@@ -1,0 +1,925 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0;font-family:'Inter',system-ui,sans-serif}
+  ::-webkit-scrollbar{width:0;height:0}
+  [data-mode]{
+    --a1:#7c5cff; --a2:#5b3ddf;
+    --blur: blur(3px) saturate(180%) brightness(1.06);
+  }
+  [data-mode="light"]{
+    --wall:
+      radial-gradient(38% 30% at 86% 24%, rgba(255,224,158,.95), rgba(255,224,158,0) 70%),
+      radial-gradient(30% 26% at 74% 52%, rgba(255,198,132,.85), rgba(255,198,132,0) 72%),
+      radial-gradient(34% 30% at 96% 78%, rgba(255,214,150,.7), transparent 72%),
+      radial-gradient(40% 38% at 10% 26%, rgba(178,170,238,.9), transparent 72%),
+      radial-gradient(38% 40% at 2% 78%, rgba(150,166,232,.78), transparent 72%),
+      linear-gradient(118deg, #b7b4ea 0%, #c8c1e6 30%, #e8d7c6 60%, #f6d7a0 100%);
+    --orb: rgba(255,216,150,.9);
+    --g-bg: rgba(255,255,255,.07);
+    --g-bg2: rgba(255,255,255,.14);
+    --g-bd: rgba(255,255,255,.82);
+    --g-sh: inset 1.5px 1.5px 0 rgba(255,255,255,.95), inset -1.5px -1.5px 3px rgba(60,40,90,.1), 0 10px 32px rgba(40,25,80,.12), 0 1px 0 rgba(255,255,255,.6);
+    --txt:#1c1830; --txt2:rgba(34,28,60,.64); --txt3:rgba(34,28,60,.42);
+    --ring:rgba(255,255,255,.8); --tab-bg:rgba(255,255,255,.26); --island:#0c0c10;
+    --field:rgba(255,255,255,.12); --glow:0 1px 16px rgba(255,255,255,.5);
+  }
+  [data-mode="dark"]{
+    --wall:
+      radial-gradient(40% 32% at 80% 22%, rgba(150,150,165,.22), transparent 70%),
+      radial-gradient(38% 36% at 16% 72%, rgba(120,120,138,.18), transparent 72%),
+      radial-gradient(60% 50% at 50% 50%, rgba(90,90,104,.12), transparent 74%),
+      #08080a;
+    --orb: rgba(150,150,168,.16);
+    --g-bg: rgba(255,255,255,.04);
+    --g-bg2: rgba(255,255,255,.08);
+    --g-bd: rgba(255,255,255,.22);
+    --g-sh: inset 1.5px 1.5px 0 rgba(255,255,255,.28), inset -1.5px -1.5px 3px rgba(0,0,0,.5), 0 12px 34px rgba(0,0,0,.55), 0 1px 0 rgba(255,255,255,.18);
+    --txt:#f3f2f8; --txt2:rgba(235,233,245,.6); --txt3:rgba(235,233,245,.38);
+    --ring:rgba(16,16,20,.85); --tab-bg:rgba(38,38,44,.5); --island:#000;
+    --field:rgba(255,255,255,.05); --glow:0 1px 14px rgba(0,0,0,.55);
+  }
+  [data-mode] *{transition:background-color .5s ease, color .45s ease, border-color .5s ease, box-shadow .5s ease, fill .45s ease;}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+  @keyframes wiggle{0%,100%{transform:rotate(-4deg) translateY(0)}50%{transform:rotate(4deg) translateY(-7px)}}
+  @keyframes sweep{0%{transform:translateX(-130%) rotate(8deg)}55%,100%{transform:translateX(240%) rotate(8deg)}}
+  @keyframes bubbleIn{from{opacity:0;transform:translateY(10px) scale(.95)}to{opacity:1;transform:none}}
+  @keyframes typing{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-5px);opacity:1}}
+  @keyframes drift{0%,100%{transform:translate(0,0)}50%{transform:translate(-20px,16px)}}
+  @keyframes ringPulse{0%{transform:scale(1);opacity:.8}100%{transform:scale(1.9);opacity:0}}
+  @keyframes floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+  @keyframes splashPop{0%{opacity:0;transform:scale(.72) translateY(14px)}55%{opacity:1;transform:scale(1.04) translateY(0)}72%{transform:scale(.99)}100%{opacity:1;transform:scale(1)}}
+  @keyframes splashHalo{0%{opacity:0;transform:scale(.6)}60%{opacity:.9}100%{opacity:.5;transform:scale(1.15)}}
+  @keyframes splashText{0%,40%{opacity:0;transform:translateY(10px)}100%{opacity:1;transform:translateY(0)}}
+</style>
+</helmet>
+
+<div style="min-height:100vh;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:34px 16px;background:radial-gradient(circle at 50% 16%, #2b2b32, #141416 72%);font-family:'Inter',sans-serif">
+
+  <div style="position:relative;width:390px;height:844px;flex:none;border-radius:56px;padding:13px;background:linear-gradient(150deg,#42424a,#1a1a1e);box-shadow:0 50px 90px rgba(0,0,0,.55), inset 0 0 0 2px rgba(255,255,255,.06), inset 0 0 0 11px #0a0a0c">
+
+    <div data-mode="{{ mode }}" style="position:relative;width:100%;height:100%;border-radius:44px;overflow:hidden;background:var(--wall);--a1:{{ a1 }};--a2:{{ a2 }}">
+
+      <!-- bokeh depth orbs -->
+      <div style="position:absolute;inset:0;pointer-events:none;overflow:hidden">
+        <div style="position:absolute;top:6%;right:8%;width:120px;height:120px;border-radius:50%;background:var(--orb);filter:blur(10px);opacity:.85;animation:drift 11s ease-in-out infinite"></div>
+        <div style="position:absolute;top:30%;right:24%;width:64px;height:64px;border-radius:50%;background:var(--orb);filter:blur(7px);opacity:.7;animation:drift 9s ease-in-out infinite reverse"></div>
+        <div style="position:absolute;top:46%;right:4%;width:90px;height:90px;border-radius:50%;background:var(--orb);filter:blur(9px);opacity:.6;animation:drift 13s ease-in-out infinite"></div>
+        <div style="position:absolute;top:18%;right:40%;width:30px;height:30px;border-radius:50%;background:var(--orb);filter:blur(4px);opacity:.8;animation:drift 8s ease-in-out infinite"></div>
+      </div>
+
+      <!-- status bar -->
+      <div style="position:absolute;top:0;left:0;right:0;height:54px;z-index:40;display:flex;align-items:center;justify-content:space-between;padding:18px 30px 0;pointer-events:none">
+        <div style="font-size:15px;font-weight:700;color:var(--txt);letter-spacing:.3px">9:41</div>
+        <div style="display:flex;align-items:center;gap:7px;color:var(--txt)">
+          <svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="5" y="4" width="3" height="8" rx="1"/><rect x="10" y="2" width="3" height="10" rx="1" opacity=".4"/><rect x="15" y="0" width="3" height="12" rx="1" opacity=".4"/></svg>
+          <svg width="16" height="12" viewBox="0 0 16 12" fill="currentColor"><path d="M8 2.5C10 2.5 11.8 3.3 13 4.6L11.7 6C10.7 5 9.4 4.5 8 4.5S5.3 5 4.3 6L3 4.6C4.2 3.3 6 2.5 8 2.5Z"/><path d="M8 6.5c.9 0 1.7.4 2.3 1L8 10 5.7 7.5c.6-.6 1.4-1 2.3-1Z"/></svg>
+          <svg width="26" height="13" viewBox="0 0 26 13" fill="none"><rect x="1" y="1" width="21" height="11" rx="3" stroke="currentColor" opacity=".5"/><rect x="3" y="3" width="16" height="7" rx="1.5" fill="currentColor"/><rect x="23" y="4" width="2" height="5" rx="1" fill="currentColor" opacity=".5"/></svg>
+        </div>
+      </div>
+      <!-- dynamic island -->
+      <div style="position:absolute;top:11px;left:50%;transform:translateX(-50%);width:118px;height:33px;border-radius:20px;background:var(--island);z-index:50"></div>
+
+      <!-- ============ SCREENS ============ -->
+      <div style="position:absolute;inset:0;overflow-y:auto;z-index:10">
+
+      <sc-if value="{{ isSplash }}" hint-placeholder-val="{{ true }}">
+        <div style="position:absolute;inset:0;z-index:70;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px;text-align:center;background:var(--wall)">
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;position:relative">
+            <div style="position:absolute;width:300px;height:300px;border-radius:50%;background:radial-gradient(circle,var(--orb),transparent 68%);filter:blur(18px);animation:splashHalo 1.4s ease-out both"></div>
+            <div style="animation:splashPop .9s cubic-bezier(.34,1.4,.5,1) both">
+              <div style="width:236px;height:236px;border-radius:52px;overflow:hidden;box-shadow:0 26px 60px rgba(40,25,80,.28), inset 1.5px 1.5px 0 rgba(255,255,255,.8);animation:floaty 3.2s ease-in-out 1s infinite">
+                <img src="assets/current-logo.png" alt="Current" style="width:100%;height:100%;object-fit:cover;display:block" />
+              </div>
+            </div>
+          </div>
+          <div style="padding-bottom:44px;display:flex;flex-direction:column;align-items:center;gap:12px;animation:splashText 1.6s ease-out both">
+            <div style="display:flex;gap:6px">
+              <div style="width:7px;height:7px;border-radius:50%;background:var(--a1);animation:typing 1.2s infinite"></div>
+              <div style="width:7px;height:7px;border-radius:50%;background:var(--a1);animation:typing 1.2s infinite .2s"></div>
+              <div style="width:7px;height:7px;border-radius:50%;background:var(--a1);animation:typing 1.2s infinite .4s"></div>
+            </div>
+            <div style="font-size:11px;font-weight:600;letter-spacing:.4px;color:var(--txt3);text-transform:uppercase">a product of</div>
+            <div style="font-size:15px;font-weight:800;letter-spacing:.2px;color:var(--txt)">Trigun Robotics Systems</div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isOnboarding }}" hint-placeholder-val="{{ true }}">
+        <div style="min-height:844px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:70px 30px 50px;text-align:center;animation:fadeUp .5s ease">
+          <!-- mascot -->
+          <div style="animation:wiggle 3.6s ease-in-out infinite;margin-bottom:10px">
+            <div style="position:relative;width:128px;height:148px">
+              <div style="position:absolute;top:0;left:50%;transform:translateX(-50%);width:74px;height:62px;border:13px solid;border-color:#cfcadf #cfcadf transparent;border-bottom:none;border-radius:37px 37px 0 0;box-shadow:inset 2px 2px 0 rgba(255,255,255,.6)"></div>
+              <div style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:122px;height:100px;border-radius:30px;background:linear-gradient(150deg,#8d6dff,#5b3ddf);box-shadow:inset 3px 3px 0 rgba(255,255,255,.4), inset -3px -4px 8px rgba(40,20,90,.45), 0 16px 30px rgba(91,61,223,.5)">
+                <div style="position:absolute;top:30px;left:30px;width:14px;height:18px;border-radius:8px;background:#fff;box-shadow:34px 0 0 #fff"></div>
+                <div style="position:absolute;top:52px;left:50%;transform:translateX(-50%);width:30px;height:15px;border:3px solid #fff;border-top:none;border-radius:0 0 18px 18px"></div>
+                <div style="position:absolute;top:46px;left:18px;width:14px;height:9px;border-radius:50%;background:rgba(255,140,170,.55);filter:blur(1px)"></div>
+                <div style="position:absolute;top:46px;right:18px;width:14px;height:9px;border-radius:50%;background:rgba(255,140,170,.55);filter:blur(1px)"></div>
+                <div style="position:absolute;top:60px;left:-13px;width:18px;height:32px;border-radius:10px;background:linear-gradient(150deg,#8d6dff,#5b3ddf);transform:rotate(14deg)"></div>
+                <div style="position:absolute;top:60px;right:-13px;width:18px;height:32px;border-radius:10px;background:linear-gradient(150deg,#8d6dff,#5b3ddf);transform:rotate(-14deg)"></div>
+              </div>
+            </div>
+          </div>
+
+          <div style="font-size:46px;font-weight:900;letter-spacing:-1.5px;color:var(--txt);text-shadow:var(--glow);margin-top:18px">Current</div>
+          <div style="font-size:17px;font-weight:500;color:var(--txt2);margin-top:8px">Private messaging, simplified</div>
+
+          <div style="position:relative;width:100%;margin-top:46px;border-radius:30px;overflow:hidden;background:var(--g-bg);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);padding:22px 20px">
+            <div style="position:absolute;inset:0;overflow:hidden;border-radius:inherit;pointer-events:none"><div style="position:absolute;top:-40%;left:0;width:36%;height:180%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.55),transparent);filter:blur(7px);animation:sweep 7s ease-in-out infinite"></div></div>
+            <div style="font-size:14px;font-weight:600;color:var(--txt);position:relative">End-to-end encrypted by default</div>
+            <div style="font-size:12.5px;color:var(--txt2);margin-top:5px;line-height:1.5;position:relative">Your conversations are sealed — only you and the people you trust hold the keys.</div>
+          </div>
+
+          <button onClick="{{ goSignup }}" style="width:100%;margin-top:26px;height:58px;border:none;border-radius:22px;background:linear-gradient(135deg,var(--a1),var(--a2));color:#fff;font-size:16.5px;font-weight:700;font-family:inherit;cursor:pointer;box-shadow:inset 1.5px 1.5px 0 rgba(255,255,255,.35), 0 12px 26px rgba(91,61,223,.45)" style-active="transform:scale(.97)">Create account</button>
+          <button onClick="{{ goLogin }}" style="width:100%;margin-top:12px;height:58px;border-radius:22px;background:var(--g-bg2);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);color:var(--txt);font-size:16.5px;font-weight:700;font-family:inherit;cursor:pointer" style-active="transform:scale(.97)">Log in</button>
+          <div onClick="{{ replaySplash }}" style="margin-top:18px;font-size:12.5px;font-weight:600;color:var(--txt3);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.5 9A9 9 0 0 0 5.6 5.6L1 10M23 14l-4.6 4.4A9 9 0 0 1 3.5 15"/></svg>Replay intro</div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isSignup }}">
+        <div style="min-height:844px;padding:74px 26px 50px;animation:fadeUp .45s ease">
+          <button onClick="{{ back }}" style="width:42px;height:42px;border-radius:50%;background:var(--g-bg);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);display:grid;place-items:center;cursor:pointer" style-active="transform:scale(.92)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--txt)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+          <div style="font-size:34px;font-weight:900;letter-spacing:-1px;color:var(--txt);text-shadow:var(--glow);margin-top:24px">Create account</div>
+          <div style="font-size:14.5px;color:var(--txt2);margin-top:6px">Join Current in seconds — no phone number required.</div>
+
+          <div style="margin-top:28px;display:flex;flex-direction:column;gap:14px">
+            <div style="border-radius:18px;background:var(--field);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);padding:14px 18px">
+              <div style="font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.6px">Username</div>
+              <div style="font-size:16px;font-weight:600;color:var(--txt);margin-top:3px">@mila.form</div>
+            </div>
+            <div style="border-radius:18px;background:var(--field);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);padding:14px 18px">
+              <div style="font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.6px">Email</div>
+              <div style="font-size:16px;font-weight:600;color:var(--txt);margin-top:3px">mila@current.app</div>
+            </div>
+            <div style="border-radius:18px;background:var(--field);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);padding:14px 18px;display:flex;justify-content:space-between;align-items:center">
+              <div><div style="font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.6px">Password</div><div style="font-size:16px;font-weight:600;color:var(--txt);margin-top:3px;letter-spacing:3px">••••••••</div></div>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--txt2)" stroke-width="1.8"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+            </div>
+            <div style="border-radius:18px;background:var(--field);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);padding:14px 18px">
+              <div style="font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.6px">Confirm password</div>
+              <div style="font-size:16px;font-weight:600;color:var(--txt);margin-top:3px;letter-spacing:3px">••••••••</div>
+            </div>
+          </div>
+
+          <button onClick="{{ goHome }}" style="width:100%;margin-top:24px;height:56px;border:none;border-radius:20px;background:linear-gradient(135deg,var(--a1),var(--a2));color:#fff;font-size:16px;font-weight:700;font-family:inherit;cursor:pointer;box-shadow:inset 1.5px 1.5px 0 rgba(255,255,255,.35), 0 12px 26px rgba(91,61,223,.45)" style-active="transform:scale(.97)">Create account</button>
+
+          <div style="display:flex;align-items:center;gap:12px;margin:22px 2px">
+            <div style="flex:1;height:1px;background:var(--g-bd)"></div><div style="font-size:12px;color:var(--txt3);font-weight:600">or continue with</div><div style="flex:1;height:1px;background:var(--g-bd)"></div>
+          </div>
+          <div style="display:flex;gap:12px">
+            <button style="flex:1;height:52px;border-radius:18px;background:var(--g-bg2);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);color:var(--txt);font-size:14.5px;font-weight:700;font-family:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px" style-active="transform:scale(.96)"><span style="font-size:18px;font-weight:800;background:linear-gradient(135deg,#4285f4,#ea4335 60%,#fbbc05);-webkit-background-clip:text;background-clip:text;color:transparent">G</span>Google</button>
+            <button style="flex:1;height:52px;border-radius:18px;background:var(--g-bg2);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);color:var(--txt);font-size:14.5px;font-weight:700;font-family:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px" style-active="transform:scale(.96)"><svg width="17" height="17" viewBox="0 0 24 24" fill="var(--txt)"><path d="M16.4 1.6c.1 1-.3 2-.9 2.8-.7.8-1.7 1.4-2.7 1.3-.1-1 .3-2 1-2.8.6-.7 1.7-1.3 2.6-1.3ZM19 17.3c-.5 1.2-.8 1.7-1.4 2.7-.9 1.4-2.2 3.1-3.7 3.1-1.4 0-1.7-.9-3.6-.9s-2.3.9-3.6.9c-1.5 0-2.7-1.6-3.6-2.9C-.9 16.6-1.2 11 1 8.1 2 6.5 3.7 5.5 5.3 5.5c1.6 0 2.6 1 3.9 1s2.1-1 3.9-1c1.4 0 2.9.8 3.9 2.1-3.4 1.9-2.8 6.7-1 7.7Z"/></svg>Apple</button>
+          </div>
+          <div style="text-align:center;margin-top:24px;font-size:13.5px;color:var(--txt2)">Already have an account? <span onClick="{{ goLogin }}" style="color:var(--a1);font-weight:700;cursor:pointer">Log in</span></div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isLogin }}">
+        <div style="min-height:844px;padding:74px 26px 50px;animation:fadeUp .45s ease">
+          <button onClick="{{ back }}" style="width:42px;height:42px;border-radius:50%;background:var(--g-bg);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);display:grid;place-items:center;cursor:pointer" style-active="transform:scale(.92)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--txt)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+          <div style="font-size:34px;font-weight:900;letter-spacing:-1px;color:var(--txt);text-shadow:var(--glow);margin-top:24px">Welcome back</div>
+          <div style="font-size:14.5px;color:var(--txt2);margin-top:6px">Unlock your private space.</div>
+
+          <div style="margin-top:30px;display:flex;flex-direction:column;gap:14px">
+            <div style="border-radius:18px;background:var(--field);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);padding:14px 18px">
+              <div style="font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.6px">Email or username</div>
+              <div style="font-size:16px;font-weight:600;color:var(--txt);margin-top:3px">@mila.form</div>
+            </div>
+            <div style="border-radius:18px;background:var(--field);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);padding:14px 18px;display:flex;justify-content:space-between;align-items:center">
+              <div><div style="font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.6px">Password</div><div style="font-size:16px;font-weight:600;color:var(--txt);margin-top:3px;letter-spacing:3px">••••••••</div></div>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--txt2)" stroke-width="1.8"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+            </div>
+          </div>
+
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:18px">
+            <div onClick="{{ toggleRemember }}" style="display:flex;align-items:center;gap:9px;cursor:pointer">
+              <div style="width:24px;height:24px;border-radius:8px;border:1px solid var(--g-bd);background:{{ rememberBg }};box-shadow:var(--g-sh);display:grid;place-items:center"><sc-if value="{{ remember }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></sc-if></div>
+              <span style="font-size:13.5px;font-weight:600;color:var(--txt2)">Remember me</span>
+            </div>
+            <span style="font-size:13.5px;font-weight:700;color:var(--a1);cursor:pointer">Forgot password?</span>
+          </div>
+
+          <button onClick="{{ goHome }}" style="width:100%;margin-top:28px;height:56px;border:none;border-radius:20px;background:linear-gradient(135deg,var(--a1),var(--a2));color:#fff;font-size:16px;font-weight:700;font-family:inherit;cursor:pointer;box-shadow:inset 1.5px 1.5px 0 rgba(255,255,255,.35), 0 12px 26px rgba(91,61,223,.45)" style-active="transform:scale(.97)">Log in</button>
+
+          <div style="display:flex;align-items:center;gap:12px;margin:22px 2px">
+            <div style="flex:1;height:1px;background:var(--g-bd)"></div><div style="font-size:12px;color:var(--txt3);font-weight:600">or</div><div style="flex:1;height:1px;background:var(--g-bd)"></div>
+          </div>
+          <div style="display:flex;gap:12px">
+            <button style="flex:1;height:52px;border-radius:18px;background:var(--g-bg2);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);color:var(--txt);font-size:14.5px;font-weight:700;font-family:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px" style-active="transform:scale(.96)"><span style="font-size:18px;font-weight:800;background:linear-gradient(135deg,#4285f4,#ea4335 60%,#fbbc05);-webkit-background-clip:text;background-clip:text;color:transparent">G</span>Google</button>
+            <button style="flex:1;height:52px;border-radius:18px;background:var(--g-bg2);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);color:var(--txt);font-size:14.5px;font-weight:700;font-family:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px" style-active="transform:scale(.96)"><svg width="17" height="17" viewBox="0 0 24 24" fill="var(--txt)"><path d="M16.4 1.6c.1 1-.3 2-.9 2.8-.7.8-1.7 1.4-2.7 1.3-.1-1 .3-2 1-2.8.6-.7 1.7-1.3 2.6-1.3ZM19 17.3c-.5 1.2-.8 1.7-1.4 2.7-.9 1.4-2.2 3.1-3.7 3.1-1.4 0-1.7-.9-3.6-.9s-2.3.9-3.6.9c-1.5 0-2.7-1.6-3.6-2.9C-.9 16.6-1.2 11 1 8.1 2 6.5 3.7 5.5 5.3 5.5c1.6 0 2.6 1 3.9 1s2.1-1 3.9-1c1.4 0 2.9.8 3.9 2.1-3.4 1.9-2.8 6.7-1 7.7Z"/></svg>Apple</button>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isChats }}">
+        <div style="min-height:844px;padding:62px 18px 120px;animation:fadeUp .45s ease">
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <div style="font-size:33px;font-weight:900;letter-spacing:-1px;color:var(--txt);text-shadow:var(--glow)">Chats</div>
+            <div style="display:flex;gap:10px">
+              <button onClick="{{ toggleMode }}" style="width:42px;height:42px;border-radius:50%;background:var(--g-bg);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);display:grid;place-items:center;cursor:pointer;font-size:18px" style-active="transform:scale(.92)">{{ modeIcon }}</button>
+              <button style="width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,var(--a1),var(--a2));border:none;box-shadow:0 8px 18px rgba(91,61,223,.4);display:grid;place-items:center;cursor:pointer" style-active="transform:scale(.92)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+            </div>
+          </div>
+
+          <!-- search -->
+          <div style="margin-top:18px;border-radius:18px;background:var(--g-bg);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);padding:13px 16px;display:flex;align-items:center;gap:11px">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--txt2)" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+            <span style="font-size:15px;color:var(--txt3);font-weight:500">Search messages, people…</span>
+          </div>
+
+          <!-- stories -->
+          <div style="display:flex;gap:14px;margin-top:20px;overflow-x:auto;padding:2px 2px 4px">
+            <div style="display:flex;flex-direction:column;align-items:center;gap:6px;flex:none">
+              <div style="width:62px;height:62px;border-radius:50%;background:var(--g-bg2);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px dashed var(--g-bd);box-shadow:var(--g-sh);display:grid;place-items:center;cursor:pointer"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--a1)" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div>
+              <span style="font-size:11px;font-weight:600;color:var(--txt2)">Your story</span>
+            </div>
+            <sc-for list="{{ stories }}" as="st" hint-placeholder-count="5">
+              <div style="display:flex;flex-direction:column;align-items:center;gap:6px;flex:none;cursor:pointer">
+                <div style="padding:2.5px;border-radius:50%;background:linear-gradient(135deg,var(--a1),var(--a2))">
+                  <div style="position:relative;width:58px;height:58px;border-radius:50%;background:{{ st.av }};box-shadow:inset 0 0 0 2.5px var(--ring);overflow:hidden;display:grid;place-items:end center"><svg width="40" height="40" viewBox="0 0 24 24" style="opacity:.9"><circle cx="12" cy="9" r="4" fill="rgba(255,255,255,.9)"/><path d="M4 23c0-4.4 3.6-7.5 8-7.5s8 3.1 8 7.5" fill="rgba(255,255,255,.9)"/></svg></div>
+                </div>
+                <span style="font-size:11px;font-weight:600;color:var(--txt2);max-width:62px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ st.name }}</span>
+              </div>
+            </sc-for>
+          </div>
+
+          <!-- filter tabs -->
+          <div style="display:flex;gap:9px;margin-top:18px">
+            <sc-for list="{{ filters }}" as="f" hint-placeholder-count="4">
+              <button onClick="{{ f.set }}" style="padding:9px 17px;border-radius:14px;border:1px solid var(--g-bd);font-size:13.5px;font-weight:700;font-family:inherit;cursor:pointer;color:{{ f.col }};{{ f.pill }}" style-active="transform:scale(.95)">{{ f.name }}</button>
+            </sc-for>
+          </div>
+
+          <!-- conversation list -->
+          <div style="margin-top:18px;border-radius:26px;background:var(--g-bg);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);overflow:hidden">
+            <sc-for list="{{ conversations }}" as="c" hint-placeholder-count="7">
+              <div onClick="{{ c.open }}" style="display:flex;align-items:center;gap:13px;padding:13px 16px;cursor:pointer;border-bottom:1px solid var(--g-bd)" style-active="background:var(--g-bg2)">
+                <div style="position:relative;width:54px;height:54px;flex:none">
+                  <div style="width:54px;height:54px;border-radius:50%;background:{{ c.av }};box-shadow:inset 0 0 0 2px rgba(255,255,255,.5), 0 4px 10px rgba(0,0,0,.16);overflow:hidden;display:grid;place-items:end center"><svg width="38" height="38" viewBox="0 0 24 24" style="opacity:.88"><circle cx="12" cy="9" r="4" fill="rgba(255,255,255,.9)"/><path d="M4 23c0-4.4 3.6-7.5 8-7.5s8 3.1 8 7.5" fill="rgba(255,255,255,.9)"/></svg></div>
+                  <sc-if value="{{ c.online }}"><div style="position:absolute;right:0;bottom:2px;width:14px;height:14px;border-radius:50%;background:#34d27b;box-shadow:0 0 0 2.5px var(--ring)"></div></sc-if>
+                </div>
+                <div style="flex:1;min-width:0">
+                  <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+                    <span style="font-size:15.5px;font-weight:700;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ c.name }}</span>
+                    <span style="font-size:11.5px;font-weight:600;color:{{ c.timeCol }};flex:none">{{ c.time }}</span>
+                  </div>
+                  <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:3px">
+                    <span style="font-size:13.5px;color:{{ c.previewCol }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:{{ c.previewWeight }}">{{ c.preview }}</span>
+                    <sc-if value="{{ c.unread }}"><span style="flex:none;min-width:21px;height:21px;padding:0 6px;border-radius:11px;background:linear-gradient(135deg,var(--a1),var(--a2));color:#fff;font-size:11.5px;font-weight:800;display:grid;place-items:center;box-shadow:0 4px 10px rgba(91,61,223,.4)">{{ c.unread }}</span></sc-if>
+                  </div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isChat }}">
+        <div style="min-height:844px;display:flex;flex-direction:column;animation:fadeUp .4s ease">
+          <!-- chat header -->
+          <div style="position:sticky;top:0;z-index:20;padding:56px 14px 12px;display:flex;align-items:center;gap:11px;background:var(--g-bg);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border-bottom:1px solid var(--g-bd)">
+            <button onClick="{{ back }}" style="width:38px;height:38px;border-radius:50%;background:transparent;border:none;display:grid;place-items:center;cursor:pointer" style-active="transform:scale(.9)"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--txt)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+            <div style="position:relative;width:42px;height:42px;flex:none">
+              <div style="width:42px;height:42px;border-radius:50%;background:linear-gradient(140deg,hsl(265 70% 72%),hsl(300 62% 52%));box-shadow:inset 0 0 0 2px rgba(255,255,255,.5);overflow:hidden;display:grid;place-items:end center"><svg width="30" height="30" viewBox="0 0 24 24" style="opacity:.9"><circle cx="12" cy="9" r="4" fill="rgba(255,255,255,.9)"/><path d="M4 23c0-4.4 3.6-7.5 8-7.5s8 3.1 8 7.5" fill="rgba(255,255,255,.9)"/></svg></div>
+              <div style="position:absolute;right:-1px;bottom:0;width:12px;height:12px;border-radius:50%;background:#34d27b;box-shadow:0 0 0 2.5px var(--ring)"></div>
+            </div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:16px;font-weight:800;color:var(--txt)">Mila Form</div>
+              <div style="font-size:12px;color:#34d27b;font-weight:600">online now</div>
+            </div>
+            <button onClick="{{ goIncoming }}" style="width:40px;height:40px;border-radius:50%;background:var(--g-bg2);border:1px solid var(--g-bd);box-shadow:var(--g-sh);display:grid;place-items:center;cursor:pointer" style-active="transform:scale(.9)"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--txt)" stroke-width="1.9"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3.1-8.7A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2Z"/></svg></button>
+            <button onClick="{{ goIncoming }}" style="width:40px;height:40px;border-radius:50%;background:var(--g-bg2);border:1px solid var(--g-bd);box-shadow:var(--g-sh);display:grid;place-items:center;cursor:pointer" style-active="transform:scale(.9)"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--txt)" stroke-width="1.9"><path d="M23 7l-7 5 7 5V7Z"/><rect x="1" y="5" width="15" height="14" rx="3"/></svg></button>
+          </div>
+
+          <!-- messages -->
+          <div style="flex:1;padding:16px 16px 8px;display:flex;flex-direction:column;gap:11px">
+            <div style="align-self:center;display:flex;align-items:center;gap:7px;padding:7px 14px;border-radius:14px;background:var(--g-bg);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);margin-bottom:4px">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--a1)" stroke-width="2.2"><rect x="4" y="11" width="16" height="10" rx="2.5"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+              <span style="font-size:11.5px;font-weight:600;color:var(--txt2)">Messages are end-to-end encrypted</span>
+            </div>
+
+            <sc-for list="{{ messages }}" as="m" hint-placeholder-count="3">
+              <div style="display:flex;{{ m.rowStyle }};animation:bubbleIn .35s ease">
+                <div style="max-width:76%">
+                  <sc-if value="{{ m.isVoice }}">
+                    <div style="display:flex;align-items:center;gap:11px;padding:13px 15px;{{ m.bubbleStyle }}">
+                      <div style="width:34px;height:34px;border-radius:50%;background:{{ m.playBg }};display:grid;place-items:center;flex:none"><svg width="14" height="14" viewBox="0 0 24 24" fill="{{ m.playFill }}"><path d="M7 5l12 7-12 7V5Z"/></svg></div>
+                      <div style="display:flex;align-items:center;gap:3px;height:26px">
+                        <div style="width:3px;height:9px;border-radius:2px;background:{{ m.wave }}"></div><div style="width:3px;height:17px;border-radius:2px;background:{{ m.wave }}"></div><div style="width:3px;height:24px;border-radius:2px;background:{{ m.wave }}"></div><div style="width:3px;height:13px;border-radius:2px;background:{{ m.wave }}"></div><div style="width:3px;height:20px;border-radius:2px;background:{{ m.wave }}"></div><div style="width:3px;height:8px;border-radius:2px;background:{{ m.wave }}"></div><div style="width:3px;height:15px;border-radius:2px;background:{{ m.wave }}"></div><div style="width:3px;height:22px;border-radius:2px;background:{{ m.wave }}"></div><div style="width:3px;height:11px;border-radius:2px;background:{{ m.wave }}"></div><div style="width:3px;height:18px;border-radius:2px;background:{{ m.wave }}"></div><div style="width:3px;height:7px;border-radius:2px;background:{{ m.wave }}"></div><div style="width:3px;height:14px;border-radius:2px;background:{{ m.wave }}"></div>
+                      </div>
+                      <span style="font-size:12px;font-weight:600;color:{{ m.durCol }};flex:none">{{ m.dur }}</span>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ m.isText }}">
+                    <div style="padding:11px 15px;font-size:14.5px;line-height:1.42;{{ m.bubbleStyle }}">{{ m.text }}</div>
+                  </sc-if>
+                  <div style="display:flex;align-items:center;gap:5px;margin-top:4px;{{ m.metaAlign }}">
+                    <span style="font-size:10.5px;color:var(--txt3);font-weight:600">{{ m.time }}</span>
+                    <sc-if value="{{ m.me }}"><svg width="15" height="11" viewBox="0 0 24 16" fill="none" stroke="var(--a1)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M1 8l5 5L15 3"/><path d="M9 12l1 1L22 3"/></svg></sc-if>
+                  </div>
+                </div>
+              </div>
+            </sc-for>
+
+            <sc-if value="{{ typing }}">
+              <div style="align-self:flex-start;display:flex;align-items:center;gap:5px;padding:14px 17px;background:var(--g-bg2);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);border-radius:22px 22px 22px 6px;animation:bubbleIn .3s ease">
+                <div style="width:8px;height:8px;border-radius:50%;background:var(--txt2);animation:typing 1.2s infinite"></div>
+                <div style="width:8px;height:8px;border-radius:50%;background:var(--txt2);animation:typing 1.2s infinite .2s"></div>
+                <div style="width:8px;height:8px;border-radius:50%;background:var(--txt2);animation:typing 1.2s infinite .4s"></div>
+              </div>
+            </sc-if>
+          </div>
+
+          <!-- input bar -->
+          <div style="position:sticky;bottom:0;padding:10px 14px 30px;display:flex;align-items:center;gap:9px;background:var(--g-bg);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border-top:1px solid var(--g-bd)">
+            <button style="width:42px;height:42px;border-radius:50%;background:var(--g-bg2);border:1px solid var(--g-bd);box-shadow:var(--g-sh);display:grid;place-items:center;cursor:pointer;flex:none" style-active="transform:scale(.9)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--txt2)" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+            <div style="flex:1;height:46px;border-radius:23px;background:var(--field);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);display:flex;align-items:center;padding:0 16px;gap:10px">
+              <input value="{{ draft }}" onInput="{{ setDraft }}" placeholder="Message…" style="flex:1;background:transparent;border:none;outline:none;font-family:inherit;font-size:15px;color:var(--txt)" />
+              <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="var(--txt2)" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 9h.01M15 9h.01"/></svg>
+            </div>
+            <button onClick="{{ send }}" style="width:46px;height:46px;border-radius:50%;background:linear-gradient(135deg,var(--a1),var(--a2));border:none;box-shadow:0 8px 18px rgba(91,61,223,.42);display:grid;place-items:center;cursor:pointer;flex:none" style-active="transform:scale(.9)">
+              <sc-if value="{{ hasDraft }}"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7Z"/></svg></sc-if>
+              <sc-if value="{{ noDraft }}"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.9"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3"/></svg></sc-if>
+            </button>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isCalls }}">
+        <div style="min-height:844px;padding:62px 18px 120px;animation:fadeUp .45s ease">
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <div style="font-size:33px;font-weight:900;letter-spacing:-1px;color:var(--txt);text-shadow:var(--glow)">Calls</div>
+            <button style="width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,var(--a1),var(--a2));border:none;box-shadow:0 8px 18px rgba(91,61,223,.4);display:grid;place-items:center;cursor:pointer" style-active="transform:scale(.92)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2v6h6M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6"/></svg></button>
+          </div>
+          <div style="margin-top:20px;border-radius:26px;background:var(--g-bg);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);overflow:hidden">
+            <sc-for list="{{ calls }}" as="c" hint-placeholder-count="6">
+              <div onClick="{{ c.open }}" style="display:flex;align-items:center;gap:13px;padding:13px 16px;cursor:pointer;border-bottom:1px solid var(--g-bd)" style-active="background:var(--g-bg2)">
+                <div style="width:50px;height:50px;flex:none;border-radius:50%;background:{{ c.av }};box-shadow:inset 0 0 0 2px rgba(255,255,255,.5);overflow:hidden;display:grid;place-items:end center"><svg width="36" height="36" viewBox="0 0 24 24" style="opacity:.88"><circle cx="12" cy="9" r="4" fill="rgba(255,255,255,.9)"/><path d="M4 23c0-4.4 3.6-7.5 8-7.5s8 3.1 8 7.5" fill="rgba(255,255,255,.9)"/></svg></div>
+                <div style="flex:1;min-width:0">
+                  <div style="font-size:15.5px;font-weight:700;color:{{ c.nameCol }}">{{ c.name }}</div>
+                  <div style="display:flex;align-items:center;gap:5px;margin-top:3px">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="{{ c.dirCol }}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="{{ c.dirIcon }}"/></svg>
+                    <span style="font-size:12.5px;color:var(--txt2);font-weight:500">{{ c.time }}</span>
+                  </div>
+                </div>
+                <button style="width:40px;height:40px;border-radius:50%;background:var(--g-bg2);border:1px solid var(--g-bd);box-shadow:var(--g-sh);display:grid;place-items:center;cursor:pointer;flex:none" style-active="transform:scale(.9)">
+                  <sc-if value="{{ c.isVideo }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--a1)" stroke-width="1.9"><path d="M23 7l-7 5 7 5V7Z"/><rect x="1" y="5" width="15" height="14" rx="3"/></svg></sc-if>
+                  <sc-if value="{{ c.isVoice }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--a1)" stroke-width="1.9"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3.1-8.7A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2Z"/></svg></sc-if>
+                </button>
+              </div>
+            </sc-for>
+          </div>
+          <button onClick="{{ goIncoming }}" style="width:100%;margin-top:18px;height:52px;border-radius:18px;background:var(--g-bg2);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);color:var(--txt);font-size:14.5px;font-weight:700;font-family:inherit;cursor:pointer" style-active="transform:scale(.97)">▶  Preview incoming call screen</button>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isIncoming }}">
+        <div style="min-height:844px;display:flex;flex-direction:column;align-items:center;padding:118px 30px 56px;text-align:center;animation:fadeUp .4s ease">
+          <div style="font-size:14px;font-weight:600;color:var(--txt2);display:flex;align-items:center;gap:6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34d27b" stroke-width="2.4"><rect x="4" y="11" width="16" height="10" rx="2.5"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Encrypted Trusty call</div>
+          <div style="position:relative;margin-top:50px;width:160px;height:160px;display:grid;place-items:center">
+            <div style="position:absolute;width:160px;height:160px;border-radius:50%;border:2px solid var(--a1);animation:ringPulse 2s ease-out infinite"></div>
+            <div style="position:absolute;width:160px;height:160px;border-radius:50%;border:2px solid var(--a1);animation:ringPulse 2s ease-out infinite 1s"></div>
+            <div style="width:148px;height:148px;border-radius:50%;background:linear-gradient(140deg,hsl(265 72% 72%),hsl(303 62% 52%));box-shadow:inset 0 0 0 4px rgba(255,255,255,.5), 0 18px 40px rgba(91,61,223,.45);overflow:hidden;display:grid;place-items:end center"><svg width="110" height="110" viewBox="0 0 24 24" style="opacity:.9"><circle cx="12" cy="9" r="4" fill="rgba(255,255,255,.92)"/><path d="M4 23c0-4.4 3.6-7.5 8-7.5s8 3.1 8 7.5" fill="rgba(255,255,255,.92)"/></svg></div>
+          </div>
+          <div style="font-size:30px;font-weight:900;letter-spacing:-.6px;color:var(--txt);text-shadow:var(--glow);margin-top:34px">Mila Form</div>
+          <div style="font-size:15px;color:var(--txt2);font-weight:500;margin-top:6px">Current voice call…</div>
+
+          <div style="margin-top:auto;width:100%;display:flex;flex-direction:column;gap:22px">
+            <div style="display:flex;justify-content:center;gap:16px">
+              <div style="display:flex;flex-direction:column;align-items:center;gap:7px"><button style="width:56px;height:56px;border-radius:50%;background:var(--g-bg2);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);display:grid;place-items:center;cursor:pointer" style-active="transform:scale(.92)"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--txt)" stroke-width="1.9"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3ZM4 10v2a8 8 0 0 0 16 0v-2M1 1l22 22"/></svg></button><span style="font-size:11.5px;color:var(--txt2);font-weight:600">Mute</span></div>
+              <div style="display:flex;flex-direction:column;align-items:center;gap:7px"><button style="width:56px;height:56px;border-radius:50%;background:var(--g-bg2);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);display:grid;place-items:center;cursor:pointer" style-active="transform:scale(.92)"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--txt)" stroke-width="1.9"><path d="M11 5L6 9H2v6h4l5 4V5ZM15.5 8.5a5 5 0 0 1 0 7M19 5a9 9 0 0 1 0 14"/></svg></button><span style="font-size:11.5px;color:var(--txt2);font-weight:600">Speaker</span></div>
+              <div style="display:flex;flex-direction:column;align-items:center;gap:7px"><button style="width:56px;height:56px;border-radius:50%;background:var(--g-bg2);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);display:grid;place-items:center;cursor:pointer" style-active="transform:scale(.92)"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--txt)" stroke-width="1.9"><path d="M23 7l-7 5 7 5V7Z"/><rect x="1" y="5" width="15" height="14" rx="3"/></svg></button><span style="font-size:11.5px;color:var(--txt2);font-weight:600">Video</span></div>
+            </div>
+            <div style="display:flex;justify-content:space-evenly;align-items:center">
+              <div style="display:flex;flex-direction:column;align-items:center;gap:9px"><button onClick="{{ back }}" style="width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,#ff5a6e,#e0354b);border:none;box-shadow:0 14px 30px rgba(224,53,75,.45);display:grid;place-items:center;cursor:pointer" style-active="transform:scale(.92)"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" style="transform:rotate(135deg)"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3.1-8.7A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2Z"/></svg></button><span style="font-size:12px;color:var(--txt2);font-weight:600">Decline</span></div>
+              <div style="display:flex;flex-direction:column;align-items:center;gap:9px"><button onClick="{{ back }}" style="width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,#34d27b,#15a55c);border:none;box-shadow:0 14px 30px rgba(21,165,92,.45);display:grid;place-items:center;cursor:pointer;animation:floaty 1.8s ease-in-out infinite" style-active="transform:scale(.92)"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3.1-8.7A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2Z"/></svg></button><span style="font-size:12px;color:var(--txt2);font-weight:600">Accept</span></div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isContacts }}">
+        <div style="min-height:844px;padding:62px 18px 120px;animation:fadeUp .45s ease">
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <div style="font-size:33px;font-weight:900;letter-spacing:-1px;color:var(--txt);text-shadow:var(--glow)">Contacts</div>
+            <button style="width:42px;height:42px;border-radius:50%;background:var(--g-bg);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);display:grid;place-items:center;cursor:pointer" style-active="transform:scale(.92)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--txt)" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M21 14v.01M14 21h.01M21 21v-3M17 21h.01"/></svg></button>
+          </div>
+          <div style="margin-top:18px;display:flex;gap:11px">
+            <div style="flex:1;border-radius:18px;background:var(--g-bg);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);padding:13px 16px;display:flex;align-items:center;gap:11px"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--txt2)" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg><span style="font-size:15px;color:var(--txt3);font-weight:500">Search by @username</span></div>
+            <button style="width:50px;height:50px;border-radius:16px;background:linear-gradient(135deg,var(--a1),var(--a2));border:none;box-shadow:0 8px 18px rgba(91,61,223,.4);display:grid;place-items:center;cursor:pointer;flex:none" style-active="transform:scale(.92)"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h7v7h-7z"/></svg></button>
+          </div>
+
+          <button onClick="{{ goNewGroup }}" style="width:100%;margin-top:14px;border-radius:20px;background:var(--g-bg2);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);padding:15px 18px;display:flex;align-items:center;gap:13px;cursor:pointer;font-family:inherit" style-active="transform:scale(.98)">
+            <div style="width:44px;height:44px;border-radius:14px;background:linear-gradient(135deg,var(--a1),var(--a2));display:grid;place-items:center;box-shadow:0 6px 14px rgba(91,61,223,.4)"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg></div>
+            <div style="text-align:left;flex:1"><div style="font-size:15.5px;font-weight:700;color:var(--txt)">New group</div><div style="font-size:12.5px;color:var(--txt2);margin-top:2px">Start an encrypted group chat</div></div>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--txt3)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+          </button>
+
+          <div style="font-size:12px;font-weight:800;color:var(--txt3);text-transform:uppercase;letter-spacing:.8px;margin:22px 4px 10px">Online now</div>
+          <div style="display:flex;gap:14px;overflow-x:auto;padding:2px 2px 4px">
+            <sc-for list="{{ onlineNow }}" as="o" hint-placeholder-count="4">
+              <div onClick="{{ o.open }}" style="display:flex;flex-direction:column;align-items:center;gap:6px;flex:none;cursor:pointer">
+                <div style="position:relative"><div style="width:58px;height:58px;border-radius:50%;background:{{ o.av }};box-shadow:inset 0 0 0 2px rgba(255,255,255,.5);overflow:hidden;display:grid;place-items:end center"><svg width="40" height="40" viewBox="0 0 24 24" style="opacity:.88"><circle cx="12" cy="9" r="4" fill="rgba(255,255,255,.9)"/><path d="M4 23c0-4.4 3.6-7.5 8-7.5s8 3.1 8 7.5" fill="rgba(255,255,255,.9)"/></svg></div><div style="position:absolute;right:1px;bottom:2px;width:14px;height:14px;border-radius:50%;background:#34d27b;box-shadow:0 0 0 2.5px var(--ring)"></div></div>
+                <span style="font-size:11px;font-weight:600;color:var(--txt2);max-width:60px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ o.name }}</span>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="font-size:12px;font-weight:800;color:var(--txt3);text-transform:uppercase;letter-spacing:.8px;margin:18px 4px 10px">All contacts</div>
+          <div style="border-radius:26px;background:var(--g-bg);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);overflow:hidden">
+            <sc-for list="{{ contacts }}" as="c" hint-placeholder-count="8">
+              <div onClick="{{ c.open }}" style="display:flex;align-items:center;gap:13px;padding:11px 16px;cursor:pointer;border-bottom:1px solid var(--g-bd)" style-active="background:var(--g-bg2)">
+                <div style="position:relative;width:46px;height:46px;flex:none"><div style="width:46px;height:46px;border-radius:50%;background:{{ c.av }};box-shadow:inset 0 0 0 2px rgba(255,255,255,.5);overflow:hidden;display:grid;place-items:end center"><svg width="32" height="32" viewBox="0 0 24 24" style="opacity:.88"><circle cx="12" cy="9" r="4" fill="rgba(255,255,255,.9)"/><path d="M4 23c0-4.4 3.6-7.5 8-7.5s8 3.1 8 7.5" fill="rgba(255,255,255,.9)"/></svg></div><sc-if value="{{ c.online }}"><div style="position:absolute;right:0;bottom:1px;width:12px;height:12px;border-radius:50%;background:#34d27b;box-shadow:0 0 0 2.5px var(--ring)"></div></sc-if></div>
+                <div style="flex:1;min-width:0"><div style="font-size:15px;font-weight:700;color:var(--txt)">{{ c.name }}</div><div style="font-size:12.5px;color:var(--txt2);margin-top:1px">{{ c.user }}</div></div>
+                <button style="width:36px;height:36px;border-radius:50%;background:var(--g-bg2);border:1px solid var(--g-bd);box-shadow:var(--g-sh);display:grid;place-items:center;cursor:pointer;flex:none" style-active="transform:scale(.9)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--a1)" stroke-width="2"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3.1-8.7A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2Z"/></svg></button>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="margin-top:16px;border-radius:22px;background:linear-gradient(135deg,rgba(124,92,255,.18),rgba(91,61,223,.1));-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);padding:18px;display:flex;align-items:center;gap:14px">
+            <div style="width:46px;height:46px;border-radius:14px;background:linear-gradient(135deg,var(--a1),var(--a2));display:grid;place-items:center;flex:none;box-shadow:0 6px 14px rgba(91,61,223,.4)"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M4 12v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8M16 6l-4-4-4 4M12 2v14"/></svg></div>
+            <div style="flex:1"><div style="font-size:14.5px;font-weight:700;color:var(--txt)">Invite friends to Current</div><div style="font-size:12.5px;color:var(--txt2);margin-top:2px">Share your invite link or QR code</div></div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isNewGroup }}">
+        <div style="min-height:844px;padding:62px 18px 120px;animation:fadeUp .45s ease">
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <button onClick="{{ back }}" style="width:42px;height:42px;border-radius:50%;background:var(--g-bg);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);display:grid;place-items:center;cursor:pointer" style-active="transform:scale(.92)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--txt)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+            <div style="font-size:17px;font-weight:800;color:var(--txt)">New group</div>
+            <button onClick="{{ goGroupChat }}" style="padding:9px 18px;border-radius:14px;background:linear-gradient(135deg,var(--a1),var(--a2));border:none;color:#fff;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;box-shadow:0 8px 16px rgba(91,61,223,.4)" style-active="transform:scale(.94)">Create</button>
+          </div>
+
+          <div style="display:flex;flex-direction:column;align-items:center;margin-top:26px">
+            <div style="width:96px;height:96px;border-radius:50%;background:var(--g-bg2);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px dashed var(--g-bd);box-shadow:var(--g-sh);display:grid;place-items:center;cursor:pointer"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--a1)" stroke-width="1.9" stroke-linecap="round"><path d="M14.5 4h-5L8 6H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-4l-1.5-2Z"/><circle cx="12" cy="13" r="3.5"/></svg></div>
+            <span style="font-size:12.5px;font-weight:600;color:var(--txt2);margin-top:10px">Add group photo</span>
+          </div>
+
+          <div style="margin-top:22px;border-radius:18px;background:var(--field);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);padding:14px 18px">
+            <div style="font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.6px">Group name</div>
+            <div style="font-size:16px;font-weight:600;color:var(--txt);margin-top:3px">Weekend Trip ✈️</div>
+          </div>
+
+          <div style="display:flex;justify-content:space-between;align-items:center;margin:22px 4px 10px"><span style="font-size:12px;font-weight:800;color:var(--txt3);text-transform:uppercase;letter-spacing:.8px">Add members</span><span style="font-size:12.5px;font-weight:700;color:var(--a1)">3 selected</span></div>
+          <div style="border-radius:26px;background:var(--g-bg);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);overflow:hidden">
+            <sc-for list="{{ contacts }}" as="c" hint-placeholder-count="6">
+              <div style="display:flex;align-items:center;gap:13px;padding:11px 16px;cursor:pointer;border-bottom:1px solid var(--g-bd)" style-active="background:var(--g-bg2)">
+                <div style="width:44px;height:44px;flex:none;border-radius:50%;background:{{ c.av }};box-shadow:inset 0 0 0 2px rgba(255,255,255,.5);overflow:hidden;display:grid;place-items:end center"><svg width="31" height="31" viewBox="0 0 24 24" style="opacity:.88"><circle cx="12" cy="9" r="4" fill="rgba(255,255,255,.9)"/><path d="M4 23c0-4.4 3.6-7.5 8-7.5s8 3.1 8 7.5" fill="rgba(255,255,255,.9)"/></svg></div>
+                <div style="flex:1;min-width:0"><div style="font-size:15px;font-weight:700;color:var(--txt)">{{ c.name }}</div><div style="font-size:12.5px;color:var(--txt2);margin-top:1px">{{ c.user }}</div></div>
+                <div style="width:26px;height:26px;border-radius:50%;border:1px solid var(--g-bd);background:{{ c.checkBg }};box-shadow:var(--g-sh);display:grid;place-items:center;flex:none"><sc-if value="{{ c.checked }}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></sc-if></div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isProfile }}">
+        <div style="min-height:844px;padding:62px 18px 120px;animation:fadeUp .45s ease">
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <div style="font-size:33px;font-weight:900;letter-spacing:-1px;color:var(--txt);text-shadow:var(--glow)">Profile</div>
+            <button onClick="{{ goSettings }}" style="width:42px;height:42px;border-radius:50%;background:var(--g-bg);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);display:grid;place-items:center;cursor:pointer" style-active="transform:scale(.92)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--txt)" stroke-width="1.9"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1Z"/></svg></button>
+          </div>
+
+          <div style="margin-top:22px;border-radius:30px;background:var(--g-bg);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);padding:26px 22px;display:flex;flex-direction:column;align-items:center;position:relative;overflow:hidden">
+            <div style="position:absolute;inset:0;overflow:hidden;border-radius:inherit;pointer-events:none"><div style="position:absolute;top:-40%;left:0;width:36%;height:180%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.5),transparent);filter:blur(7px);animation:sweep 8s ease-in-out infinite"></div></div>
+            <div style="position:relative;width:104px;height:104px"><div style="width:104px;height:104px;border-radius:50%;background:linear-gradient(140deg,hsl(265 72% 72%),hsl(303 62% 52%));box-shadow:inset 0 0 0 3px rgba(255,255,255,.5), 0 12px 28px rgba(91,61,223,.4);overflow:hidden;display:grid;place-items:end center"><svg width="74" height="74" viewBox="0 0 24 24" style="opacity:.9"><circle cx="12" cy="9" r="4" fill="rgba(255,255,255,.92)"/><path d="M4 23c0-4.4 3.6-7.5 8-7.5s8 3.1 8 7.5" fill="rgba(255,255,255,.92)"/></svg></div><div style="position:absolute;right:4px;bottom:6px;width:18px;height:18px;border-radius:50%;background:#34d27b;box-shadow:0 0 0 3px var(--ring)"></div></div>
+            <div style="font-size:23px;font-weight:900;letter-spacing:-.4px;color:var(--txt);margin-top:14px;position:relative">Mila Form</div>
+            <div style="font-size:14px;color:var(--txt2);font-weight:600;position:relative">@mila.form</div>
+            <div style="margin-top:14px;display:flex;align-items:center;gap:7px;padding:8px 16px;border-radius:14px;background:linear-gradient(135deg,rgba(124,92,255,.2),rgba(91,61,223,.12));border:1px solid var(--g-bd);position:relative"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--a1)" stroke-width="2.3"><path d="M12 2l8 4v6c0 5-3.4 8.5-8 10-4.6-1.5-8-5-8-10V6l8-4Z"/></svg><span style="font-size:12.5px;font-weight:700;color:var(--a1)">Privacy is peace of mind</span></div>
+          </div>
+
+          <div style="margin-top:16px;border-radius:22px;background:var(--g-bg);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);padding:16px 18px">
+            <div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:13.5px;font-weight:700;color:var(--txt)">Storage</span><span style="font-size:12.5px;font-weight:600;color:var(--txt2)">4.2 GB of 15 GB</span></div>
+            <div style="margin-top:10px;height:9px;border-radius:5px;background:var(--field);overflow:hidden"><div style="width:28%;height:100%;border-radius:5px;background:linear-gradient(90deg,var(--a1),var(--a2))"></div></div>
+          </div>
+
+          <div style="margin-top:16px;border-radius:24px;background:var(--g-bg);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);overflow:hidden">
+            <sc-for list="{{ settingsList }}" as="s" hint-placeholder-count="7">
+              <div onClick="{{ s.go }}" style="display:flex;align-items:center;gap:14px;padding:14px 16px;cursor:pointer;border-bottom:1px solid var(--g-bd)" style-active="background:var(--g-bg2)">
+                <div style="width:38px;height:38px;border-radius:11px;background:var(--g-bg2);border:1px solid var(--g-bd);display:grid;place-items:center;flex:none"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--a1)" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="{{ s.icon }}"/></svg></div>
+                <div style="flex:1;min-width:0"><div style="font-size:15px;font-weight:700;color:var(--txt)">{{ s.label }}</div><div style="font-size:12px;color:var(--txt2);margin-top:1px">{{ s.sub }}</div></div>
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--txt3)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isPrivacy }}">
+        <div style="min-height:844px;padding:62px 18px 120px;animation:fadeUp .45s ease">
+          <div style="display:flex;align-items:center;gap:12px">
+            <button onClick="{{ back }}" style="width:42px;height:42px;border-radius:50%;background:var(--g-bg);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);display:grid;place-items:center;cursor:pointer" style-active="transform:scale(.92)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--txt)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+            <div style="font-size:24px;font-weight:900;letter-spacing:-.6px;color:var(--txt);text-shadow:var(--glow)">Privacy Dashboard</div>
+          </div>
+
+          <div style="margin-top:20px;border-radius:26px;background:linear-gradient(140deg,rgba(52,210,123,.22),rgba(21,165,92,.1));-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);padding:20px;display:flex;align-items:center;gap:16px">
+            <div style="width:54px;height:54px;border-radius:16px;background:linear-gradient(135deg,#34d27b,#15a55c);display:grid;place-items:center;flex:none;box-shadow:0 8px 18px rgba(21,165,92,.4)"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 4v6c0 5-3.4 8.5-8 10-4.6-1.5-8-5-8-10V6l8-4ZM9 12l2 2 4-4"/></svg></div>
+            <div><div style="font-size:16px;font-weight:800;color:var(--txt)">You're fully encrypted</div><div style="font-size:12.5px;color:var(--txt2);margin-top:2px">All chats & calls end-to-end secured</div></div>
+          </div>
+
+          <div style="margin-top:14px;display:flex;gap:12px">
+            <div style="flex:1;border-radius:24px;background:var(--g-bg);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);padding:18px;display:flex;flex-direction:column;align-items:center">
+              <div style="position:relative;width:88px;height:88px;display:grid;place-items:center"><svg width="88" height="88" viewBox="0 0 88 88" style="transform:rotate(-90deg)"><circle cx="44" cy="44" r="38" fill="none" stroke="var(--field)" stroke-width="8"/><circle cx="44" cy="44" r="38" fill="none" stroke="url(#sg)" stroke-width="8" stroke-linecap="round" stroke-dasharray="239" stroke-dashoffset="34"/><defs><linearGradient id="sg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7c5cff"/><stop offset="1" stop-color="#5b3ddf"/></linearGradient></defs></svg><div style="position:absolute;text-align:center"><div style="font-size:24px;font-weight:900;color:var(--txt);line-height:1">86</div><div style="font-size:9px;font-weight:700;color:var(--txt3)">/100</div></div></div>
+              <div style="font-size:12.5px;font-weight:700;color:var(--txt);margin-top:10px">Security score</div>
+            </div>
+            <div style="flex:1;border-radius:24px;background:var(--g-bg);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);padding:18px;display:flex;flex-direction:column;justify-content:center;gap:12px">
+              <div style="text-align:center"><div style="font-size:30px;font-weight:900;color:var(--txt);line-height:1">3</div><div style="font-size:11.5px;font-weight:600;color:var(--txt2);margin-top:4px">Active devices</div></div>
+              <div style="text-align:center"><div style="font-size:30px;font-weight:900;color:var(--txt);line-height:1">2</div><div style="font-size:11.5px;font-weight:600;color:var(--txt2);margin-top:4px">Blocked users</div></div>
+            </div>
+          </div>
+
+          <div style="margin-top:14px;border-radius:22px;background:var(--g-bg);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);padding:6px 18px">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:13px 0;border-bottom:1px solid var(--g-bd)">
+              <div style="display:flex;align-items:center;gap:12px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--a1)" stroke-width="1.9"><rect x="4" y="11" width="16" height="10" rx="2.5"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><div><div style="font-size:14.5px;font-weight:700;color:var(--txt)">Two-factor auth</div><div style="font-size:11.5px;color:var(--txt2)">Extra layer on login</div></div></div>
+              <div onClick="{{ toggleTwoFA }}" style="width:52px;height:31px;border-radius:16px;position:relative;cursor:pointer;flex:none;{{ twoFASw.track }}"><div style="position:absolute;top:3px;width:25px;height:25px;border-radius:50%;background:#fff;box-shadow:0 2px 5px rgba(0,0,0,.3);transition:left .25s;{{ twoFASw.knob }}"></div></div>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:13px 0">
+              <div style="display:flex;align-items:center;gap:12px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--a1)" stroke-width="1.9"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.2 4.2l2.8 2.8M17 17l2.8 2.8M1 12h4M19 12h4"/></svg><div><div style="font-size:14.5px;font-weight:700;color:var(--txt)">Biometric lock</div><div style="font-size:11.5px;color:var(--txt2)">Face ID to open app</div></div></div>
+              <div onClick="{{ toggleBio }}" style="width:52px;height:31px;border-radius:16px;position:relative;cursor:pointer;flex:none;{{ bioSw.track }}"><div style="position:absolute;top:3px;width:25px;height:25px;border-radius:50%;background:#fff;box-shadow:0 2px 5px rgba(0,0,0,.3);transition:left .25s;{{ bioSw.knob }}"></div></div>
+            </div>
+          </div>
+
+          <div style="font-size:12px;font-weight:800;color:var(--txt3);text-transform:uppercase;letter-spacing:.8px;margin:20px 4px 10px">Active devices</div>
+          <div style="border-radius:22px;background:var(--g-bg);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);overflow:hidden">
+            <div style="display:flex;align-items:center;gap:13px;padding:13px 16px;border-bottom:1px solid var(--g-bd)"><div style="width:38px;height:38px;border-radius:11px;background:var(--g-bg2);border:1px solid var(--g-bd);display:grid;place-items:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--txt)" stroke-width="1.8"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M11 18h2"/></svg></div><div style="flex:1"><div style="font-size:14px;font-weight:700;color:var(--txt)">iPhone 16 Pro · This device</div><div style="font-size:11.5px;color:#34d27b;font-weight:600">Active now</div></div></div>
+            <div style="display:flex;align-items:center;gap:13px;padding:13px 16px;border-bottom:1px solid var(--g-bd)"><div style="width:38px;height:38px;border-radius:11px;background:var(--g-bg2);border:1px solid var(--g-bd);display:grid;place-items:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--txt)" stroke-width="1.8"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg></div><div style="flex:1"><div style="font-size:14px;font-weight:700;color:var(--txt)">MacBook Air</div><div style="font-size:11.5px;color:var(--txt2)">Last active 2h ago</div></div></div>
+            <div style="display:flex;align-items:center;gap:13px;padding:13px 16px"><div style="width:38px;height:38px;border-radius:11px;background:var(--g-bg2);border:1px solid var(--g-bd);display:grid;place-items:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--txt)" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2"/></svg></div><div style="flex:1"><div style="font-size:14px;font-weight:700;color:var(--txt)">iPad Pro</div><div style="font-size:11.5px;color:var(--txt2)">Last active Mon</div></div><span style="font-size:12px;font-weight:700;color:#ff5a6e;cursor:pointer">Remove</span></div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isSettings }}">
+        <div style="min-height:844px;padding:62px 18px 120px;animation:fadeUp .45s ease">
+          <div style="display:flex;align-items:center;gap:12px">
+            <button onClick="{{ back }}" style="width:42px;height:42px;border-radius:50%;background:var(--g-bg);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);display:grid;place-items:center;cursor:pointer" style-active="transform:scale(.92)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--txt)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+            <div style="font-size:26px;font-weight:900;letter-spacing:-.6px;color:var(--txt);text-shadow:var(--glow)">Settings</div>
+          </div>
+
+          <div style="font-size:12px;font-weight:800;color:var(--txt3);text-transform:uppercase;letter-spacing:.8px;margin:22px 4px 10px">Appearance</div>
+          <div style="border-radius:22px;background:var(--g-bg);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);padding:6px 18px">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 0">
+              <div style="display:flex;align-items:center;gap:12px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--a1)" stroke-width="1.9"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg><div style="font-size:14.5px;font-weight:700;color:var(--txt)">Dark mode</div></div>
+              <div onClick="{{ toggleMode }}" style="width:52px;height:31px;border-radius:16px;position:relative;cursor:pointer;flex:none;{{ darkSw.track }}"><div style="position:absolute;top:3px;width:25px;height:25px;border-radius:50%;background:#fff;box-shadow:0 2px 5px rgba(0,0,0,.3);transition:left .25s;{{ darkSw.knob }}"></div></div>
+            </div>
+          </div>
+
+          <div style="font-size:12px;font-weight:800;color:var(--txt3);text-transform:uppercase;letter-spacing:.8px;margin:20px 4px 10px">Wallpaper</div>
+          <div style="border-radius:22px;background:var(--g-bg);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);padding:16px;display:flex;gap:12px;overflow-x:auto">
+            <div style="width:58px;height:82px;border-radius:14px;flex:none;background:linear-gradient(118deg,#b7b4ea,#e8d7c6 60%,#f6d7a0);box-shadow:0 0 0 2.5px var(--a1), inset 0 0 0 1px rgba(255,255,255,.5)"></div>
+            <div style="width:58px;height:82px;border-radius:14px;flex:none;background:linear-gradient(140deg,#0a0a0c,#2a2a32);box-shadow:inset 0 0 0 1px var(--g-bd)"></div>
+            <div style="width:58px;height:82px;border-radius:14px;flex:none;background:linear-gradient(140deg,#2db4ff,#1a6ff0);box-shadow:inset 0 0 0 1px var(--g-bd)"></div>
+            <div style="width:58px;height:82px;border-radius:14px;flex:none;background:linear-gradient(140deg,#ff6a8f,#e0357a);box-shadow:inset 0 0 0 1px var(--g-bd)"></div>
+            <div style="width:58px;height:82px;border-radius:14px;flex:none;background:linear-gradient(140deg,#34d2a0,#0f9d7a);box-shadow:inset 0 0 0 1px var(--g-bd)"></div>
+          </div>
+
+          <div style="font-size:12px;font-weight:800;color:var(--txt3);text-transform:uppercase;letter-spacing:.8px;margin:20px 4px 10px">Notifications</div>
+          <div style="border-radius:22px;background:var(--g-bg);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);padding:6px 18px">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:13px 0;border-bottom:1px solid var(--g-bd)">
+              <div style="display:flex;align-items:center;gap:12px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--a1)" stroke-width="1.9"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M10 21a2 2 0 0 0 4 0"/></svg><div style="font-size:14.5px;font-weight:700;color:var(--txt)">Push notifications</div></div>
+              <div onClick="{{ toggleNotif }}" style="width:52px;height:31px;border-radius:16px;position:relative;cursor:pointer;flex:none;{{ notifSw.track }}"><div style="position:absolute;top:3px;width:25px;height:25px;border-radius:50%;background:#fff;box-shadow:0 2px 5px rgba(0,0,0,.3);transition:left .25s;{{ notifSw.knob }}"></div></div>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:13px 0">
+              <div style="display:flex;align-items:center;gap:12px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--a1)" stroke-width="1.9"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg><div style="font-size:14.5px;font-weight:700;color:var(--txt)">Show message preview</div></div>
+              <div style="width:52px;height:31px;border-radius:16px;position:relative;flex:none;background:var(--field);border:1px solid var(--g-bd)"><div style="position:absolute;top:3px;left:3px;width:25px;height:25px;border-radius:50%;background:#fff;box-shadow:0 2px 5px rgba(0,0,0,.3)"></div></div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isGroupChat }}">
+        <div style="min-height:844px;display:flex;flex-direction:column;animation:fadeUp .4s ease">
+          <div onClick="{{ goGroupInfo }}" style="position:sticky;top:0;z-index:20;padding:56px 14px 12px;display:flex;align-items:center;gap:11px;background:var(--g-bg);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border-bottom:1px solid var(--g-bd);cursor:pointer">
+            <button onClick="{{ back }}" style="width:38px;height:38px;border-radius:50%;background:transparent;border:none;display:grid;place-items:center;cursor:pointer" style-active="transform:scale(.9)"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--txt)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+            <div style="width:42px;height:42px;flex:none;border-radius:50%;background:linear-gradient(140deg,hsl(90 72% 72%),hsl(128 62% 52%));box-shadow:inset 0 0 0 2px rgba(255,255,255,.5);display:grid;place-items:center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.9"/></svg></div>
+            <div style="flex:1;min-width:0"><div style="font-size:16px;font-weight:800;color:var(--txt)">Design Guild</div><div style="font-size:12px;color:var(--txt2);font-weight:500">6 members · 4 online</div></div>
+            <button style="width:40px;height:40px;border-radius:50%;background:var(--g-bg2);border:1px solid var(--g-bd);box-shadow:var(--g-sh);display:grid;place-items:center;cursor:pointer" style-active="transform:scale(.9)"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--txt)" stroke-width="1.9"><path d="M23 7l-7 5 7 5V7Z"/><rect x="1" y="5" width="15" height="14" rx="3"/></svg></button>
+          </div>
+
+          <div style="flex:1;padding:16px 16px 8px;display:flex;flex-direction:column;gap:11px">
+            <div style="align-self:center;display:flex;align-items:center;gap:7px;padding:7px 14px;border-radius:14px;background:var(--g-bg);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);margin-bottom:4px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--a1)" stroke-width="2.2"><rect x="4" y="11" width="16" height="10" rx="2.5"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><span style="font-size:11.5px;font-weight:600;color:var(--txt2)">End-to-end encrypted group</span></div>
+            <sc-for list="{{ groupMsgs }}" as="m" hint-placeholder-count="3">
+              <div style="display:flex;{{ m.rowStyle }};animation:bubbleIn .35s ease">
+                <div style="max-width:78%;display:flex;gap:9px;align-items:flex-end">
+                  <sc-if value="{{ m.showAvatar }}"><div style="width:30px;height:30px;flex:none;border-radius:50%;background:{{ m.av }};box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.5);overflow:hidden;display:grid;place-items:end center"><svg width="21" height="21" viewBox="0 0 24 24" style="opacity:.88"><circle cx="12" cy="9" r="4" fill="rgba(255,255,255,.9)"/><path d="M4 23c0-4.4 3.6-7.5 8-7.5s8 3.1 8 7.5" fill="rgba(255,255,255,.9)"/></svg></div></sc-if>
+                  <div>
+                    <sc-if value="{{ m.showName }}"><div style="font-size:11.5px;font-weight:700;color:var(--a1);margin:0 0 3px 4px">{{ m.name }}</div></sc-if>
+                    <div style="padding:11px 15px;font-size:14.5px;line-height:1.42;{{ m.bubbleStyle }}">{{ m.text }}</div>
+                    <div style="font-size:10.5px;color:var(--txt3);font-weight:600;margin-top:4px;{{ m.metaAlign }}">{{ m.time }}</div>
+                  </div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="position:sticky;bottom:0;padding:10px 14px 30px;display:flex;align-items:center;gap:9px;background:var(--g-bg);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border-top:1px solid var(--g-bd)">
+            <button style="width:42px;height:42px;border-radius:50%;background:var(--g-bg2);border:1px solid var(--g-bd);box-shadow:var(--g-sh);display:grid;place-items:center;cursor:pointer;flex:none" style-active="transform:scale(.9)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--txt2)" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+            <div style="flex:1;height:46px;border-radius:23px;background:var(--field);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);display:flex;align-items:center;padding:0 16px"><span style="font-size:15px;color:var(--txt3);font-weight:500">Message Design Guild…</span></div>
+            <button style="width:46px;height:46px;border-radius:50%;background:linear-gradient(135deg,var(--a1),var(--a2));border:none;box-shadow:0 8px 18px rgba(91,61,223,.42);display:grid;place-items:center;cursor:pointer;flex:none" style-active="transform:scale(.9)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.9"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3"/></svg></button>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isGroupInfo }}">
+        <div style="min-height:844px;padding:62px 18px 60px;animation:fadeUp .45s ease">
+          <div style="display:flex;align-items:center;gap:12px">
+            <button onClick="{{ back }}" style="width:42px;height:42px;border-radius:50%;background:var(--g-bg);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);display:grid;place-items:center;cursor:pointer" style-active="transform:scale(.92)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--txt)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+            <div style="font-size:22px;font-weight:900;letter-spacing:-.5px;color:var(--txt);text-shadow:var(--glow)">Group info</div>
+          </div>
+
+          <div style="margin-top:20px;display:flex;flex-direction:column;align-items:center">
+            <div style="width:92px;height:92px;border-radius:28px;background:linear-gradient(140deg,hsl(90 72% 72%),hsl(128 62% 52%));box-shadow:inset 0 0 0 3px rgba(255,255,255,.5), 0 12px 26px rgba(60,160,60,.35);display:grid;place-items:center"><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.9"/></svg></div>
+            <div style="font-size:22px;font-weight:900;color:var(--txt);margin-top:14px">Design Guild</div>
+            <div style="font-size:13px;color:var(--txt2);font-weight:500;margin-top:2px">6 members · Created Mar 2026</div>
+          </div>
+
+          <div style="display:flex;justify-content:space-between;align-items:center;margin:24px 4px 10px"><span style="font-size:12px;font-weight:800;color:var(--txt3);text-transform:uppercase;letter-spacing:.8px">Members</span><span style="font-size:12.5px;font-weight:700;color:var(--a1);cursor:pointer">+ Add</span></div>
+          <div style="border-radius:24px;background:var(--g-bg);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);overflow:hidden">
+            <sc-for list="{{ members }}" as="m" hint-placeholder-count="6">
+              <div style="display:flex;align-items:center;gap:13px;padding:12px 16px;border-bottom:1px solid var(--g-bd)">
+                <div style="position:relative;width:46px;height:46px;flex:none"><div style="width:46px;height:46px;border-radius:50%;background:{{ m.av }};box-shadow:inset 0 0 0 2px rgba(255,255,255,.5);overflow:hidden;display:grid;place-items:end center"><svg width="32" height="32" viewBox="0 0 24 24" style="opacity:.88"><circle cx="12" cy="9" r="4" fill="rgba(255,255,255,.9)"/><path d="M4 23c0-4.4 3.6-7.5 8-7.5s8 3.1 8 7.5" fill="rgba(255,255,255,.9)"/></svg></div><sc-if value="{{ m.online }}"><div style="position:absolute;right:0;bottom:1px;width:12px;height:12px;border-radius:50%;background:#34d27b;box-shadow:0 0 0 2.5px var(--ring)"></div></sc-if></div>
+                <div style="flex:1;min-width:0"><div style="font-size:15px;font-weight:700;color:var(--txt)">{{ m.name }}</div><div style="font-size:12px;color:var(--txt2);margin-top:1px">{{ m.statusLabel }}</div></div>
+                <sc-if value="{{ m.isAdmin }}"><span style="padding:5px 11px;border-radius:10px;background:linear-gradient(135deg,rgba(124,92,255,.22),rgba(91,61,223,.14));border:1px solid var(--g-bd);font-size:11px;font-weight:800;color:var(--a1)">Admin</span></sc-if>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="margin-top:16px;display:flex;flex-direction:column;gap:10px">
+            <button style="width:100%;height:52px;border-radius:18px;background:var(--g-bg2);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);color:var(--txt);font-size:14.5px;font-weight:700;font-family:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:9px" style-active="transform:scale(.97)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--a1)" stroke-width="2"><rect x="4" y="11" width="16" height="10" rx="2.5"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Encryption keys</button>
+            <button style="width:100%;height:52px;border-radius:18px;background:rgba(255,90,110,.12);border:1px solid rgba(255,90,110,.3);color:#ff5a6e;font-size:14.5px;font-weight:700;font-family:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:9px" style-active="transform:scale(.97)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ff5a6e" stroke-width="2" stroke-linecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Leave group</button>
+          </div>
+        </div>
+      </sc-if>
+
+      </div>
+      <!-- ============ /SCREENS ============ -->
+
+      <!-- tab bar -->
+      <sc-if value="{{ showTabs }}">
+        <div style="position:absolute;bottom:22px;left:18px;right:18px;height:66px;z-index:30;border-radius:28px;background:var(--tab-bg);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--g-bd);box-shadow:var(--g-sh);display:flex;align-items:center;justify-content:space-around;padding:0 8px">
+          <button onClick="{{ goChats }}" style="background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 14px" style-active="transform:scale(.9)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="{{ colChats }}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9.5 9.5 0 0 1-4-.9L3 21l1.9-4.5A8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5Z"/></svg><span style="font-size:10px;font-weight:700;color:{{ colChats }}">Chats</span></button>
+          <button onClick="{{ goCalls }}" style="background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 14px" style-active="transform:scale(.9)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="{{ colCalls }}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3.1-8.7A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2Z"/></svg><span style="font-size:10px;font-weight:700;color:{{ colCalls }}">Calls</span></button>
+          <button onClick="{{ goContacts }}" style="background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 14px" style-active="transform:scale(.9)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="{{ colContacts }}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></svg><span style="font-size:10px;font-weight:700;color:{{ colContacts }}">Contacts</span></button>
+          <button onClick="{{ goProfile }}" style="background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 14px" style-active="transform:scale(.9)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="{{ colProfile }}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg><span style="font-size:10px;font-weight:700;color:{{ colProfile }}">Profile</span></button>
+        </div>
+      </sc-if>
+
+      <!-- home indicator -->
+      <div style="position:absolute;bottom:9px;left:50%;transform:translateX(-50%);width:134px;height:5px;border-radius:3px;background:var(--txt);opacity:.4;z-index:60"></div>
+
+    </div>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:12px">
+    <button onClick="{{ toggleMode }}" style="display:flex;align-items:center;gap:9px;padding:11px 20px;border-radius:30px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);color:#fff;font-family:'Inter',sans-serif;font-size:13.5px;font-weight:700;cursor:pointer;backdrop-filter:blur(10px)"><span style="font-size:16px">{{ modeIcon }}</span>{{ modeLabel }}</button>
+    <div style="font-size:12.5px;color:rgba(255,255,255,.4);font-weight:500;font-family:'Inter',sans-serif">Tap any glass panel to navigate</div>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;defaultMode&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;],&quot;default&quot;:&quot;light&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Theme&quot;},&quot;startScreen&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;splash&quot;,&quot;onboarding&quot;,&quot;signup&quot;,&quot;login&quot;,&quot;chats&quot;,&quot;chat&quot;,&quot;calls&quot;,&quot;incoming&quot;,&quot;contacts&quot;,&quot;newgroup&quot;,&quot;profile&quot;,&quot;privacy&quot;,&quot;settings&quot;,&quot;groupchat&quot;,&quot;groupinfo&quot;],&quot;default&quot;:&quot;splash&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Theme&quot;},&quot;accent&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:[&quot;#7c5cff&quot;,&quot;#5b3ddf&quot;],&quot;options&quot;:[[&quot;#7c5cff&quot;,&quot;#5b3ddf&quot;],[&quot;#2db4ff&quot;,&quot;#1a6ff0&quot;],[&quot;#ff6a8f&quot;,&quot;#e0357a&quot;],[&quot;#34d2a0&quot;,&quot;#0f9d7a&quot;]],&quot;tsType&quot;:&quot;string[]&quot;,&quot;section&quot;:&quot;Theme&quot;}}">
+class Component extends DCLogic {
+  _param(k){ try { return new URLSearchParams(location.search).get(k); } catch(e){ return null; } }
+  state = {
+    screen: this._param('screen') || this.props.startScreen || 'splash',
+    mode: this._param('mode') || this.props.defaultMode || 'light',
+    history: [],
+    filter: 'All',
+    remember: true,
+    twoFA: true,
+    notif: true,
+    bioLock: true,
+    draft: '',
+    typing: false,
+    messages: [
+      { id: 1, who: 'them', text: 'Hey! Did you get the new keys? 🔑', time: '9:24' },
+      { id: 2, who: 'me', text: 'Yep — all encrypted and synced ✨', time: '9:25' },
+      { id: 3, who: 'them', kind: 'voice', dur: '0:14', time: '9:26' },
+      { id: 4, who: 'me', text: 'Listening now. Sounds perfect 👌', time: '9:27' },
+    ],
+  };
+
+  av(h) { return `linear-gradient(140deg, hsl(${h} 72% 72%), hsl(${h + 38} 62% 52%))`; }
+  componentDidMount(){
+    if(this._param('embed')){
+      try{
+        document.documentElement.style.background='transparent';
+        document.body.style.background='transparent';
+        const desk=document.querySelector('[data-desk]');
+        if(desk){desk.style.background='transparent';desk.style.padding='0';desk.style.minHeight='0';desk.style.gap='0';}
+        const bar=document.querySelector('[data-deskbar]');
+        if(bar) bar.style.display='none';
+        const phone=document.querySelector('[data-phone]');
+        if(phone) phone.style.boxShadow='0 10px 34px rgba(0,0,0,.28)';
+      }catch(e){}
+    }
+    if(this.state.screen==='splash' && !this._param('embed')){
+      this._splashT=setTimeout(()=>this.setState({screen:'onboarding'}),3000);
+    }
+  }
+  componentWillUnmount(){ if(this._splashT) clearTimeout(this._splashT); }
+  replaySplash = () => { this.setState({ screen: 'splash', history: [] }); if(this._splashT) clearTimeout(this._splashT); this._splashT = setTimeout(()=>this.setState({screen:'onboarding'}),3000); };
+  go = (screen) => this.setState(s => ({ screen, history: [...s.history, s.screen] }));
+  back = () => this.setState(s => { const h = [...s.history]; const prev = h.pop() || 'chats'; return { screen: prev, history: h }; });
+  toggleMode = () => this.setState(s => ({ mode: s.mode === 'light' ? 'dark' : 'light' }));
+  setFilter = (filter) => this.setState({ filter });
+  toggle = (key) => this.setState(s => ({ [key]: !s[key] }));
+  setDraft = (e) => this.setState({ draft: e.target.value });
+  send = () => {
+    const text = (this.state.draft || '').trim();
+    if (!text) return;
+    this.setState(s => ({ messages: [...s.messages, { id: Date.now(), who: 'me', text, time: 'now' }], draft: '' }));
+    setTimeout(() => this.setState({ typing: true }), 450);
+    setTimeout(() => this.setState(s => ({ typing: false, messages: [...s.messages, { id: Date.now() + 1, who: 'them', text: 'Got it — locked and loaded 🔒', time: 'now' }] })), 2100);
+  };
+
+  renderVals() {
+    const s = this.state;
+    const sc = s.screen;
+    const acc = this.props.accent || ['#7c5cff', '#5b3ddf'];
+    const a1 = acc[0], a2 = acc[1];
+    const navCol = (n) => sc === n ? a1 : 'var(--txt2)';
+
+    const conversations = [
+      { name: 'Mila Form', preview: 'Sent you the encrypted file 🔐', time: '9:24', unread: 2, online: true, h: 265, target: 'chat' },
+      { name: 'Design Guild', preview: 'Ara: pushed the glass tokens', time: '8:50', unread: 5, online: false, h: 200, target: 'groupchat' },
+      { name: 'Theo Vance', preview: '🎤 Voice message · 0:14', time: '8:12', unread: 0, online: true, h: 20, target: 'chat' },
+      { name: 'Priya N', preview: 'See you at 7 — bringing snacks', time: 'Yesterday', unread: 0, online: false, h: 150, target: 'chat' },
+      { name: 'Jonas K', preview: 'typing…', time: '11:02', unread: 0, online: true, h: 320, target: 'chat', live: true },
+      { name: 'Sahara Channel', preview: '🔒 New post: Privacy Weekly #12', time: 'Tue', unread: 0, online: false, h: 40, target: 'chat' },
+      { name: 'Eli R', preview: "Haha that's wild 😂", time: 'Mon', unread: 0, online: true, h: 330, target: 'chat' },
+      { name: 'Mom ❤️', preview: 'Call me when you are free', time: 'Mon', unread: 0, online: false, h: 8, target: 'chat' },
+    ].map(c => ({
+      ...c,
+      av: this.av(c.h),
+      open: () => this.go(c.target),
+      timeCol: c.unread ? a1 : 'var(--txt3)',
+      previewCol: c.unread ? 'var(--txt)' : 'var(--txt2)',
+      previewWeight: c.unread ? '700' : '500',
+    }));
+
+    const stories = [
+      { name: 'Mila', h: 265 }, { name: 'Theo', h: 20 }, { name: 'Priya', h: 150 },
+      { name: 'Jonas', h: 320 }, { name: 'Eli', h: 330 }, { name: 'Ara', h: 90 },
+    ].map(x => ({ ...x, av: this.av(x.h) }));
+
+    const filters = ['All', 'Unread', 'Groups', 'Channels'].map(f => ({
+      name: f,
+      set: () => this.setFilter(f),
+      col: f === s.filter ? '#fff' : 'var(--txt2)',
+      pill: f === s.filter
+        ? 'background:linear-gradient(135deg,var(--a1),var(--a2));box-shadow:0 8px 18px rgba(91,61,223,.4);border-color:transparent;'
+        : 'background:var(--g-bg);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);',
+    }));
+
+    const messages = s.messages.map(m => {
+      const me = m.who === 'me';
+      const voice = m.kind === 'voice';
+      return {
+        ...m,
+        me,
+        isVoice: voice,
+        isText: !voice,
+        rowStyle: me ? 'justify-content:flex-end' : 'justify-content:flex-start',
+        metaAlign: me ? 'justify-content:flex-end' : 'justify-content:flex-start',
+        bubbleStyle: me
+          ? 'background:linear-gradient(135deg,var(--a1),var(--a2));color:#fff;border:1px solid rgba(255,255,255,.28);box-shadow:inset 1.5px 1.5px 0 rgba(255,255,255,.32), 0 8px 20px rgba(91,61,223,.38);border-radius:22px 22px 7px 22px;'
+          : 'background:var(--g-bg2);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);color:var(--txt);border:1px solid var(--g-bd);box-shadow:var(--g-sh);border-radius:22px 22px 22px 7px;',
+        wave: me ? 'rgba(255,255,255,.85)' : 'var(--a1)',
+        playBg: me ? 'rgba(255,255,255,.25)' : 'linear-gradient(135deg,var(--a1),var(--a2))',
+        playFill: me ? '#fff' : '#fff',
+        durCol: me ? 'rgba(255,255,255,.85)' : 'var(--txt2)',
+      };
+    });
+
+    const sw = (on) => ({
+      track: on ? 'background:linear-gradient(135deg,var(--a1),var(--a2));border:1px solid transparent' : 'background:var(--field);border:1px solid var(--g-bd)',
+      knob: on ? 'left:24px' : 'left:3px',
+    });
+
+    const calls = [
+      { name: 'Mila Form', h: 265, kind: 'video', dir: 'out', time: 'Today, 10:30' },
+      { name: 'Theo Vance', h: 20, kind: 'voice', dir: 'in', time: 'Today, 9:15' },
+      { name: 'Priya N', h: 150, kind: 'voice', dir: 'missed', time: 'Yesterday' },
+      { name: 'Design Guild', h: 200, kind: 'video', dir: 'out', time: 'Yesterday' },
+      { name: 'Jonas K', h: 320, kind: 'voice', dir: 'missed', time: 'Mon' },
+      { name: 'Eli R', h: 330, kind: 'video', dir: 'in', time: 'Mon' },
+    ].map(c => ({
+      ...c,
+      av: this.av(c.h),
+      open: () => this.go('incoming'),
+      missed: c.dir === 'missed',
+      nameCol: c.dir === 'missed' ? '#ff5a6e' : 'var(--txt)',
+      dirIcon: c.dir === 'missed' ? 'M7 17l10-10M7 7h10v10' : (c.dir === 'in' ? 'M7 7l10 10M17 7v10H7' : 'M17 17L7 7M7 17V7h10'),
+      dirCol: c.dir === 'missed' ? '#ff5a6e' : 'var(--txt2)',
+      isVideo: c.kind === 'video',
+      isVoice: c.kind === 'voice',
+    }));
+
+    const contacts = [
+      { name: 'Ara Holt', user: '@ara', h: 90, online: true },
+      { name: 'Eli Rivera', user: '@eli.r', h: 330, online: true },
+      { name: 'Jonas Kerr', user: '@jonas', h: 320, online: false },
+      { name: 'Mila Form', user: '@mila.form', h: 265, online: true },
+      { name: 'Priya Nair', user: '@priya', h: 150, online: false },
+      { name: 'Sam Okafor', user: '@samo', h: 50, online: false },
+      { name: 'Theo Vance', user: '@theo', h: 20, online: true },
+      { name: 'Zoe Lin', user: '@zoe', h: 180, online: false },
+    ].map((c, i) => ({
+      ...c, av: this.av(c.h), open: () => this.go('chat'),
+      checked: i < 3,
+      checkBg: i < 3 ? 'linear-gradient(135deg,var(--a1),var(--a2))' : 'var(--field)',
+    }));
+
+    const onlineNow = contacts.filter(c => c.online);
+
+    const members = [
+      { name: 'You', h: 265, role: 'Admin', online: true },
+      { name: 'Ara Holt', h: 90, role: 'Admin', online: true },
+      { name: 'Theo Vance', h: 20, role: 'Member', online: true },
+      { name: 'Priya Nair', h: 150, role: 'Member', online: false },
+      { name: 'Jonas Kerr', h: 320, role: 'Member', online: false },
+      { name: 'Zoe Lin', h: 180, role: 'Member', online: true },
+    ].map(m => ({
+      ...m, av: this.av(m.h), isAdmin: m.role === 'Admin',
+      statusLabel: m.role === 'Admin' ? (m.online ? 'Admin · online' : 'Group admin') : (m.online ? 'online' : 'offline'),
+    }));
+
+    const groupMsgs = [
+      { id: 1, who: 'them', name: 'Ara Holt', h: 90, text: 'Pushed the new glass tokens to main 🎨', time: '8:48' },
+      { id: 2, who: 'them', name: 'Theo Vance', h: 20, text: 'The bevel highlight looks unreal now', time: '8:49' },
+      { id: 3, who: 'me', name: 'You', text: 'Shipping it. Great work everyone 🔒', time: '8:50' },
+    ].map((m, i, arr) => {
+      const me = m.who === 'me';
+      const prev = arr[i - 1];
+      const firstOfRun = !prev || prev.who !== m.who || prev.name !== m.name;
+      return {
+        ...m, me, av: this.av(m.h || 0),
+        showAvatar: !me && firstOfRun,
+        showName: !me && firstOfRun,
+        metaAlign: me ? 'text-align:right' : 'text-align:left',
+        rowStyle: me ? 'justify-content:flex-end' : 'justify-content:flex-start',
+        bubbleStyle: me
+          ? 'background:linear-gradient(135deg,var(--a1),var(--a2));color:#fff;border:1px solid rgba(255,255,255,.28);box-shadow:inset 1.5px 1.5px 0 rgba(255,255,255,.32), 0 8px 20px rgba(91,61,223,.38);border-radius:22px 22px 7px 22px;'
+          : 'background:var(--g-bg2);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);color:var(--txt);border:1px solid var(--g-bd);box-shadow:var(--g-sh);border-radius:22px 22px 22px 7px;',
+      };
+    });
+
+    const settingsList = [
+      { label: 'Account', sub: 'Username, email, keys', icon: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM4 21c0-4 3.6-7 8-7s8 3 8 7', go: () => this.go('profile') },
+      { label: 'Privacy & Security', sub: 'Encryption, 2FA, blocked', icon: 'M12 2l8 4v6c0 5-3.4 8.5-8 10-4.6-1.5-8-5-8-10V6l8-4ZM9 12l2 2 4-4', go: () => this.go('privacy') },
+      { label: 'Notifications', sub: 'Sounds, previews, badges', icon: 'M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M10 21a2 2 0 0 0 4 0', go: () => this.go('settings') },
+      { label: 'Appearance', sub: 'Theme, wallpaper, mode', icon: 'M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6L5.6 18.4', go: () => this.go('settings') },
+      { label: 'Data and Storage', sub: '4.2 GB of 15 GB used', icon: 'M4 7c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3ZM4 7v10c0 1.7 3.6 3 8 3s8-1.3 8-3V7', go: () => this.go('settings') },
+      { label: 'Devices', sub: '3 active sessions', icon: 'M4 4h16v12H4zM2 20h20M9 16v4M15 16v4', go: () => this.go('privacy') },
+      { label: 'Help & Support', sub: 'FAQ, contact, about', icon: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20ZM9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.8.4-1 .9-1 1.7M12 17h.01', go: () => this.go('settings') },
+    ];
+
+    return {
+      mode: s.mode,
+      a1, a2,
+      modeIcon: s.mode === 'light' ? '☾' : '☀',
+      modeLabel: s.mode === 'light' ? 'Dark mode' : 'Light mode',
+      go: this.go, back: this.back, toggleMode: this.toggleMode, replaySplash: this.replaySplash,
+      goSignup: () => this.go('signup'), goLogin: () => this.go('login'), goHome: () => this.go('chats'),
+      goChats: () => this.go('chats'), goCalls: () => this.go('calls'), goContacts: () => this.go('contacts'),
+      goProfile: () => this.go('profile'), goPrivacy: () => this.go('privacy'), goSettings: () => this.go('settings'),
+      goNewGroup: () => this.go('newgroup'), goIncoming: () => this.go('incoming'),
+      goGroupInfo: () => this.go('groupinfo'), goGroupChat: () => this.go('groupchat'),
+      isSplash: sc === 'splash',
+      isOnboarding: sc === 'onboarding', isSignup: sc === 'signup', isLogin: sc === 'login',
+      isChats: sc === 'chats', isChat: sc === 'chat', isContacts: sc === 'contacts',
+      isNewGroup: sc === 'newgroup', isCalls: sc === 'calls', isIncoming: sc === 'incoming',
+      isProfile: sc === 'profile', isPrivacy: sc === 'privacy', isSettings: sc === 'settings',
+      isGroupChat: sc === 'groupchat', isGroupInfo: sc === 'groupinfo',
+      showTabs: ['chats', 'calls', 'contacts', 'profile'].includes(sc),
+      colChats: navCol('chats'), colCalls: navCol('calls'), colContacts: navCol('contacts'), colProfile: navCol('profile'),
+      remember: s.remember, toggleRemember: () => this.toggle('remember'),
+      rememberBg: s.remember ? 'linear-gradient(135deg,var(--a1),var(--a2))' : 'var(--field)',
+      filters, conversations, stories, messages,
+      typing: s.typing, draft: s.draft, setDraft: this.setDraft, send: this.send,
+      hasDraft: (s.draft || '').trim().length > 0, noDraft: (s.draft || '').trim().length === 0,
+      calls, contacts, onlineNow, members, groupMsgs, settingsList,
+      twoFA: s.twoFA, notif: s.notif, bioLock: s.bioLock,
+      twoFASw: sw(s.twoFA), notifSw: sw(s.notif), bioSw: sw(s.bioLock), darkSw: sw(s.mode === 'dark'),
+      toggleTwoFA: () => this.toggle('twoFA'), toggleNotif: () => this.toggle('notif'), toggleBio: () => this.toggle('bioLock'),
+      isLight: s.mode === 'light',
+    };
+  }
+}
+</script>
+</body>
+</html>
