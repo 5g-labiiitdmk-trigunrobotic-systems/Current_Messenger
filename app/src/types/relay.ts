@@ -1,0 +1,54 @@
+// Wire protocol for the relay client. Mirrors server/src/protocol.ts — keep both in sync.
+
+export type MessageKind =
+  | 'text'
+  | 'voice'
+  | 'media'
+  | 'sticker'
+  | 'reaction'
+  | 'edit'
+  | 'pin'
+  | 'unpin'
+  | 'forward'
+  | 'reply'
+  | 'poll'
+  | 'poll_vote'
+  | 'location'
+  | 'mood'
+  | 'mention'
+  | 'game'
+  | 'doodle'
+  | 'call_signal';
+
+export interface EncryptedPayload {
+  nonce: string;
+  ciphertext: string;
+}
+
+export type ClientEvent =
+  | { type: 'auth'; token: string }
+  | { type: 'message:send'; tempId: string; to?: string; groupId?: string; kind: MessageKind; payload: EncryptedPayload; meta?: Record<string, unknown> }
+  | { type: 'typing'; to?: string; groupId?: string; isTyping: boolean }
+  | { type: 'read'; to?: string; groupId?: string; messageId: string }
+  | { type: 'presence:set'; status: 'online' | 'away' }
+  | { type: 'group:create'; groupId: string; name: string; memberIds: string[]; isBroadcast?: boolean }
+  | { type: 'group:invite'; groupId: string; to: string }
+  | { type: 'group:leave'; groupId: string }
+  | { type: 'call:signal'; to: string; signal: Record<string, unknown> }
+  | { type: 'ping' };
+
+export type ServerEvent =
+  | { type: 'auth:ok'; userId: string }
+  | { type: 'auth:error'; message: string }
+  | { type: 'message:sent'; tempId: string; messageId: string; sentAt: string }
+  | { type: 'message:failed'; tempId: string; reason: 'recipient_offline' | 'not_contact' | 'blocked' | 'not_group_member' | 'broadcast_read_only' | 'unauthenticated' }
+  | { type: 'message:receive'; messageId: string; from: string; groupId?: string; kind: MessageKind; payload: EncryptedPayload; meta?: Record<string, unknown>; sentAt: string }
+  | { type: 'typing'; from: string; groupId?: string; isTyping: boolean }
+  | { type: 'read'; from: string; groupId?: string; messageId: string }
+  | { type: 'presence'; userId: string; status: 'online' | 'offline'; lastSeenAt?: string }
+  | { type: 'group:created'; groupId: string; name: string; memberIds: string[]; isBroadcast?: boolean }
+  | { type: 'group:invited'; groupId: string; name: string; from: string; memberIds: string[]; isBroadcast?: boolean }
+  | { type: 'group:member_left'; groupId: string; userId: string }
+  | { type: 'call:signal'; from: string; signal: Record<string, unknown> }
+  | { type: 'error'; message: string }
+  | { type: 'pong' };

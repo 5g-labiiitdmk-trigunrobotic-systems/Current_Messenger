@@ -1,0 +1,16 @@
+# Render.com free-tier web service config. Deploy: connect this repo, set the
+# root directory to `server`, and Render will pick this up automatically.
+# (Railway/Fly.io work too — see docs/SETUP.md for those instead.)
+services:
+  - type: web
+    name: current-relay
+    runtime: node
+    plan: free
+    rootDir: server
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false

@@ -1,0 +1,99 @@
+{
+  "expo": {
+    "name": "Current",
+    "slug": "current-messenger",
+    "scheme": "current",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/current-logo.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#141416"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.current.app",
+      "googleServicesFile": "./GoogleService-Info.plist",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Current uses the camera to scan contact QR codes and take photos to share in chats.",
+        "NSMicrophoneUsageDescription": "Current uses the microphone for voice messages and voice/video calls.",
+        "NSPhotoLibraryUsageDescription": "Current needs access to your photos so you can share media in chats.",
+        "NSFaceIDUsageDescription": "Current uses Face ID to unlock the app when biometric lock is enabled."
+      }
+    },
+    "android": {
+      "package": "com.current.app",
+      "googleServicesFile": "./google-services.json",
+      "adaptiveIcon": {
+        "backgroundColor": "#141416",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "READ_EXTERNAL_STORAGE",
+        "POST_NOTIFICATIONS",
+        "USE_BIOMETRIC",
+        "USE_FINGERPRINT"
+      ],
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-secure-store",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Current uses the camera to scan contact QR codes and take photos to share in chats."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#7c5cff"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Current needs access to your photos so you can share media in chats."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Current uses your location only when you choose to share it live in a chat — never stored."
+        }
+      ],
+      "@react-native-firebase/app",
+      "@react-native-firebase/auth",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/current-logo.png",
+          "imageWidth": 160,
+          "resizeMode": "contain",
+          "backgroundColor": "#141416"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {}
+    }
+  }
+}

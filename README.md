@@ -1,25 +1,43 @@
-# CODING AGENTS: READ THIS FIRST
+# Current
 
-This is a **handoff bundle** from Claude Design (claude.ai/design).
+A privacy-focused messenger where messages are never stored anywhere, ever —
+not in a database, not temporarily, not encrypted-at-rest. Every message is a
+live relay: if the recipient isn't online, the send hard-fails instead of
+queueing. Contacts must approve each other before either side can message.
 
-A user mocked up designs in HTML/CSS/JS using an AI design tool, then exported this bundle so a coding agent can implement the designs for real.
+Design: iOS Liquid Glass aesthetic, ported from the `project/` Claude Design
+export (`Current.dc.html`) into a real React Native app — see `project/` for
+the original prototype and `chats/chat1.md` for the design brief.
 
-## What you should do — IMPORTANT
+## Structure
 
-**Read the chat transcripts first.** There are 1 chat transcript(s) in `chats/`. The transcripts show the full back-and-forth between the user and the design assistant — they tell you **what the user actually wants** and **where they landed** after iterating. Don't skip them. The final HTML files are the output, but the chat is where the intent lives.
+- **`app/`** — the React Native + Expo (TypeScript, Expo Router) mobile app.
+- **`server/`** — the WebSocket relay: in-memory only, zero message persistence.
+- **`supabase/migrations/`** — the metadata schema: exactly four tables
+  (`users`, `contact_requests`, `blocked_users`, `device_keys`). No message
+  content ever touches Postgres.
+- **`docs/SETUP.md`** — credential setup (Supabase, Firebase Phone Auth,
+  relay deployment) — **start here** to actually run this.
+- **`project/`, `chats/`** — the original Claude Design handoff bundle
+  (design source of truth for the visual language).
 
-**Read `project/Current.dc.html` in full.** The user had this file open when they triggered the handoff, so it's almost certainly the primary design they want built. Read it top to bottom — don't skim. Then **follow its imports**: open every file it pulls in (shared components, CSS, scripts) so you understand how the pieces fit together before you start implementing.
+## Architecture at a glance
 
-**If anything is ambiguous, ask the user to confirm before you start implementing.** It's much cheaper to clarify scope up front than to build the wrong thing.
+- **Auth**: dual-mandatory — Supabase email OTP *and* Firebase phone OTP.
+  Neither alone creates a usable account (`app/app/(auth)/`).
+- **Messaging**: E2E-encrypted (NaCl box / libsodium-equivalent primitives,
+  `app/src/lib/crypto.ts`) over a raw WebSocket relay (`server/src/index.ts`).
+  No forward secrecy/ratcheting in this pass — simple per-message encryption.
+- **Contacts**: request/approve flow gates all message routing, enforced
+  server-side (`server/src/supabaseAdmin.ts`).
+- **Groups**: live-only, held in the relay's process memory
+  (`server/src/state.ts`) — never in Postgres, never on disk.
+- **Calls**: real ring/accept/decline signaling over the relay; no WebRTC
+  audio/video transport (that's a separate large subsystem, not built).
+- **Long-tail features** (AR filters, mini-games, voice changer, doodle,
+  co-watching, business profiles, bots, widget presence, topics): UI shells
+  only, reachable from Profile → Lab (`app/app/lab/`).
 
-## About the design files
-
-The design medium is **HTML/CSS/JS** — these are prototypes, not production code. Your job is to **recreate them pixel-perfectly** in whatever technology makes sense for the target codebase (React, Vue, native, whatever fits). Match the visual output; don't copy the prototype's internal structure unless it happens to fit.
-
-**Don't render these files in a browser or take screenshots unless the user asks you to.** Everything you need — dimensions, colors, layout rules — is spelled out in the source. Read the HTML and CSS directly; a screenshot won't tell you anything they don't.
-
-## Bundle contents
-
-- `README.md` — this file
-- `chats/` — conversation transcripts (read these!)
-- `project/` — the `Trusty Privacy Messenger App` project files (HTML prototypes, assets, components)
+See `docs/SETUP.md` for exactly what to configure before any of this talks to
+real infrastructure — the code is complete but the credentials are yours to
+provide.
