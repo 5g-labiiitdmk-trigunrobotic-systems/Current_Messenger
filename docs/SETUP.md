@@ -4,6 +4,26 @@ This is the credential/infra checklist to get the app actually running against
 real services. Everything in `/app` and `/server` is already wired to expect
 these — nothing works end-to-end until you complete the steps below.
 
+## 0. Claude Code on the web: GitHub push access
+
+This repo's `origin` normally routes through this environment's connector
+proxy, which doesn't currently have write access to the
+`5g-labiiitdmk-trigunrobotic-systems` org (see `.claude/hooks/session-start.sh`
+for the workaround and why it's needed). Until that connector access is
+granted (Settings → GitHub App install → add this org), sessions authenticate
+via a personal access token instead:
+
+1. In this environment's settings (where you configure env vars/secrets for
+   Claude Code on the web), add a secret named **`GITHUB_TOKEN`** with a
+   GitHub PAT that has `repo` scope for this org/repo.
+2. That's it — `.claude/hooks/session-start.sh` runs automatically at the
+   start of every session, reads `GITHUB_TOKEN` from the environment, and
+   configures git so `push`/`pull`/`fetch` just work. The token is never
+   written to `.git/config` or any tracked file — it's read fresh from the
+   environment each time git needs it.
+3. If `GITHUB_TOKEN` isn't set, the hook no-ops silently and git operations
+   against `origin` will fail with a normal auth error until it's added.
+
 ## 1. Supabase (metadata DB + email auth)
 
 1. Create a project at [supabase.com](https://supabase.com) (free tier).
