@@ -24,26 +24,23 @@ via a personal access token instead:
 3. If `GITHUB_TOKEN` isn't set, the hook no-ops silently and git operations
    against `origin` will fail with a normal auth error until it's added.
 
-## 1. Supabase (metadata DB + email auth)
+## 1. Supabase (metadata DB + email auth) — DONE
 
-1. Create a project at [supabase.com](https://supabase.com) (free tier).
-2. **Auth → Providers → Email**: enable it. Under **Auth → Templates →
-   Confirm signup**, make sure the template includes `{{ .Token }}` (the
-   6-digit OTP code) — the app calls `verifyOtp({ type: 'signup' })`, which
-   needs the code-based template, not the default magic-link one.
-3. **SQL Editor**: run `supabase/migrations/0001_init.sql` (or `supabase db
-   push` if you have the CLI linked to the project). This creates exactly
-   four tables — `users`, `contact_requests`, `blocked_users`, `device_keys`
-   — with RLS policies. No message table exists anywhere on purpose.
-4. **Settings → API**: copy the Project URL and the `anon` `public` key into
-   `app/.env` (copy from `app/.env.example` first):
-   ```
-   EXPO_PUBLIC_SUPABASE_URL=https://xxxx.supabase.co
-   EXPO_PUBLIC_SUPABASE_ANON_KEY=eyJ...
-   ```
-5. Also copy the **service role key** (Settings → API → `service_role`,
-   secret) into `server/.env` as `SUPABASE_SERVICE_ROLE_KEY` — this key must
-   never appear in the app, only on the relay server.
+Project: **`vwwedjketyuyhqbrqnvl`** (vwwedjketyuyhqbrqnvl.supabase.co).
+`app/.env` has the URL + anon key, `server/.env` has the URL + service role
+key (both gitignored, never committed). Migration `0001_init.sql` has been
+run against it.
+
+Still worth double-checking on your end: **Auth → Templates → Confirm
+signup** should include `{{ .Token }}` (the 6-digit OTP code) — the app
+calls `verifyOtp({ type: 'signup' })`, which needs the code-based template,
+not Supabase's default magic-link one. If signup emails arrive with a
+clickable link instead of a code, switch the template.
+
+This sandbox can't reach `*.supabase.co` (network egress is allowlisted and
+Supabase isn't on it), so none of this has been verified live from within a
+session — verify from your own machine/device, or add the host to this
+environment's egress allowlist if you want a future session able to check.
 
 ## 2. Firebase (phone OTP)
 
