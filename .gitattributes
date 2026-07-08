@@ -1,0 +1,14 @@
+# Enforce LF line endings regardless of the committing machine's OS/git
+# config. Matters concretely for this repo: .claude/hooks/session-start.sh
+# has a bash shebang — a CRLF-corrupted shebang line fails to execute on
+# Linux (both this sandbox and EAS Build's Linux build servers), even
+# though it'd look fine and run fine on Windows.
+* text=auto eol=lf
+
+*.sh text eol=lf
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ttf binary
+*.keystore binary
+*.jks binary
