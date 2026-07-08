@@ -37,9 +37,14 @@ yarn-error.*
 .env.*
 !.env.example
 
-# Firebase native config (contains project identifiers — keep local)
-google-services.json
-GoogleService-Info.plist
+# Firebase native config: intentionally NOT gitignored. These identify the
+# Firebase project (API key, app ID) but aren't secrets in the access-control
+# sense — Firebase's security model relies on Auth + Security Rules + API key
+# restrictions, not on this file staying private. EAS Build archives only
+# what .gitignore doesn't exclude, so keeping these tracked is what lets a
+# cloud build actually find them during the Firebase config-plugin step.
+# (Actual secrets — Supabase service role key, GitHub/EAS tokens — stay in
+# .env / EAS environment variables, never here.)
 
 # typescript
 *.tsbuildinfo
