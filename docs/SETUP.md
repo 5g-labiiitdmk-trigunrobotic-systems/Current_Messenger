@@ -24,18 +24,30 @@ via a personal access token instead:
 3. If `GITHUB_TOKEN` isn't set, the hook no-ops silently and git operations
    against `origin` will fail with a normal auth error until it's added.
 
-## 1. Supabase (metadata DB + email auth) — DONE
+## 1. Supabase (metadata DB + email auth) — DONE, one required dashboard step left
 
 Project: **`vwwedjketyuyhqbrqnvl`** (vwwedjketyuyhqbrqnvl.supabase.co).
 `app/.env` has the URL + anon key, `server/.env` has the URL + service role
 key (both gitignored, never committed). Migration `0001_init.sql` has been
 run against it.
 
-Still worth double-checking on your end: **Auth → Templates → Confirm
-signup** should include `{{ .Token }}` (the 6-digit OTP code) — the app
-calls `verifyOtp({ type: 'signup' })`, which needs the code-based template,
-not Supabase's default magic-link one. If signup emails arrive with a
-clickable link instead of a code, switch the template.
+**Email confirmation uses Supabase's default link-based flow, not a typed
+code** (the code-based template needs custom SMTP, skipped for now per your
+call). The app was adapted to match: `signup.tsx` calls `signUp()` with
+`emailRedirectTo` set to a fixed deep link, `verify-email.tsx` is a "check
+your email" waiting screen (no code field), and `app/_layout.tsx` +
+`src/lib/authDeepLink.ts` handle the incoming link globally — tapping it in
+the confirmation email opens the app already signed in, no manual step.
+
+**Required — you must do this or the link will error out**: go to
+**Auth → URL Configuration → Redirect URLs** in the Supabase dashboard and
+add exactly:
+```
+current://auth-redirect
+```
+Supabase rejects redirects to any URL not on this allow-list. This is a
+fixed literal string (see the comment in `src/lib/authDeepLink.ts` for why
+it's hardcoded rather than computed) — copy it exactly, no trailing slash.
 
 This sandbox can't reach `*.supabase.co` (network egress is allowlisted and
 Supabase isn't on it), so none of this has been verified live from within a

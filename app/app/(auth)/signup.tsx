@@ -9,6 +9,7 @@ import { useTheme } from '../../src/theme/useTheme';
 import { fontFamilies } from '../../src/theme/tokens';
 import { useSignupStore } from '../../src/state/signupStore';
 import { supabase } from '../../src/lib/supabase';
+import { AUTH_REDIRECT_URL } from '../../src/lib/authDeepLink';
 
 const USERNAME_RE = /^[a-z0-9_.]{3,24}$/;
 
@@ -48,7 +49,11 @@ export default function SignupScreen() {
       return;
     }
 
-    const { error } = await supabase.auth.signUp({ email, password });
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { emailRedirectTo: AUTH_REDIRECT_URL },
+    });
     setLoading(false);
     if (error) {
       Alert.alert('Sign up failed', error.message);

@@ -1,65 +1,60 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, Alert } from 'react-native';
 import { router } from 'expo-router';
+import Svg, { Path } from 'react-native-svg';
 import { ScreenScaffold } from '../../src/components/ScreenScaffold';
 import { AuthHeader } from '../../src/components/AuthHeader';
-import { GlassField } from '../../src/components/GlassField';
-import { PrimaryButton } from '../../src/components/Buttons';
+import { Glass } from '../../src/components/Glass';
 import { useTheme } from '../../src/theme/useTheme';
 import { fontFamilies } from '../../src/theme/tokens';
 import { useSignupStore } from '../../src/state/signupStore';
+import { useAuthStore } from '../../src/state/authStore';
 import { supabase } from '../../src/lib/supabase';
 
+/**
+ * Supabase's default "Confirm signup" email is a clickable link, not a
+ * code (a code-based template needs custom SMTP, which we're skipping for
+ * now). So this screen doesn't collect anything — it just waits. Tapping
+ * the link in the email opens the app via a deep link, which
+ * app/_layout.tsx + src/lib/authDeepLink.ts handle globally by calling
+ * supabase.auth.setSession(...), which updates `session` here reactively.
+ */
 export default function VerifyEmailScreen() {
   const { tokens, a1 } = useTheme();
   const email = useSignupStore((s) => s.email);
-  const [code, setCode] = useState('');
-  const [loading, setLoading] = useState(false);
+  const session = useAuthStore((s) => s.session);
   const [resending, setResending] = useState(false);
 
-  const onVerify = async () => {
-    if (code.trim().length < 4) {
-      Alert.alert('Enter the code', 'Check your email for the 6-digit verification code.');
-      return;
+  useEffect(() => {
+    if (session?.user.email_confirmed_at) {
+      router.replace('/(auth)/add-phone');
     }
-    setLoading(true);
-    const { error } = await supabase.auth.verifyOtp({ email, token: code.trim(), type: 'signup' });
-    setLoading(false);
-    if (error) {
-      Alert.alert('Verification failed', error.message);
-      return;
-    }
-    router.push('/(auth)/add-phone');
-  };
+  }, [session]);
 
   const onResend = async () => {
     setResending(true);
     const { error } = await supabase.auth.resend({ type: 'signup', email });
     setResending(false);
     if (error) Alert.alert('Could not resend', error.message);
-    else Alert.alert('Code sent', `A new code was sent to ${email}.`);
+    else Alert.alert('Email sent', `A new confirmation link was sent to ${email}. Tap it to continue.`);
   };
 
   return (
     <ScreenScaffold>
-      <AuthHeader title="Verify your email" subtitle={`Enter the 6-digit code we sent to ${email || 'your email'}.`} />
+      <AuthHeader title="Check your email" subtitle={`We sent a confirmation link to ${email || 'your email'}.`} />
 
-      <View style={{ marginTop: 28 }}>
-        <GlassField
-          label="Verification code"
-          placeholder="123456"
-          keyboardType="number-pad"
-          maxLength={6}
-          value={code}
-          onChangeText={setCode}
-          style={{ letterSpacing: 6, fontSize: 20 }}
-        />
-      </View>
+      <Glass radius={22} style={{ marginTop: 26, padding: 18, flexDirection: 'row', gap: 13, alignItems: 'flex-start' }}>
+        <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={a1} strokeWidth={1.9} style={{ marginTop: 1 }}>
+          <Path d="M4 4h16v16H4z" />
+          <Path d="M4 6l8 7 8-7" />
+        </Svg>
+        <Text style={{ flex: 1, fontSize: 13, fontFamily: fontFamilies.medium, color: tokens.text2, lineHeight: 19 }}>
+          Open the email on this device and tap the confirmation link — it'll bring you straight back here, already verified. This screen updates itself, no need to come back and refresh.
+        </Text>
+      </Glass>
 
-      <PrimaryButton title="Verify email" onPress={onVerify} loading={loading} style={{ marginTop: 22 }} />
-
-      <Text onPress={onResend} style={{ textAlign: 'center', marginTop: 20, fontSize: 13.5, fontFamily: fontFamilies.bold, color: resending ? tokens.text3 : a1 }}>
-        {resending ? 'Sending…' : 'Resend code'}
+      <Text onPress={resending ? undefined : onResend} style={{ textAlign: 'center', marginTop: 22, fontSize: 13.5, fontFamily: fontFamilies.bold, color: resending ? tokens.text3 : a1 }}>
+        {resending ? 'Sending…' : "Didn't get it? Resend email"}
       </Text>
     </ScreenScaffold>
   );
