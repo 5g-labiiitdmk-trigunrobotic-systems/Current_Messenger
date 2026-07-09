@@ -106,12 +106,16 @@ export default function ContactsScreen() {
                 </View>
                 <Pressable onPress={() => respond(r.id, false)} style={{ marginRight: 6 }}>
                   <Glass radius={14} style={{ width: 34, height: 34, alignItems: 'center', justifyContent: 'center' }}>
-                    <Text style={{ color: '#ff5a6e', fontFamily: fontFamilies.bold }}>✕</Text>
+                    <Svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="#ff5a6e" strokeWidth={2.6} strokeLinecap="round">
+                      <Path d="M18 6L6 18M6 6l12 12" />
+                    </Svg>
                   </Glass>
                 </Pressable>
                 <Pressable onPress={() => respond(r.id, true)}>
                   <View style={{ width: 34, height: 34, borderRadius: 14, backgroundColor: a1, alignItems: 'center', justifyContent: 'center' }}>
-                    <Text style={{ color: '#fff', fontFamily: fontFamilies.bold }}>✓</Text>
+                    <Svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2.8} strokeLinecap="round" strokeLinejoin="round">
+                      <Path d="M20 6L9 17l-5-5" />
+                    </Svg>
                   </View>
                 </Pressable>
               </View>

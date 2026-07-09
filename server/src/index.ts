@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import { WebSocketServer, WebSocket } from 'ws';
 import type { ClientEvent, ServerEvent } from './protocol.js';
 import { relayState } from './state.js';
-import { verifyUserToken, areApprovedContacts, isBlocked, getUsername } from './supabaseAdmin.js';
+import { verifyUserToken, areApprovedContacts, isBlocked, getUsername, logTransfer } from './supabaseAdmin.js';
 import { pingOfflineRecipient } from './pushPing.js';
 
 const PORT = Number(process.env.PORT) || 8787;
@@ -131,6 +131,9 @@ wss.on('connection', (socket) => {
         break;
       }
       case 'call:signal': {
+        // Same contact-approval rule as messages — signaling payloads must
+        // not reach users who never approved the sender.
+        if (!(await areApprovedContacts(userId, event.to))) break;
         const s = relayState.getSocket(event.to);
         if (s) send(s, { type: 'call:signal', from: userId, signal: event.signal });
         break;
@@ -153,6 +156,9 @@ async function handleMessageSend(userId: string, event: Extract<ClientEvent, { t
   const socket = relayState.getSocket(userId)!;
   const messageId = crypto.randomUUID();
   const sentAt = new Date().toISOString();
+  // Size of the opaque ciphertext envelope — the only thing about the message
+  // body that is ever recorded anywhere. Content itself never leaves memory.
+  const byteSize = Buffer.byteLength(JSON.stringify(event.payload), 'utf8');
 
   if (event.groupId) {
     const group = relayState.getGroup(event.groupId);
@@ -180,6 +186,7 @@ async function handleMessageSend(userId: string, event: Extract<ClientEvent, { t
         sentAt,
       });
       deliveredToAnyone = true;
+      logTransfer(userId, memberId, byteSize);
     }
     if (deliveredToAnyone) {
       send(socket, { type: 'message:sent', tempId: event.tempId, messageId, sentAt });
@@ -224,6 +231,7 @@ async function handleMessageSend(userId: string, event: Extract<ClientEvent, { t
     sentAt,
   });
   send(socket, { type: 'message:sent', tempId: event.tempId, messageId, sentAt });
+  logTransfer(userId, to, byteSize);
 }
 
 async function forwardToRecipients(userId: string, to: string | undefined, groupId: string | undefined, sendFn: (targetId: string) => void) {
@@ -235,7 +243,9 @@ async function forwardToRecipients(userId: string, to: string | undefined, group
     }
     return;
   }
-  if (to && relayState.isOnline(to)) sendFn(to);
+  // Typing/read receipts are metadata about a conversation — only deliverable
+  // between approved contacts, same as the messages themselves.
+  if (to && relayState.isOnline(to) && (await areApprovedContacts(userId, to))) sendFn(to);
 }
 
 server.listen(PORT, () => {

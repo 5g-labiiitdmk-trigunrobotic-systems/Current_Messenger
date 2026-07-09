@@ -60,6 +60,22 @@ export async function getUsername(userId: string): Promise<string | null> {
   return data.username;
 }
 
+/**
+ * Metadata-only delivery log: one row per successfully delivered message.
+ * NEVER logs message content — the payload is opaque ciphertext that never
+ * reaches Postgres; only who→who, when, and how many bytes. Fire-and-forget:
+ * a logging failure must never block or fail an actual delivery.
+ */
+export function logTransfer(senderId: string, recipientId: string, byteSize: number): void {
+  supabaseAdmin
+    .from('message_transfer_log')
+    .insert({ sender_id: senderId, recipient_id: recipientId, byte_size: byteSize })
+    .then(({ error }) => {
+      // eslint-disable-next-line no-console
+      if (error) console.error('[relay] transfer log write failed:', error.message);
+    });
+}
+
 export async function isBlocked(blockerId: string, blockedId: string): Promise<boolean> {
   const { data, error } = await supabaseAdmin
     .from('blocked_users')

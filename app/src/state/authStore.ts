@@ -15,8 +15,13 @@ interface AuthState {
   initialize: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   updateProfile: (patch: Partial<Pick<UserRow, 'display_name' | 'bio' | 'status_visibility'>>) => Promise<void>;
+  /** Resolves to null on success, or a user-facing error message. */
+  changeUsername: (username: string) => Promise<string | null>;
   signOut: () => Promise<void>;
 }
+
+// Same rule enforced at signup and by the DB check constraint — keep in sync.
+export const USERNAME_RE = /^[a-z0-9_.]{3,24}$/;
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   session: null,
@@ -60,6 +65,26 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (!session) return;
     const { error } = await supabase.from('users').update(patch).eq('id', session.user.id);
     if (!error) set((s) => ({ profile: s.profile ? { ...s.profile, ...patch } : s.profile }));
+  },
+
+  changeUsername: async (raw) => {
+    const session = get().session;
+    if (!session) return 'Not signed in.';
+    const username = raw.trim().toLowerCase();
+    if (!USERNAME_RE.test(username)) {
+      return 'Usernames are 3-24 characters: lowercase letters, numbers, "_" or "."';
+    }
+    if (username === get().profile?.username) return null; // no-op
+    // Pre-check for a friendly error; the DB unique constraint is the real
+    // guarantee, so a race between check and update still surfaces below.
+    const { data: taken } = await supabase.from('users').select('id').eq('username', username).neq('id', session.user.id).maybeSingle();
+    if (taken) return 'That username is taken — try another.';
+    const { error } = await supabase.from('users').update({ username }).eq('id', session.user.id);
+    if (error) {
+      return error.code === '23505' ? 'That username is taken — try another.' : error.message;
+    }
+    set((s) => ({ profile: s.profile ? { ...s.profile, username } : s.profile }));
+    return null;
   },
 
   signOut: async () => {

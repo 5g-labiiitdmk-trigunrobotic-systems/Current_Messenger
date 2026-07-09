@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable, Alert } from 'react-native';
+import { View, Text, Pressable, Alert, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import QRCode from 'react-native-qrcode-svg';
@@ -71,9 +71,9 @@ export default function QrScreen() {
           </Glass>
         </View>
       ) : (
-        <View style={{ flex: 1, marginTop: 18, borderRadius: 26, overflow: 'hidden' }}>
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           {!permission?.granted ? (
-            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14 }}>
+            <View style={{ alignItems: 'center', justifyContent: 'center', gap: 14 }}>
               <Text style={{ color: tokens.text2, fontFamily: fontFamilies.medium, textAlign: 'center', paddingHorizontal: 30 }}>Camera access is needed to scan a contact's QR code.</Text>
               <Pressable onPress={requestPermission}>
                 <View style={{ paddingVertical: 12, paddingHorizontal: 22, borderRadius: 16, backgroundColor: a1 }}>
@@ -82,7 +82,27 @@ export default function QrScreen() {
               </Pressable>
             </View>
           ) : (
-            <CameraView style={{ flex: 1 }} barcodeScannerSettings={{ barcodeTypes: ['qr'] }} onBarcodeScanned={scanned ? undefined : onScan} />
+            <>
+              {/* Square viewfinder. The camera preview is a native surface on
+                  Android, so parent borderRadius/overflow clipping is
+                  unreliable — instead the camera absolutely fills a
+                  fixed-aspect square (default FILL scale type crops to the
+                  view bounds; do NOT set `ratio`, which flips it to FIT and
+                  letterboxes the raw feed) and the "frame" is drawn as a
+                  corner-bracket overlay on top. */}
+              <View style={{ width: '86%', aspectRatio: 1, overflow: 'hidden', borderRadius: 26 }}>
+                <CameraView style={StyleSheet.absoluteFill} facing="back" barcodeScannerSettings={{ barcodeTypes: ['qr'] }} onBarcodeScanned={scanned ? undefined : onScan} />
+                <Svg pointerEvents="none" width="100%" height="100%" viewBox="0 0 100 100" style={StyleSheet.absoluteFill}>
+                  <Path d="M8 26 V14 a6 6 0 0 1 6-6 H26" stroke="#fff" strokeWidth={2.5} strokeLinecap="round" fill="none" />
+                  <Path d="M74 8 H86 a6 6 0 0 1 6 6 V26" stroke="#fff" strokeWidth={2.5} strokeLinecap="round" fill="none" />
+                  <Path d="M92 74 V86 a6 6 0 0 1-6 6 H74" stroke="#fff" strokeWidth={2.5} strokeLinecap="round" fill="none" />
+                  <Path d="M26 92 H14 a6 6 0 0 1-6-6 V74" stroke="#fff" strokeWidth={2.5} strokeLinecap="round" fill="none" />
+                </Svg>
+              </View>
+              <Text style={{ marginTop: 18, fontSize: 13, fontFamily: fontFamilies.medium, color: tokens.text2, textAlign: 'center' }}>
+                Point at a contact's Current QR code
+              </Text>
+            </>
           )}
         </View>
       )}

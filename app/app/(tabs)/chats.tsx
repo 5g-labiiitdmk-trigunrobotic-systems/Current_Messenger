@@ -33,7 +33,16 @@ export default function ChatsScreen() {
         <ScreenTitle>Chats</ScreenTitle>
         <View style={{ flexDirection: 'row', gap: 10 }}>
           <IconCircle onPress={toggleMode}>
-            <Text style={{ fontSize: 18 }}>{mode === 'light' ? '☾' : '☀'}</Text>
+            {mode === 'light' ? (
+              <Svg width={19} height={19} viewBox="0 0 24 24" fill="none" stroke={tokens.text} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <Path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" />
+              </Svg>
+            ) : (
+              <Svg width={19} height={19} viewBox="0 0 24 24" fill="none" stroke={tokens.text} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <Circle cx={12} cy={12} r={4} />
+                <Path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+              </Svg>
+            )}
           </IconCircle>
           <IconCircle variant="accent" onPress={() => router.push('/(tabs)/contacts')}>
             <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2.4} strokeLinecap="round">

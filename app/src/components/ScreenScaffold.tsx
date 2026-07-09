@@ -15,8 +15,11 @@ interface ScreenScaffoldProps {
 export function ScreenScaffold({ children, scroll = true, padded = true, bottomInset = 0, style }: ScreenScaffoldProps) {
   const insets = useSafeAreaInsets();
   const Container = scroll ? ScrollView : View;
+  // bottomInset is the floating chrome height (e.g. tab bar); the safe-area
+  // inset must be added on top of it because the tab bar itself is anchored
+  // at insets.bottom — without this, the last rows scroll under the bar.
   const containerProps = scroll
-    ? { contentContainerStyle: { paddingBottom: 40 + bottomInset }, showsVerticalScrollIndicator: false }
+    ? { contentContainerStyle: { paddingBottom: 40 + bottomInset + insets.bottom }, showsVerticalScrollIndicator: false }
     : { style: { flex: 1 } };
 
   return (

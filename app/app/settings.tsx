@@ -1,9 +1,10 @@
-import React from 'react';
-import { View, Text, Pressable, ScrollView } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, Pressable, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import Svg, { Path } from 'react-native-svg';
 import { ScreenScaffold } from '../src/components/ScreenScaffold';
 import { Glass } from '../src/components/Glass';
+import { GlassField } from '../src/components/GlassField';
 import { IconCircle } from '../src/components/Buttons';
 import { SwitchToggle } from '../src/components/SwitchToggle';
 import { useTheme } from '../src/theme/useTheme';
@@ -46,6 +47,9 @@ export default function SettingsScreen() {
         </IconCircle>
         <Text style={{ fontSize: 26, fontFamily: fontFamilies.black, color: tokens.text }}>Settings</Text>
       </View>
+
+      <SectionLabel>Account</SectionLabel>
+      <UsernameEditor />
 
       <SectionLabel>Appearance</SectionLabel>
       <Glass radius={22} style={{ paddingHorizontal: 18 }}>
@@ -100,6 +104,42 @@ export default function SettingsScreen() {
         </View>
       </Pressable>
     </ScreenScaffold>
+  );
+}
+
+function UsernameEditor() {
+  const { tokens, a1 } = useTheme();
+  const profile = useAuthStore((s) => s.profile);
+  const changeUsername = useAuthStore((s) => s.changeUsername);
+  const [draft, setDraft] = useState('');
+  const [saving, setSaving] = useState(false);
+  const current = profile?.username ?? '';
+  const dirty = draft.trim().toLowerCase() !== '' && draft.trim().toLowerCase() !== current;
+
+  const onSave = async () => {
+    setSaving(true);
+    const error = await changeUsername(draft);
+    setSaving(false);
+    if (error) {
+      Alert.alert('Could not change username', error);
+      return;
+    }
+    setDraft('');
+    Alert.alert('Username changed', `You're now @${draft.trim().toLowerCase()}. Contacts find you by this name.`);
+  };
+
+  return (
+    <Glass radius={22} style={{ padding: 16, gap: 12 }}>
+      <GlassField label={`Username — currently @${current}`} placeholder={current || '@yourname'} autoCapitalize="none" value={draft} onChangeText={setDraft} />
+      <Text style={{ fontSize: 11.5, color: tokens.text3, fontFamily: fontFamilies.medium, paddingHorizontal: 4 }}>
+        3-24 characters: lowercase letters, numbers, "_" or ".". Must be unique — people add you by @username.
+      </Text>
+      <Pressable onPress={dirty && !saving ? onSave : undefined}>
+        <View style={{ height: 46, borderRadius: 16, backgroundColor: a1, opacity: dirty ? 1 : 0.45, alignItems: 'center', justifyContent: 'center' }}>
+          {saving ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontFamily: fontFamilies.bold, fontSize: 14 }}>Save username</Text>}
+        </View>
+      </Pressable>
+    </Glass>
   );
 }
 

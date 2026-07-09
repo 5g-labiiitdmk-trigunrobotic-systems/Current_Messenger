@@ -69,7 +69,11 @@ export default function NewGroupScreen() {
       <Pressable onPress={() => setIsBroadcast((b) => !b)}>
         <Glass radius={18} style={{ marginTop: 14, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12 }} variant="bg2">
           <View style={{ width: 24, height: 24, borderRadius: 7, borderWidth: 1, borderColor: tokens.glassBorder, backgroundColor: isBroadcast ? a1 : tokens.field, alignItems: 'center', justifyContent: 'center' }}>
-            {isBroadcast && <Text style={{ color: '#fff', fontSize: 13, fontFamily: fontFamilies.bold }}>✓</Text>}
+            {isBroadcast && (
+              <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2.8} strokeLinecap="round" strokeLinejoin="round">
+                <Path d="M20 6L9 17l-5-5" />
+              </Svg>
+            )}
           </View>
           <View style={{ flex: 1 }}>
             <Text style={{ fontSize: 14, fontFamily: fontFamilies.bold, color: tokens.text }}>Broadcast channel</Text>
@@ -94,7 +98,11 @@ export default function NewGroupScreen() {
                 <Text style={{ fontSize: 12.5, color: tokens.text2, fontFamily: fontFamilies.medium }}>@{c.username}</Text>
               </View>
               <View style={{ width: 26, height: 26, borderRadius: 13, borderWidth: 1, borderColor: tokens.glassBorder, backgroundColor: checked ? a1 : tokens.field, alignItems: 'center', justifyContent: 'center' }}>
-                {checked && <Text style={{ color: '#fff', fontSize: 14, fontFamily: fontFamilies.bold }}>✓</Text>}
+                {checked && (
+                  <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2.8} strokeLinecap="round" strokeLinejoin="round">
+                    <Path d="M20 6L9 17l-5-5" />
+                  </Svg>
+                )}
               </View>
             </Pressable>
           );
