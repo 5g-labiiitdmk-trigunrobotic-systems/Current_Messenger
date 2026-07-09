@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable, Alert, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import QRCode from 'react-native-qrcode-svg';
@@ -11,6 +11,7 @@ import { useTheme } from '../src/theme/useTheme';
 import { fontFamilies } from '../src/theme/tokens';
 import { useAuthStore } from '../src/state/authStore';
 import { useContactStore } from '../src/state/contactStore';
+import { appAlert } from '../src/state/alertStore';
 
 const QR_PREFIX = 'current-user:';
 
@@ -27,7 +28,7 @@ export default function QrScreen() {
     if (!result.data.startsWith(QR_PREFIX)) return;
     setScanned(true);
     const userId = result.data.slice(QR_PREFIX.length);
-    Alert.alert('Add contact', 'Send a contact request to this user?', [
+    appAlert('Add contact', 'Send a contact request to this user?', [
       { text: 'Cancel', style: 'cancel', onPress: () => setScanned(false) },
       {
         text: 'Send request',

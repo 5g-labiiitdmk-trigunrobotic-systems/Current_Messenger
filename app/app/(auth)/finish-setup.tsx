@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import { ScreenScaffold } from '../../src/components/ScreenScaffold';
 import { AuthHeader } from '../../src/components/AuthHeader';
@@ -9,6 +9,7 @@ import { useAuthStore } from '../../src/state/authStore';
 import { useSignupStore } from '../../src/state/signupStore';
 import { finalizeAccount } from '../../src/lib/account';
 import { generateFriendlyUsername } from '../../src/lib/usernameGen';
+import { appAlert } from '../../src/state/alertStore';
 
 /**
  * Landing spot for a resumed session (e.g. the app was killed mid-signup, or
@@ -53,7 +54,7 @@ export default function FinishSetupScreen() {
         }
         finalizing.current = false;
         if (!succeeded) {
-          Alert.alert('Could not finish setup', 'Please try signing in again.');
+          appAlert('Could not finish setup', 'Please try signing in again.');
           router.replace('/(auth)/onboarding');
           return;
         }

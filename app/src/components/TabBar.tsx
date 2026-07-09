@@ -1,8 +1,7 @@
 import React from 'react';
-import { View, Pressable, Text, Platform, StyleSheet } from 'react-native';
+import { View, Pressable, Text, StyleSheet } from 'react-native';
 import type { BottomTabBarProps } from 'expo-router/tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path, Circle } from 'react-native-svg';
 import { Glass } from './Glass';
@@ -54,20 +53,11 @@ export function TabBar({ state, navigation }: BottomTabBarProps) {
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-      {/* Static frosted floor behind the bar, from just above the pill down
-          to the screen bottom — content scrolling underneath fades into a
-          blur instead of hard-cutting against an opaque bar edge. */}
+      {/* Static floor behind the bar, from just above the pill down to the
+          screen bottom — content scrolling underneath fades to the tab
+          bar's solid tone instead of hard-cutting against its edge. No
+          blur (see Glass.tsx) — a plain gradient into a solid color. */}
       <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: floorHeight }}>
-        {/* Android: no BlurView here either (see Glass.tsx) — same class of
-            native-surface bug, confirmed to survive a blurMethod tweak on
-            device, so it's not used on Android at all now, not tuned. The
-            gradient below still fades content to opaque; on Android it's
-            joined by a flat translucent scrim to compensate for the
-            missing blur softness. */}
-        {Platform.OS === 'ios' && <BlurView intensity={40} tint={mode === 'light' ? 'light' : 'dark'} style={StyleSheet.absoluteFill} />}
-        {Platform.OS !== 'ios' && (
-          <View style={[StyleSheet.absoluteFill, { backgroundColor: mode === 'light' ? 'rgba(255,255,255,0.3)' : 'rgba(18,18,22,0.3)' }]} />
-        )}
         <LinearGradient
           colors={['transparent', tokens.tabBg]}
           locations={[0, 0.45]}

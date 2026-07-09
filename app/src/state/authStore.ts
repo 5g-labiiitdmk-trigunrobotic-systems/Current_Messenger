@@ -10,6 +10,10 @@ interface AuthState {
   session: Session | null;
   profile: UserRow | null;
   initializing: boolean;
+  /** Set when the last refreshProfile() call failed (RLS, network, etc.) —
+   * previously this failed completely silently, leaving profile stuck at
+   * null forever with no indication anything was wrong. */
+  profileError: string | null;
   /** true once auth.users exists but public.users row (fully-verified profile) doesn't yet */
   needsProfileSetup: boolean;
   initialize: () => Promise<void>;
@@ -27,6 +31,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   session: null,
   profile: null,
   initializing: true,
+  profileError: null,
   needsProfileSetup: false,
 
   initialize: async () => {
@@ -56,8 +61,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const session = get().session;
     if (!session) return;
     const { data, error } = await supabase.from('users').select('*').eq('id', session.user.id).maybeSingle();
-    if (error) return;
-    set({ profile: data as UserRow | null, needsProfileSetup: !data || !data.email_verified });
+    if (error) {
+      // eslint-disable-next-line no-console
+      console.error('[auth] refreshProfile failed:', error.message);
+      set({ profileError: error.message });
+      return;
+    }
+    set({ profile: data as UserRow | null, needsProfileSetup: !data || !data.email_verified, profileError: null });
   },
 
   updateProfile: async (patch) => {

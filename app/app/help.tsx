@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Pressable, Linking, Alert } from 'react-native';
+import { View, Text, Pressable, Linking } from 'react-native';
 import { router } from 'expo-router';
 import Svg, { Path } from 'react-native-svg';
 import { ScreenScaffold } from '../src/components/ScreenScaffold';
@@ -7,6 +7,7 @@ import { Glass } from '../src/components/Glass';
 import { IconCircle } from '../src/components/Buttons';
 import { useTheme } from '../src/theme/useTheme';
 import { fontFamilies } from '../src/theme/tokens';
+import { appAlert } from '../src/state/alertStore';
 
 const SUPPORT_EMAIL = 'trigunroboticsystems@gmail.com';
 
@@ -23,7 +24,7 @@ export default function HelpScreen() {
     const url = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Current app support')}`;
     const can = await Linking.canOpenURL(url);
     if (!can) {
-      Alert.alert('No email app found', `Reach us directly at ${SUPPORT_EMAIL}`);
+      appAlert('No email app found', `Reach us directly at ${SUPPORT_EMAIL}`);
       return;
     }
     Linking.openURL(url);
@@ -70,6 +71,9 @@ export default function HelpScreen() {
 
       <Text style={{ textAlign: 'center', marginTop: 24, fontSize: 12, fontFamily: fontFamilies.medium, color: tokens.text3 }}>
         Current — a product of Trigun Robotic Systems @ IIITDMK
+      </Text>
+      <Text style={{ textAlign: 'center', marginTop: 4, fontSize: 11, fontFamily: fontFamilies.medium, color: tokens.text3 }}>
+        © {new Date().getFullYear()} Trigun Robotic Systems. All rights reserved.
       </Text>
     </ScreenScaffold>
   );

@@ -1,7 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, Platform, type ViewStyle, type StyleProp } from 'react-native';
-import { BlurView } from 'expo-blur';
-import { LinearGradient } from 'expo-linear-gradient';
+import { View, type ViewStyle, type StyleProp } from 'react-native';
 import { useTheme } from '../theme/useTheme';
 
 interface GlassProps {
@@ -10,106 +8,37 @@ interface GlassProps {
   radius?: number;
   variant?: 'bg' | 'bg2' | 'field';
   bordered?: boolean;
-  shadow?: boolean;
-  intensity?: number;
 }
 
-/** Frosted glass panel: BlurView + translucent fill + bright bevel edge + soft outer shadow. */
-export function Glass({
-  children,
-  style,
-  radius = 22,
-  variant = 'bg',
-  bordered = true,
-  shadow = true,
-  intensity = 26,
-}: GlassProps) {
-  const { tokens, mode } = useTheme();
+/**
+ * Solid elevation-tone panel. Depth comes from a flat tone difference
+ * between elevation levels (Material 3 dark-theme convention) plus a thin
+ * hairline border — no blur, no inset highlight/shadow gradients, no
+ * outer glow. This replaced a BlurView-based "Liquid Glass" treatment
+ * that had a persistent, unresolved ghost-rectangle rendering bug on
+ * Android across four separate fix attempts (blurMethod tuning, removing
+ * BlurView on Android only, a navigation-transition fix). Going fully
+ * solid on both platforms — not just Android — removes the entire
+ * native-blur-surface bug class instead of continuing to chase it.
+ */
+export function Glass({ children, style, radius = 22, variant = 'bg', bordered = true }: GlassProps) {
+  const { tokens } = useTheme();
   const fill = variant === 'bg2' ? tokens.glassBg2 : variant === 'field' ? tokens.field : tokens.glassBg;
-  // Approximates the source design's --g-sh: a real box-shadow can layer an
-  // inset highlight + inset shadow + outer glow at once; RN can't do inset
-  // shadows or multiple shadows on one node, so the outer glow is a native
-  // shadow (stronger/theme-aware to match `0 12px 34px rgba(0,0,0,.55)` in
-  // dark mode) and the two inset edges are simulated with a pair of corner
-  // gradients (light top-left, dark bottom-right) layered inside the panel.
-  const outerShadow = mode === 'light' ? styles.shadowLight : styles.shadowDark;
 
   return (
     <View
       style={[
-        // Android bug: `elevation` on a transparent View (no backgroundColor)
-        // draws the shadow as an unclipped rectangle instead of respecting
-        // borderRadius — the actual visible fill is a separate absolutely-
-        // positioned child below, so without this the shadow's rounded
-        // silhouette has nothing non-transparent to derive its shape from,
-        // and bleeds out past the rounded corners. `fill` is already
-        // low-alpha (the glass tint), so this changes nothing visually.
-        { borderRadius: radius, overflow: 'hidden', backgroundColor: fill },
-        shadow && outerShadow,
+        {
+          borderRadius: radius,
+          overflow: 'hidden',
+          backgroundColor: fill,
+          borderWidth: bordered ? 1 : 0,
+          borderColor: tokens.glassBorder,
+        },
         style,
       ]}
     >
-      {/* Android: expo-blur's BlurView — under ANY blurMethod, including
-          the 'none' fallback tried previously — is still a native module
-          with its own compositing behavior, and the ghost-rectangle bug
-          survived that attempt too (confirmed on-device). Rather than
-          keep chasing which native code path is at fault, Android gets NO
-          BlurView at all here: just an extra translucent scrim layered
-          with the existing fill + bevel/inset gradients below to fake the
-          "frosted" softness. Plain View/LinearGradient are universal RN
-          primitives with no native-surface compositing of their own — the
-          same class already used everywhere else in this component
-          without issue. iOS keeps the real blur; it was never broken. */}
-      {Platform.OS === 'ios' ? (
-        <BlurView intensity={intensity} tint={mode === 'light' ? 'light' : 'dark'} style={StyleSheet.absoluteFill} />
-      ) : (
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: mode === 'light' ? 'rgba(255,255,255,0.4)' : 'rgba(18,18,22,0.4)' }]} />
-      )}
-      <View
-        style={[
-          StyleSheet.absoluteFill,
-          {
-            backgroundColor: fill,
-            borderRadius: radius,
-            borderWidth: bordered ? 1 : 0,
-            borderColor: tokens.glassBorder,
-          },
-        ]}
-      />
-      {/* top-left bevel highlight — simulates light hitting the glass edge */}
-      <LinearGradient
-        pointerEvents="none"
-        colors={[tokens.bevelHighlight, 'rgba(255,255,255,0)']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0.6, y: 1 }}
-        style={[StyleSheet.absoluteFill, { opacity: mode === 'light' ? 0.35 : 0.18, borderRadius: radius }]}
-      />
-      {/* bottom-right inset shadow — grounds the panel the way a real inset shadow would */}
-      <LinearGradient
-        pointerEvents="none"
-        colors={['rgba(0,0,0,0)', tokens.bevelShadow]}
-        start={{ x: 0.35, y: 0.35 }}
-        end={{ x: 1, y: 1 }}
-        style={[StyleSheet.absoluteFill, { opacity: mode === 'light' ? 0.5 : 0.7, borderRadius: radius }]}
-      />
-      <View style={{ borderRadius: radius }}>{children}</View>
+      {children}
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  shadowLight: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.16,
-    shadowRadius: 22,
-    elevation: 8,
-  },
-  shadowDark: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.55,
-    shadowRadius: 30,
-    elevation: 14,
-  },
-});

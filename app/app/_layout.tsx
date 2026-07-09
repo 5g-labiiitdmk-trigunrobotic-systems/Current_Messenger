@@ -1,7 +1,7 @@
 import 'react-native-get-random-values';
 import 'react-native-url-polyfill/auto';
 import React, { useEffect } from 'react';
-import { View, Alert } from 'react-native';
+import { View } from 'react-native';
 import { Stack, router } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { StatusBar } from 'expo-status-bar';
@@ -18,6 +18,8 @@ import { useContactStore } from '../src/state/contactStore';
 import { useGroupStore } from '../src/state/groupStore';
 import { useCallStore } from '../src/state/callStore';
 import { AppLockGate } from '../src/components/AppLockGate';
+import { AppAlertHost } from '../src/components/AppAlertHost';
+import { appAlert } from '../src/state/alertStore';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -45,7 +47,7 @@ export default function RootLayout() {
       if (result.status === 'session') {
         router.replace('/(auth)/finish-setup');
       } else if (result.status === 'error') {
-        Alert.alert('Could not confirm email', result.message ?? 'The confirmation link may have expired — try resending it.');
+        appAlert('Could not confirm email', result.message ?? 'The confirmation link may have expired — try resending it.');
       }
     });
   }, [incomingUrl]);
@@ -105,6 +107,7 @@ export default function RootLayout() {
               <Stack.Screen name="auth-redirect" options={{ animation: 'fade' }} />
             </Stack>
           </AppLockGate>
+          <AppAlertHost />
         </View>
       </SafeAreaProvider>
     </GestureHandlerRootView>

@@ -23,19 +23,23 @@ export interface ThemeTokens {
   wallStops: string[]; // linear gradient stops approximating the CSS `--wall` background
   wallAngle: number; // degrees
   orbColor: string;
-  glassBg: string; // --g-bg
-  glassBg2: string; // --g-bg2
-  glassBorder: string; // --g-bd
-  text: string; // --txt
-  text2: string; // --txt2
-  text3: string; // --txt3
-  ring: string; // --ring
-  tabBg: string; // --tab-bg
-  field: string; // --field
+  /** Solid elevation-tone surfaces (Material 3 dark-theme convention: depth
+   * from flat tone difference, not blur/shadow). glassBg = standard card
+   * level, glassBg2 = elevated/active level (tab bar, pressed states),
+   * field = recessed level (inputs). Names kept from the earlier
+   * translucent-glass tokens to minimize churn at call sites — values are
+   * now opaque hex, not rgba. */
+  glassBg: string;
+  glassBg2: string;
+  glassBorder: string; // hairline outline, alpha kept — blends into whatever's behind the card edge
+  text: string;
+  text2: string;
+  text3: string;
+  ring: string;
+  tabBg: string; // solid tone the bottom scroll-under fade settles into (matches glassBg2)
+  field: string;
   glowColor: string; // soft text shadow color
   statusBarStyle: 'dark' | 'light';
-  bevelHighlight: string;
-  bevelShadow: string;
 }
 
 export const themes: Record<Mode, ThemeTokens> = {
@@ -43,37 +47,33 @@ export const themes: Record<Mode, ThemeTokens> = {
     wallStops: ['#b7b4ea', '#c8c1e6', '#e8d7c6', '#f6d7a0'],
     wallAngle: 118,
     orbColor: 'rgba(255,216,150,0.9)',
-    glassBg: 'rgba(255,255,255,0.10)',
-    glassBg2: 'rgba(255,255,255,0.20)',
+    glassBg: '#f7f6fb',
+    glassBg2: '#ffffff',
     glassBorder: 'rgba(255,255,255,0.82)',
     text: '#1c1830',
     text2: 'rgba(34,28,60,0.78)',
     text3: 'rgba(34,28,60,0.58)',
     ring: 'rgba(255,255,255,0.8)',
-    tabBg: 'rgba(255,255,255,0.5)',
-    field: 'rgba(255,255,255,0.28)',
+    tabBg: '#ffffff',
+    field: '#eeedf5',
     glowColor: 'rgba(255,255,255,0.5)',
     statusBarStyle: 'dark',
-    bevelHighlight: 'rgba(255,255,255,0.95)',
-    bevelShadow: 'rgba(60,40,90,0.14)',
   },
   dark: {
     wallStops: ['#08080a', '#0e0e12', '#08080a'],
     wallAngle: 140,
     orbColor: 'rgba(150,150,168,0.16)',
-    glassBg: 'rgba(255,255,255,0.04)',
-    glassBg2: 'rgba(255,255,255,0.08)',
+    glassBg: '#19191d',
+    glassBg2: '#232328',
     glassBorder: 'rgba(255,255,255,0.22)',
     text: '#f3f2f8',
     text2: 'rgba(235,233,245,0.6)',
     text3: 'rgba(235,233,245,0.38)',
     ring: 'rgba(16,16,20,0.85)',
-    tabBg: 'rgba(38,38,44,0.5)',
-    field: 'rgba(255,255,255,0.05)',
+    tabBg: '#232328',
+    field: '#121216',
     glowColor: 'rgba(0,0,0,0.55)',
     statusBarStyle: 'light',
-    bevelHighlight: 'rgba(255,255,255,0.28)',
-    bevelShadow: 'rgba(0,0,0,0.5)',
   },
 };
 

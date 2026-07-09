@@ -202,7 +202,16 @@ async function handleMessageSend(userId: string, event: Extract<ClientEvent, { t
     return;
   }
 
-  const [approved, blocked] = await Promise.all([areApprovedContacts(userId, to), isBlocked(to, userId)]);
+  // Only checking isBlocked(to, userId) — "has the recipient blocked the
+  // sender" — meant a user who blocked someone could still message THEM;
+  // only the reverse direction was ever enforced. Blocking must cut both
+  // ways.
+  const [approved, recipientBlockedSender, senderBlockedRecipient] = await Promise.all([
+    areApprovedContacts(userId, to),
+    isBlocked(to, userId),
+    isBlocked(userId, to),
+  ]);
+  const blocked = recipientBlockedSender || senderBlockedRecipient;
   if (blocked) {
     send(socket, { type: 'message:failed', tempId: event.tempId, reason: 'blocked' });
     return;

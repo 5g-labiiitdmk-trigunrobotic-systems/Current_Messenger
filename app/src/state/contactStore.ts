@@ -56,6 +56,7 @@ export const useContactStore = create<ContactState>((set, get) => ({
       supabase.from('blocked_users').select('blocked_id').eq('blocker_id', me),
     ]);
 
+    const blockedIds = (blocks ?? []).map((b) => b.blocked_id);
     const all = (reqs ?? []) as any[];
     const approved: UserRow[] = [];
     const incoming: ContactRequestWithUser[] = [];
@@ -64,6 +65,11 @@ export const useContactStore = create<ContactState>((set, get) => ({
     for (const r of all) {
       const otherUser = r.sender_id === me ? r.receiver : r.sender;
       if (!otherUser) continue;
+      // blocked_users has no relationship to contact_requests in the schema
+      // — an approved request stays "approved" forever regardless of a
+      // later block, so this list must cross-reference blocks itself or a
+      // blocked contact reappears in Chats/Contacts on every refresh.
+      if (blockedIds.includes(otherUser.id)) continue;
       if (r.status === 'approved') {
         approved.push(otherUser);
       } else if (r.status === 'pending' && r.receiver_id === me) {
@@ -77,7 +83,7 @@ export const useContactStore = create<ContactState>((set, get) => ({
       approved,
       incoming,
       outgoing,
-      blocked: (blocks ?? []).map((b) => b.blocked_id),
+      blocked: blockedIds,
       loading: false,
     });
   },
@@ -113,7 +119,12 @@ export const useContactStore = create<ContactState>((set, get) => ({
     const me = useAuthStore.getState().session?.user.id;
     if (!me) return;
     await supabase.from('blocked_users').insert({ blocker_id: me, blocked_id: userId, reason: reason ?? null });
-    set((s) => ({ blocked: [...s.blocked, userId] }));
+    // Blocking someone you're an approved contact with previously left them
+    // in `approved` — still showing up in Chats/Contacts as if nothing
+    // happened, which is exactly what "blocked users behaving unexpectedly"
+    // looked like. Block and approved-contact status are independent state
+    // (no DB relationship between them), so prune it client-side here too.
+    set((s) => ({ blocked: [...s.blocked, userId], approved: s.approved.filter((c) => c.id !== userId) }));
   },
 
   report: async (userId, reason) => {

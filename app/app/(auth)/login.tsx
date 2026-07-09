@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Alert, Pressable } from 'react-native';
+import { View, Text, Pressable } from 'react-native';
 import { router } from 'expo-router';
 import Svg, { Path } from 'react-native-svg';
 import { ScreenScaffold } from '../../src/components/ScreenScaffold';
@@ -10,6 +10,7 @@ import { useTheme } from '../../src/theme/useTheme';
 import { fontFamilies } from '../../src/theme/tokens';
 import { supabase } from '../../src/lib/supabase';
 import { useAuthStore } from '../../src/state/authStore';
+import { appAlert } from '../../src/state/alertStore';
 
 export default function LoginScreen() {
   const { tokens, a1, a2 } = useTheme();
@@ -20,7 +21,7 @@ export default function LoginScreen() {
 
   const onSubmit = async () => {
     if (!identifier.trim() || !password) {
-      Alert.alert('Missing info', 'Enter your email/username and password.');
+      appAlert('Missing info', 'Enter your email/username and password.');
       return;
     }
     setLoading(true);
@@ -29,7 +30,7 @@ export default function LoginScreen() {
       const { data } = await supabase.from('users').select('email').eq('username', email.toLowerCase()).maybeSingle();
       if (!data) {
         setLoading(false);
-        Alert.alert('Account not found', 'No account with that username.');
+        appAlert('Account not found', 'No account with that username.');
         return;
       }
       email = data.email;
@@ -37,7 +38,7 @@ export default function LoginScreen() {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
       setLoading(false);
-      Alert.alert('Login failed', error.message);
+      appAlert('Login failed', error.message);
       return;
     }
     await useAuthStore.getState().refreshProfile();
@@ -48,11 +49,11 @@ export default function LoginScreen() {
 
   const onForgot = async () => {
     if (!identifier.includes('@')) {
-      Alert.alert('Enter your email', 'Type your email address above first, then tap "Forgot password?" again.');
+      appAlert('Enter your email', 'Type your email address above first, then tap "Forgot password?" again.');
       return;
     }
     const { error } = await supabase.auth.resetPasswordForEmail(identifier.trim());
-    Alert.alert(error ? 'Could not send reset email' : 'Check your inbox', error ? error.message : `Password reset instructions sent to ${identifier}.`);
+    appAlert(error ? 'Could not send reset email' : 'Check your inbox', error ? error.message : `Password reset instructions sent to ${identifier}.`);
   };
 
   return (
@@ -99,8 +100,8 @@ export default function LoginScreen() {
         <View style={{ flex: 1, height: 1, backgroundColor: tokens.glassBorder }} />
       </View>
       <View style={{ flexDirection: 'row', gap: 12 }}>
-        <GlassButton title="Google" height={52} style={{ flex: 1, opacity: 0.5 }} onPress={() => Alert.alert('Not available', 'Current requires verified email sign-in.')} />
-        <GlassButton title="Apple" height={52} style={{ flex: 1, opacity: 0.5 }} onPress={() => Alert.alert('Not available', 'Current requires verified email sign-in.')} />
+        <GlassButton title="Google" height={52} style={{ flex: 1, opacity: 0.5 }} onPress={() => appAlert('Not available', 'Current requires verified email sign-in.')} />
+        <GlassButton title="Apple" height={52} style={{ flex: 1, opacity: 0.5 }} onPress={() => appAlert('Not available', 'Current requires verified email sign-in.')} />
       </View>
     </ScreenScaffold>
   );

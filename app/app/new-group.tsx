@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Pressable, Alert } from 'react-native';
+import { View, Text, Pressable } from 'react-native';
 import { router } from 'expo-router';
 import Svg, { Path } from 'react-native-svg';
 import { ScreenScaffold } from '../src/components/ScreenScaffold';
@@ -11,6 +11,7 @@ import { useTheme } from '../src/theme/useTheme';
 import { fontFamilies } from '../src/theme/tokens';
 import { useContactStore } from '../src/state/contactStore';
 import { useGroupStore } from '../src/state/groupStore';
+import { appAlert } from '../src/state/alertStore';
 
 export default function NewGroupScreen() {
   const { tokens, a1 } = useTheme();
@@ -35,11 +36,11 @@ export default function NewGroupScreen() {
 
   const onCreate = () => {
     if (!name.trim()) {
-      Alert.alert('Name your group', 'Give the group a name before creating it.');
+      appAlert('Name your group', 'Give the group a name before creating it.');
       return;
     }
     if (selected.size === 0) {
-      Alert.alert('Add members', 'Select at least one contact to add.');
+      appAlert('Add members', 'Select at least one contact to add.');
       return;
     }
     const groupId = createGroup(name.trim(), [...selected], isBroadcast);

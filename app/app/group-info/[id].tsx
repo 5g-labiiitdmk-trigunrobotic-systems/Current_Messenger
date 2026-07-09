@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Pressable, Alert } from 'react-native';
+import { View, Text, Pressable } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path, Circle } from 'react-native-svg';
@@ -12,6 +12,7 @@ import { fontFamilies } from '../../src/theme/tokens';
 import { useGroupStore } from '../../src/state/groupStore';
 import { useContactStore } from '../../src/state/contactStore';
 import { useAuthStore } from '../../src/state/authStore';
+import { appAlert } from '../../src/state/alertStore';
 
 export default function GroupInfoScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -36,7 +37,7 @@ export default function GroupInfoScreen() {
   });
 
   const onLeave = () => {
-    Alert.alert('Leave group', `Leave ${group.name}?`, [
+    appAlert('Leave group', `Leave ${group.name}?`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Leave',

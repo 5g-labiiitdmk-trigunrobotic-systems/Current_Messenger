@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Alert } from 'react-native';
+import { View, Text } from 'react-native';
 import { router } from 'expo-router';
 import Svg, { Path } from 'react-native-svg';
 import { ScreenScaffold } from '../../src/components/ScreenScaffold';
@@ -10,6 +10,7 @@ import { fontFamilies } from '../../src/theme/tokens';
 import { useSignupStore } from '../../src/state/signupStore';
 import { useAuthStore } from '../../src/state/authStore';
 import { supabase } from '../../src/lib/supabase';
+import { appAlert } from '../../src/state/alertStore';
 
 /**
  * Supabase's default "Confirm signup" email is a clickable link, not a
@@ -37,8 +38,8 @@ export default function VerifyEmailScreen() {
     setResending(true);
     const { error } = await supabase.auth.resend({ type: 'signup', email });
     setResending(false);
-    if (error) Alert.alert('Could not resend', error.message);
-    else Alert.alert('Email sent', `A new confirmation link was sent to ${email}. Tap it to continue.`);
+    if (error) appAlert('Could not resend', error.message);
+    else appAlert('Email sent', `A new confirmation link was sent to ${email}. Tap it to continue.`);
   };
 
   return (

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable, ScrollView, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, Pressable, ScrollView, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import Svg, { Path } from 'react-native-svg';
 import { ScreenScaffold } from '../src/components/ScreenScaffold';
@@ -13,6 +13,7 @@ import { wallpapers, type WallpaperKey } from '../src/theme/wallpapers';
 import { useThemeStore } from '../src/state/themeStore';
 import { useSettingsStore } from '../src/state/settingsStore';
 import { useAuthStore } from '../src/state/authStore';
+import { appAlert } from '../src/state/alertStore';
 
 const ACCENTS: { key: keyof typeof accentPalettes; label: string }[] = [
   { key: 'purple', label: 'Purple' },
@@ -132,7 +133,7 @@ export default function SettingsScreen() {
 }
 
 function UsernameEditor() {
-  const { tokens, a1 } = useTheme();
+  const { a1 } = useTheme();
   const profile = useAuthStore((s) => s.profile);
   const changeUsername = useAuthStore((s) => s.changeUsername);
   const [draft, setDraft] = useState('');
@@ -145,19 +146,16 @@ function UsernameEditor() {
     const error = await changeUsername(draft);
     setSaving(false);
     if (error) {
-      Alert.alert('Could not change username', error);
+      appAlert('Could not change username', error);
       return;
     }
     setDraft('');
-    Alert.alert('Username changed', `You're now @${draft.trim().toLowerCase()}. Contacts find you by this name.`);
+    appAlert('Username changed', `You're now @${draft.trim().toLowerCase()}. Contacts find you by this name.`);
   };
 
   return (
     <Glass radius={22} style={{ padding: 16, gap: 12 }}>
       <GlassField label={`Username — currently @${current}`} placeholder={current || '@yourname'} autoCapitalize="none" value={draft} onChangeText={setDraft} />
-      <Text style={{ fontSize: 11.5, color: tokens.text3, fontFamily: fontFamilies.medium, paddingHorizontal: 4 }}>
-        3-24 characters: lowercase letters, numbers, "_" or ".". Must be unique — people add you by @username.
-      </Text>
       <Pressable onPress={dirty && !saving ? onSave : undefined}>
         <View style={{ height: 46, borderRadius: 16, backgroundColor: a1, opacity: dirty ? 1 : 0.45, alignItems: 'center', justifyContent: 'center' }}>
           {saving ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontFamily: fontFamilies.bold, fontSize: 14 }}>Save username</Text>}

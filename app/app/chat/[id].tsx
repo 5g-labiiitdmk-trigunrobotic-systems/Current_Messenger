@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, TextInput, Pressable, FlatList, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, TextInput, Pressable, FlatList, KeyboardAvoidingView, Platform } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
@@ -15,6 +15,7 @@ import { useContactStore } from '../../src/state/contactStore';
 import { usePresenceStore } from '../../src/state/presenceStore';
 import { useCallStore } from '../../src/state/callStore';
 import { useAuthStore } from '../../src/state/authStore';
+import { appAlert } from '../../src/state/alertStore';
 import { isPresenceVisible } from '../../src/lib/presencePolicy';
 import { pickImageBase64, getCurrentLocationOnce, startVoiceRecording, stopVoiceRecording, playAudioBase64 } from '../../src/lib/media';
 import { useAudioRecorder, RecordingPresets } from 'expo-audio';
@@ -29,6 +30,7 @@ export default function ChatScreen() {
   const threads = useChatStore((s) => s.threads);
   const typingMap = useChatStore((s) => s.typing);
   const { sendText, sendRich, forwardMessage, setTyping, markRead, react, editMessage, deleteLocal, togglePin, votePoll, pinned } = useChatStore();
+  const { block, report } = useContactStore();
   const ring = useCallStore((s) => s.ring);
   const approved = useContactStore((s) => s.approved);
 
@@ -81,7 +83,7 @@ export default function ChatScreen() {
     if (!recording) {
       const ok = await startVoiceRecording(recorder);
       if (!ok) {
-        Alert.alert('Microphone permission needed', 'Enable microphone access to send voice messages.');
+        appAlert('Microphone permission needed', 'Enable microphone access to send voice messages.');
         return;
       }
       setRecording(true);
@@ -93,7 +95,7 @@ export default function ChatScreen() {
   };
 
   const onAttach = async () => {
-    Alert.alert('Share', undefined, [
+    appAlert('Share', undefined, [
       {
         text: 'Photo',
         onPress: async () => {
@@ -106,7 +108,7 @@ export default function ChatScreen() {
         onPress: async () => {
           const loc = await getCurrentLocationOnce();
           if (loc) sendRich(id ?? '', false, 'location', loc);
-          else Alert.alert('Location permission needed', 'Enable location access to share your position.');
+          else appAlert('Location permission needed', 'Enable location access to share your position.');
         },
       },
       { text: 'Sticker', onPress: onPickSticker },
@@ -117,7 +119,7 @@ export default function ChatScreen() {
 
   const onPickSticker = () => {
     const stickers = ['😀', '😂', '❤️', '🔥', '👍', '🎉', '🙌', '😢'];
-    Alert.alert(
+    appAlert(
       'Send a sticker',
       undefined,
       stickers.map((emoji) => ({ text: emoji, onPress: () => sendRich(id ?? '', false, 'sticker', { emoji }) })).concat([{ text: 'Cancel', style: 'cancel' } as any])
@@ -126,7 +128,7 @@ export default function ChatScreen() {
 
   const onSendPoll = () => {
     if (!pollQuestion.trim() || !pollOptA.trim() || !pollOptB.trim()) {
-      Alert.alert('Fill in the poll', 'A question and both options are required.');
+      appAlert('Fill in the poll', 'A question and both options are required.');
       return;
     }
     sendRich(id ?? '', false, 'poll', { question: pollQuestion.trim(), options: [pollOptA.trim(), pollOptB.trim()], votes: {} });
@@ -138,10 +140,10 @@ export default function ChatScreen() {
 
   const onForward = (message: (typeof messages)[number]) => {
     if (approved.length === 0) {
-      Alert.alert('No contacts', 'Add a contact to forward messages to.');
+      appAlert('No contacts', 'Add a contact to forward messages to.');
       return;
     }
-    Alert.alert(
+    appAlert(
       'Forward to',
       undefined,
       approved
@@ -171,7 +173,7 @@ export default function ChatScreen() {
     }
     options.push({ text: 'Delete for me', style: 'destructive', onPress: () => deleteLocal(id ?? '', false, messageId) });
     options.push({ text: 'Cancel', style: 'cancel' });
-    Alert.alert('Message', undefined, options);
+    appAlert('Message', undefined, options);
   };
 
   if (!contact) {
@@ -182,6 +184,43 @@ export default function ChatScreen() {
       </View>
     );
   }
+
+  // No UI anywhere in the app could actually block or report a contact —
+  // contactStore.block()/report() existed but had zero call sites, which is
+  // why the Privacy Dashboard's "Blocked users" list could only ever be
+  // empty. This is the entry point.
+  const onContactMenu = () => {
+    appAlert(contact.display_name || contact.username, undefined, [
+      {
+        text: 'Block contact',
+        style: 'destructive',
+        onPress: () => {
+          appAlert('Block this contact?', 'They will no longer be able to message you, and you will no longer be able to message them.', [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Block',
+              style: 'destructive',
+              onPress: () => {
+                block(contact.id);
+                router.back();
+              },
+            },
+          ]);
+        },
+      },
+      {
+        text: 'Report contact',
+        style: 'destructive',
+        onPress: () => {
+          appAlert('Report this contact?', 'This also blocks them.', [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Report', style: 'destructive', onPress: () => report(contact.id, 'Reported from chat') },
+          ]);
+        },
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
 
   const presenceVisible = isPresenceVisible(contact);
   const isOnline = presenceVisible && presence?.status === 'online';
@@ -223,6 +262,11 @@ export default function ChatScreen() {
             <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={searchOpen ? a1 : tokens.text} strokeWidth={2}>
               <Path d="M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14Z" />
               <Path d="M21 21l-4.3-4.3" />
+            </Svg>
+          </Pressable>
+          <Pressable onPress={onContactMenu} style={{ width: 32, height: 36, alignItems: 'center', justifyContent: 'center' }}>
+            <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={tokens.text} strokeWidth={2.4} strokeLinecap="round">
+              <Path d="M12 12h.01M6 12h.01M18 12h.01" />
             </Svg>
           </Pressable>
         </Glass>

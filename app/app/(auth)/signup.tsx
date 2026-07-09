@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Alert } from 'react-native';
+import { View, Text } from 'react-native';
 import { router } from 'expo-router';
 import { ScreenScaffold } from '../../src/components/ScreenScaffold';
 import { AuthHeader } from '../../src/components/AuthHeader';
@@ -10,6 +10,7 @@ import { fontFamilies } from '../../src/theme/tokens';
 import { useSignupStore } from '../../src/state/signupStore';
 import { supabase } from '../../src/lib/supabase';
 import { AUTH_REDIRECT_URL } from '../../src/lib/authDeepLink';
+import { appAlert } from '../../src/state/alertStore';
 
 const USERNAME_RE = /^[a-z0-9_.]{3,24}$/;
 
@@ -25,19 +26,19 @@ export default function SignupScreen() {
   const onSubmit = async () => {
     const uname = username.trim().toLowerCase();
     if (!USERNAME_RE.test(uname)) {
-      Alert.alert('Invalid username', 'Use 3-24 characters: lowercase letters, numbers, "_" or "."');
+      appAlert('Invalid username', 'Use 3-24 characters: lowercase letters, numbers, "_" or "."');
       return;
     }
     if (!email.includes('@')) {
-      Alert.alert('Invalid email', 'Enter a valid email address.');
+      appAlert('Invalid email', 'Enter a valid email address.');
       return;
     }
     if (password.length < 8) {
-      Alert.alert('Weak password', 'Use at least 8 characters.');
+      appAlert('Weak password', 'Use at least 8 characters.');
       return;
     }
     if (password !== confirm) {
-      Alert.alert("Passwords don't match", 'Double check both password fields.');
+      appAlert("Passwords don't match", 'Double check both password fields.');
       return;
     }
 
@@ -45,7 +46,7 @@ export default function SignupScreen() {
     const { data: existing } = await supabase.from('users').select('id').eq('username', uname).maybeSingle();
     if (existing) {
       setLoading(false);
-      Alert.alert('Username taken', 'Try a different username.');
+      appAlert('Username taken', 'Try a different username.');
       return;
     }
 
@@ -56,7 +57,7 @@ export default function SignupScreen() {
     });
     setLoading(false);
     if (error) {
-      Alert.alert('Sign up failed', error.message);
+      appAlert('Sign up failed', error.message);
       return;
     }
     set({ username: uname, email, password });
@@ -86,13 +87,13 @@ export default function SignupScreen() {
           title="Google"
           height={52}
           style={{ flex: 1, opacity: 0.5 }}
-          onPress={() => Alert.alert('Verified email required', 'Current requires a verified email for security — social sign-in is intentionally unavailable.')}
+          onPress={() => appAlert('Verified email required', 'Current requires a verified email for security — social sign-in is intentionally unavailable.')}
         />
         <GlassButton
           title="Apple"
           height={52}
           style={{ flex: 1, opacity: 0.5 }}
-          onPress={() => Alert.alert('Verified email required', 'Current requires a verified email for security — social sign-in is intentionally unavailable.')}
+          onPress={() => appAlert('Verified email required', 'Current requires a verified email for security — social sign-in is intentionally unavailable.')}
         />
       </View>
 

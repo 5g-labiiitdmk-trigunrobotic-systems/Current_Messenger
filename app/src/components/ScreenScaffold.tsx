@@ -1,7 +1,6 @@
 import React from 'react';
-import { ScrollView, View, Platform, StyleSheet, type ViewStyle, type StyleProp } from 'react-native';
+import { ScrollView, View, StyleSheet, type ViewStyle, type StyleProp } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { BokehBackground } from './BokehBackground';
@@ -23,13 +22,16 @@ export function ScreenScaffold({ children, scroll = true, padded = true, tabBar 
   const insets = useSafeAreaInsets();
   const { mode } = useTheme();
   const Container = scroll ? ScrollView : View;
-  // The tab bar is absolutely positioned and reserves no navigator layout
-  // space, so scroll content must manually clear insets.bottom (the same
-  // safe-area value the bar itself is anchored to) + its gap + its own
-  // height, plus a bit of margin so the last row isn't flush against it.
-  const tabBarClearance = tabBar ? insets.bottom + TAB_BAR_BOTTOM_GAP + TAB_BAR_HEIGHT + TAB_BAR_TOP_MARGIN : 0;
+  // insets.bottom must be cleared on EVERY screen, tab bar or not — it's the
+  // system gesture-nav/home-indicator zone, not something specific to the
+  // floating tab bar. Missing it here (previously only added when
+  // tabBar=true) is why the Settings screen's Log out button — and the last
+  // element on every other non-tab screen — could sit clipped under it.
+  // tabBarExtra is only the floating bar's OWN footprint on top of that.
+  const tabBarExtra = tabBar ? TAB_BAR_BOTTOM_GAP + TAB_BAR_HEIGHT + TAB_BAR_TOP_MARGIN : 0;
+  const bottomClearance = insets.bottom + tabBarExtra;
   const containerProps = scroll
-    ? { contentContainerStyle: { paddingBottom: 24 + tabBarClearance }, showsVerticalScrollIndicator: false }
+    ? { contentContainerStyle: { paddingBottom: 24 + bottomClearance }, showsVerticalScrollIndicator: false }
     : { style: { flex: 1 } };
 
   return (
@@ -40,7 +42,7 @@ export function ScreenScaffold({ children, scroll = true, padded = true, tabBar 
           {...(containerProps as any)}
           style={[
             padded && { paddingHorizontal: 18, paddingTop: insets.top + 14 },
-            !scroll && { flex: 1, paddingBottom: tabBarClearance },
+            !scroll && { flex: 1, paddingBottom: bottomClearance },
             style,
           ]}
         >
@@ -53,9 +55,7 @@ export function ScreenScaffold({ children, scroll = true, padded = true, tabBar 
           collision). Sized smaller than the header's own top offset
           (insets.top + 14) so it doesn't wash out the header at rest. */}
       <View pointerEvents="none" style={[StyleSheet.absoluteFill, { bottom: undefined, height: insets.top + 22 }]}>
-        {/* Android: no BlurView (see Glass.tsx / TabBar.tsx) — same native
-            SurfaceView class, not used on this platform at all. */}
-        {Platform.OS === 'ios' && <BlurView intensity={30} tint={mode === 'light' ? 'light' : 'dark'} style={StyleSheet.absoluteFill} />}
+        {/* No blur (see Glass.tsx) — a plain gradient fade. */}
         <LinearGradient
           colors={[mode === 'light' ? 'rgba(255,255,255,0.55)' : 'rgba(8,8,10,0.6)', 'transparent']}
           locations={[0, 1]}

@@ -25,6 +25,8 @@ const SETTINGS = [
 export default function ProfileScreen() {
   const { tokens, a1 } = useTheme();
   const profile = useAuthStore((s) => s.profile);
+  const profileError = useAuthStore((s) => s.profileError);
+  const refreshProfile = useAuthStore((s) => s.refreshProfile);
 
   return (
     <ScreenScaffold tabBar>
@@ -37,6 +39,18 @@ export default function ProfileScreen() {
           </Svg>
         </IconCircle>
       </View>
+
+      {profileError && !profile && (
+        <Pressable onPress={() => refreshProfile()}>
+          <Glass radius={22} style={{ marginTop: 16, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 10, borderColor: 'rgba(255,90,110,0.35)' }}>
+            <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#ff5a6e" strokeWidth={2}>
+              <Path d="M12 9v4M12 17h.01" />
+              <Circle cx={12} cy={12} r={9} />
+            </Svg>
+            <Text style={{ flex: 1, fontSize: 12.5, fontFamily: fontFamilies.semibold, color: tokens.text2 }}>Couldn't load your profile — tap to retry</Text>
+          </Glass>
+        </Pressable>
+      )}
 
       <Glass radius={22} style={{ marginTop: 22, padding: 24, alignItems: 'center' }}>
         <ShimmerSweep />
