@@ -67,12 +67,12 @@ export default function RootLayout() {
     if (fontsLoaded) SplashScreen.hideAsync().catch(() => {});
   }, [fontsLoaded]);
 
-  if (!fontsLoaded) return null;
+  if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: '#141416' }} />;
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#141416' }}>
       <SafeAreaProvider>
-        <View style={{ flex: 1 }}>
+        <View style={{ flex: 1, backgroundColor: '#141416' }}>
           <StatusBar style={mode === 'light' ? 'dark' : 'light'} />
           <AppLockGate>
             <Stack screenOptions={{ headerShown: false, animation: 'fade_from_bottom' }}>

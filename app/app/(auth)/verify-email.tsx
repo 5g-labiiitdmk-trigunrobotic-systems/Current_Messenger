@@ -18,6 +18,8 @@ import { supabase } from '../../src/lib/supabase';
  * the link in the email opens the app via a deep link, which
  * app/_layout.tsx + src/lib/authDeepLink.ts handle globally by calling
  * supabase.auth.setSession(...), which updates `session` here reactively.
+ * finish-setup.tsx does the actual account finalization + routing to the
+ * main app — this screen just waits for email_confirmed_at to flip.
  */
 export default function VerifyEmailScreen() {
   const { tokens, a1 } = useTheme();
@@ -27,7 +29,7 @@ export default function VerifyEmailScreen() {
 
   useEffect(() => {
     if (session?.user.email_confirmed_at) {
-      router.replace('/(auth)/add-phone');
+      router.replace('/(auth)/finish-setup');
     }
   }, [session]);
 

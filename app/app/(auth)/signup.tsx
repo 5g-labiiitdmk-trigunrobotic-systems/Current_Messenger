@@ -65,7 +65,7 @@ export default function SignupScreen() {
 
   return (
     <ScreenScaffold>
-      <AuthHeader title="Create account" subtitle="Both email and phone verification are required — no phone number, no account." />
+      <AuthHeader title="Create account" subtitle="We'll email you a confirmation link — verify it to activate your account." />
 
       <View style={{ marginTop: 28, gap: 14 }}>
         <GlassField label="Username" placeholder="@yourname" autoCapitalize="none" value={username} onChangeText={setUsername} />
@@ -86,13 +86,13 @@ export default function SignupScreen() {
           title="Google"
           height={52}
           style={{ flex: 1, opacity: 0.5 }}
-          onPress={() => Alert.alert('Email + phone required', 'Current requires verified email and phone for security — social sign-in is intentionally unavailable.')}
+          onPress={() => Alert.alert('Verified email required', 'Current requires a verified email for security — social sign-in is intentionally unavailable.')}
         />
         <GlassButton
           title="Apple"
           height={52}
           style={{ flex: 1, opacity: 0.5 }}
-          onPress={() => Alert.alert('Email + phone required', 'Current requires verified email and phone for security — social sign-in is intentionally unavailable.')}
+          onPress={() => Alert.alert('Verified email required', 'Current requires a verified email for security — social sign-in is intentionally unavailable.')}
         />
       </View>
 

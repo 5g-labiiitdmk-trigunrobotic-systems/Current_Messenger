@@ -7,12 +7,14 @@ import { useTheme } from '../../src/theme/useTheme';
 import { fontFamilies } from '../../src/theme/tokens';
 import { useAuthStore } from '../../src/state/authStore';
 import { useSignupStore } from '../../src/state/signupStore';
+import { finalizeAccount } from '../../src/lib/account';
 
 /**
- * Landing spot for a resumed session that hasn't finished dual verification
- * (e.g. the app was killed mid-signup). Figures out what's still missing and
- * routes there. In-memory wizard state (phone OTP confirmation object) can't
- * survive a restart, so a missing phone step always re-requests a fresh code.
+ * Landing spot for a resumed session (e.g. the app was killed mid-signup, or
+ * the user just tapped the email confirmation link). Once email is verified,
+ * this is also the single place that creates the public.users row — the
+ * in-memory signup wizard's username can't survive a restart, so a cold-start
+ * resume falls back to deriving one from the email address.
  */
 export default function FinishSetupScreen() {
   const { tokens } = useTheme();
@@ -31,9 +33,13 @@ export default function FinishSetupScreen() {
       router.replace('/(auth)/verify-email');
       return;
     }
-    if (!profile || !profile.phone_verified) {
-      set({ email: session.user.email ?? '', username: profile?.username ?? '' });
-      router.replace('/(auth)/add-phone');
+    if (!profile) {
+      const pendingUsername = useSignupStore.getState().username;
+      const username = pendingUsername || (session.user.email ?? '').split('@')[0].toLowerCase();
+      finalizeAccount({ userId: session.user.id, username, email: session.user.email ?? '' })
+        .then(() => useAuthStore.getState().refreshProfile())
+        .then(() => useSignupStore.getState().reset())
+        .catch(() => {});
       return;
     }
     router.replace('/(tabs)/chats');

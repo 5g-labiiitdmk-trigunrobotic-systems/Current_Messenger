@@ -99,8 +99,8 @@ export default function LoginScreen() {
         <View style={{ flex: 1, height: 1, backgroundColor: tokens.glassBorder }} />
       </View>
       <View style={{ flexDirection: 'row', gap: 12 }}>
-        <GlassButton title="Google" height={52} style={{ flex: 1, opacity: 0.5 }} onPress={() => Alert.alert('Not available', 'Current requires verified email + phone sign-in.')} />
-        <GlassButton title="Apple" height={52} style={{ flex: 1, opacity: 0.5 }} onPress={() => Alert.alert('Not available', 'Current requires verified email + phone sign-in.')} />
+        <GlassButton title="Google" height={52} style={{ flex: 1, opacity: 0.5 }} onPress={() => Alert.alert('Not available', 'Current requires verified email sign-in.')} />
+        <GlassButton title="Apple" height={52} style={{ flex: 1, opacity: 0.5 }} onPress={() => Alert.alert('Not available', 'Current requires verified email sign-in.')} />
       </View>
     </ScreenScaffold>
   );

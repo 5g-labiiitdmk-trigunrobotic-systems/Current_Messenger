@@ -63,7 +63,7 @@ export default function SplashRoute() {
       <Animated.View entering={FadeIn.delay(1400).duration(700)} style={styles.footer}>
         <TypingDots color={a1} />
         <Text style={[styles.kicker, { color: tokens.text3 }]}>a product of</Text>
-        <Text style={[styles.brand, { color: tokens.text }]}>Trigun Robotics Systems</Text>
+        <Text style={[styles.brand, { color: tokens.text }]}>Trigun Robotic Systems @ IIITDMK</Text>
       </Animated.View>
     </View>
   );
