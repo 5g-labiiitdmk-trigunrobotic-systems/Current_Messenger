@@ -17,6 +17,7 @@ import { useCallStore } from '../../src/state/callStore';
 import { useAuthStore } from '../../src/state/authStore';
 import { isPresenceVisible } from '../../src/lib/presencePolicy';
 import { pickImageBase64, getCurrentLocationOnce, startVoiceRecording, stopVoiceRecording, playAudioBase64 } from '../../src/lib/media';
+import { useAudioRecorder, RecordingPresets } from 'expo-audio';
 
 export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -46,6 +47,7 @@ export default function ChatScreen() {
   const [pollOptB, setPollOptB] = useState('');
   const listRef = useRef<FlatList>(null);
   const typingTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
 
   const messages = searchQuery.trim() ? allMessages.filter((m) => m.text?.toLowerCase().includes(searchQuery.trim().toLowerCase())) : allMessages;
 
@@ -77,7 +79,7 @@ export default function ChatScreen() {
 
   const onMic = async () => {
     if (!recording) {
-      const ok = await startVoiceRecording();
+      const ok = await startVoiceRecording(recorder);
       if (!ok) {
         Alert.alert('Microphone permission needed', 'Enable microphone access to send voice messages.');
         return;
@@ -85,7 +87,7 @@ export default function ChatScreen() {
       setRecording(true);
     } else {
       setRecording(false);
-      const result = await stopVoiceRecording();
+      const result = await stopVoiceRecording(recorder);
       if (result) sendRich(id ?? '', false, 'voice', result);
     }
   };

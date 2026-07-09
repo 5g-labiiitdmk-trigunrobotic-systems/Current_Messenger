@@ -81,6 +81,14 @@
           "locationWhenInUsePermission": "Current uses your location only when you choose to share it live in a chat — never stored."
         }
       ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Current uses the microphone for voice messages and voice/video calls.",
+          "enableBackgroundPlayback": false,
+          "enableBackgroundRecording": false
+        }
+      ],
       "@react-native-firebase/app",
       "@react-native-firebase/auth",
       [
