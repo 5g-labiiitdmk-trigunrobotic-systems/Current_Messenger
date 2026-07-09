@@ -39,7 +39,7 @@ export default function ContactsScreen() {
   const onlineNow = approved.filter((c) => isPresenceVisible(c) && presence[c.id]?.status === 'online');
 
   return (
-    <ScreenScaffold bottomInset={90}>
+    <ScreenScaffold tabBar>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <ScreenTitle>Contacts</ScreenTitle>
         <IconCircle onPress={() => router.push('/qr')}>

@@ -28,7 +28,7 @@ export default function ChatsScreen() {
   });
 
   return (
-    <ScreenScaffold bottomInset={90}>
+    <ScreenScaffold tabBar>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <ScreenTitle>Chats</ScreenTitle>
         <View style={{ flexDirection: 'row', gap: 10 }}>

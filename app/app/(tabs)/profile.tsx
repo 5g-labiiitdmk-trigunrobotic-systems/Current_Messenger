@@ -27,7 +27,7 @@ export default function ProfileScreen() {
   const profile = useAuthStore((s) => s.profile);
 
   return (
-    <ScreenScaffold bottomInset={90}>
+    <ScreenScaffold tabBar>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <ScreenTitle>Profile</ScreenTitle>
         <IconCircle onPress={() => router.push('/settings')}>

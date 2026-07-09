@@ -20,7 +20,7 @@ export default function CallsScreen() {
   const byId = Object.fromEntries(approved.map((c) => [c.id, c]));
 
   return (
-    <ScreenScaffold bottomInset={90}>
+    <ScreenScaffold tabBar>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <ScreenTitle>Calls</ScreenTitle>
         <IconCircle variant="accent" onPress={() => router.push('/(tabs)/contacts')}>

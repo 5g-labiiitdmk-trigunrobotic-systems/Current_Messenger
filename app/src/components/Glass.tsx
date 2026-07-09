@@ -37,7 +37,14 @@ export function Glass({
   return (
     <View
       style={[
-        { borderRadius: radius, overflow: 'hidden' },
+        // Android bug: `elevation` on a transparent View (no backgroundColor)
+        // draws the shadow as an unclipped rectangle instead of respecting
+        // borderRadius — the actual visible fill is a separate absolutely-
+        // positioned child below, so without this the shadow's rounded
+        // silhouette has nothing non-transparent to derive its shape from,
+        // and bleeds out past the rounded corners. `fill` is already
+        // low-alpha (the glass tint), so this changes nothing visually.
+        { borderRadius: radius, overflow: 'hidden', backgroundColor: fill },
         shadow && outerShadow,
         style,
       ]}

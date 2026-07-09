@@ -1,11 +1,23 @@
 import React from 'react';
-import { View, Pressable, Text } from 'react-native';
+import { View, Pressable, Text, Platform, StyleSheet } from 'react-native';
 import type { BottomTabBarProps } from 'expo-router/tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path, Circle } from 'react-native-svg';
 import { Glass } from './Glass';
 import { useTheme } from '../theme/useTheme';
 import { fontFamilies } from '../theme/tokens';
+
+// Single source of truth for the floating tab bar's footprint. TabBar is
+// absolutely positioned and reserves no space in the tab navigator, so any
+// scrollable screen behind it must pad for exactly this — see
+// ScreenScaffold's `tabBar` prop, which imports these instead of every
+// screen guessing a magic number (which is how the bar drifted out of sync
+// with screen padding before).
+export const TAB_BAR_HEIGHT = 66;
+export const TAB_BAR_BOTTOM_GAP = 8;
+export const TAB_BAR_TOP_MARGIN = 14; // breathing room above the bar
 
 const ICONS: Record<string, (color: string) => React.ReactNode> = {
   chats: (c) => (
@@ -36,29 +48,55 @@ const ICONS: Record<string, (color: string) => React.ReactNode> = {
 const LABELS: Record<string, string> = { chats: 'Chats', calls: 'Calls', contacts: 'Contacts', profile: 'Profile' };
 
 export function TabBar({ state, navigation }: BottomTabBarProps) {
-  const { tokens, a1 } = useTheme();
+  const { tokens, a1, mode } = useTheme();
   const insets = useSafeAreaInsets();
+  const floorHeight = insets.bottom + TAB_BAR_BOTTOM_GAP + TAB_BAR_HEIGHT + 40;
 
   return (
-    <View style={{ position: 'absolute', left: 18, right: 18, bottom: insets.bottom + 8 }}>
-      <Glass radius={22} variant="bg2" style={{ height: 66 }}>
-        <View style={{ flexDirection: 'row', height: 66, alignItems: 'center', justifyContent: 'space-around', paddingHorizontal: 8 }}>
-          {state.routes.map((route, i) => {
-            const focused = state.index === i;
-            const color = focused ? a1 : tokens.text2;
-            return (
-              <Pressable
-                key={route.key}
-                onPress={() => navigation.navigate(route.name)}
-                style={({ pressed }) => [{ alignItems: 'center', gap: 3, paddingVertical: 6, paddingHorizontal: 14, transform: [{ scale: pressed ? 0.9 : 1 }] }]}
-              >
-                {ICONS[route.name]?.(color)}
-                <Text style={{ fontSize: 10, fontFamily: fontFamilies.bold, color }}>{LABELS[route.name] ?? route.name}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      </Glass>
+    <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+      {/* Static frosted floor behind the bar, from just above the pill down
+          to the screen bottom — content scrolling underneath fades into a
+          blur instead of hard-cutting against an opaque bar edge. */}
+      <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: floorHeight }}>
+        <BlurView
+          intensity={40}
+          tint={mode === 'light' ? 'light' : 'dark'}
+          experimentalBlurMethod={Platform.OS === 'android' ? 'dimezisBlurView' : undefined}
+          style={StyleSheet.absoluteFill}
+        />
+        <LinearGradient
+          colors={['transparent', tokens.tabBg]}
+          locations={[0, 0.45]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+      </View>
+
+      <View style={{ position: 'absolute', left: 18, right: 18, bottom: insets.bottom + TAB_BAR_BOTTOM_GAP }}>
+        <Glass
+          radius={22}
+          variant="bg2"
+          style={{ height: TAB_BAR_HEIGHT, borderWidth: 1.5, borderColor: mode === 'light' ? 'rgba(28,24,48,0.16)' : 'rgba(255,255,255,0.32)' }}
+        >
+          <View style={{ flexDirection: 'row', height: TAB_BAR_HEIGHT, alignItems: 'center', justifyContent: 'space-around', paddingHorizontal: 8 }}>
+            {state.routes.map((route, i) => {
+              const focused = state.index === i;
+              const color = focused ? a1 : tokens.text2;
+              return (
+                <Pressable
+                  key={route.key}
+                  onPress={() => navigation.navigate(route.name)}
+                  style={({ pressed }) => [{ alignItems: 'center', gap: 3, paddingVertical: 6, paddingHorizontal: 14, transform: [{ scale: pressed ? 0.9 : 1 }] }]}
+                >
+                  {ICONS[route.name]?.(color)}
+                  <Text style={{ fontSize: 10, fontFamily: fontFamilies.bold, color }}>{LABELS[route.name] ?? route.name}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </Glass>
+      </View>
     </View>
   );
 }
