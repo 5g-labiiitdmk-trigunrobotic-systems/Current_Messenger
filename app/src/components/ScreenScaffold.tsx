@@ -1,5 +1,5 @@
 import React from 'react';
-import { ScrollView, View, StyleSheet, type ViewStyle, type StyleProp } from 'react-native';
+import { ScrollView, View, Platform, StyleSheet, type ViewStyle, type StyleProp } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -53,7 +53,9 @@ export function ScreenScaffold({ children, scroll = true, padded = true, tabBar 
           collision). Sized smaller than the header's own top offset
           (insets.top + 14) so it doesn't wash out the header at rest. */}
       <View pointerEvents="none" style={[StyleSheet.absoluteFill, { bottom: undefined, height: insets.top + 22 }]}>
-        <BlurView intensity={30} tint={mode === 'light' ? 'light' : 'dark'} style={StyleSheet.absoluteFill} />
+        {/* Android: no BlurView (see Glass.tsx / TabBar.tsx) — same native
+            SurfaceView class, not used on this platform at all. */}
+        {Platform.OS === 'ios' && <BlurView intensity={30} tint={mode === 'light' ? 'light' : 'dark'} style={StyleSheet.absoluteFill} />}
         <LinearGradient
           colors={[mode === 'light' ? 'rgba(255,255,255,0.55)' : 'rgba(8,8,10,0.6)', 'transparent']}
           locations={[0, 1]}

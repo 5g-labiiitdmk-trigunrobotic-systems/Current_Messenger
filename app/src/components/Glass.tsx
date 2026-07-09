@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, type ViewStyle, type StyleProp } from 'react-native';
+import { View, StyleSheet, Platform, type ViewStyle, type StyleProp } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../theme/useTheme';
@@ -49,20 +49,22 @@ export function Glass({
         style,
       ]}
     >
-      {/* Android: 'dimezisBlurView' renders via a native SurfaceView that
-          does NOT respect this panel's overflow:hidden/borderRadius clip —
-          it bled out as an unclipped rectangle behind rounded cards (the
-          reported "ghost rectangle" bug survived the previous elevation/
-          backgroundColor fix because this was the real cause, not that).
-          Leaving blurMethod unset on Android falls back to 'none' — a
-          plain semi-transparent View with no native-surface compositing,
-          so it clips correctly. iOS's blur uses UIVisualEffectView, a
-          completely different path unaffected by this, so it's untouched. */}
-      <BlurView
-        intensity={intensity}
-        tint={mode === 'light' ? 'light' : 'dark'}
-        style={StyleSheet.absoluteFill}
-      />
+      {/* Android: expo-blur's BlurView — under ANY blurMethod, including
+          the 'none' fallback tried previously — is still a native module
+          with its own compositing behavior, and the ghost-rectangle bug
+          survived that attempt too (confirmed on-device). Rather than
+          keep chasing which native code path is at fault, Android gets NO
+          BlurView at all here: just an extra translucent scrim layered
+          with the existing fill + bevel/inset gradients below to fake the
+          "frosted" softness. Plain View/LinearGradient are universal RN
+          primitives with no native-surface compositing of their own — the
+          same class already used everywhere else in this component
+          without issue. iOS keeps the real blur; it was never broken. */}
+      {Platform.OS === 'ios' ? (
+        <BlurView intensity={intensity} tint={mode === 'light' ? 'light' : 'dark'} style={StyleSheet.absoluteFill} />
+      ) : (
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: mode === 'light' ? 'rgba(255,255,255,0.4)' : 'rgba(18,18,22,0.4)' }]} />
+      )}
       <View
         style={[
           StyleSheet.absoluteFill,

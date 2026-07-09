@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Pressable, Text, StyleSheet } from 'react-native';
+import { View, Pressable, Text, Platform, StyleSheet } from 'react-native';
 import type { BottomTabBarProps } from 'expo-router/tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
@@ -58,10 +58,16 @@ export function TabBar({ state, navigation }: BottomTabBarProps) {
           to the screen bottom — content scrolling underneath fades into a
           blur instead of hard-cutting against an opaque bar edge. */}
       <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: floorHeight }}>
-        {/* Android: leave blurMethod unset (see Glass.tsx) — dimezisBlurView's
-            native SurfaceView has compositing quirks with sibling layers on
-            top of it, which the gradient below is. */}
-        <BlurView intensity={40} tint={mode === 'light' ? 'light' : 'dark'} style={StyleSheet.absoluteFill} />
+        {/* Android: no BlurView here either (see Glass.tsx) — same class of
+            native-surface bug, confirmed to survive a blurMethod tweak on
+            device, so it's not used on Android at all now, not tuned. The
+            gradient below still fades content to opaque; on Android it's
+            joined by a flat translucent scrim to compensate for the
+            missing blur softness. */}
+        {Platform.OS === 'ios' && <BlurView intensity={40} tint={mode === 'light' ? 'light' : 'dark'} style={StyleSheet.absoluteFill} />}
+        {Platform.OS !== 'ios' && (
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: mode === 'light' ? 'rgba(255,255,255,0.3)' : 'rgba(18,18,22,0.3)' }]} />
+        )}
         <LinearGradient
           colors={['transparent', tokens.tabBg]}
           locations={[0, 0.45]}
