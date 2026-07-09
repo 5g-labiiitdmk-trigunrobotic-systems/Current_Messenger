@@ -78,7 +78,19 @@ export default function RootLayout() {
             <Stack screenOptions={{ headerShown: false, animation: 'fade_from_bottom' }}>
               <Stack.Screen name="index" />
               <Stack.Screen name="(auth)" />
-              <Stack.Screen name="(tabs)" />
+              {/* Entered via router.replace() from index.tsx (returning
+                  session) and finish-setup.tsx (fresh signup) — every path
+                  into the main app tears down the previous screen while
+                  animating this one in, which is the exact "replace +
+                  fade_from_bottom" combination react-native-screens has
+                  known Android issues with (a stale native fragment
+                  snapshot of the screen being replaced can linger behind
+                  the incoming one). No animation needed for a one-time
+                  "you're in" transition anyway — overriding the inherited
+                  global default rather than changing it everywhere, since
+                  this is the specific transition the reported ghost
+                  rectangle lines up with. */}
+              <Stack.Screen name="(tabs)" options={{ animation: 'none' }} />
               <Stack.Screen name="chat/[id]" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="group-chat/[id]" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="group-info/[id]" options={{ animation: 'slide_from_right' }} />
