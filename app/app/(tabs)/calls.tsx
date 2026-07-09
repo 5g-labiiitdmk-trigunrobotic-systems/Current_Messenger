@@ -30,7 +30,7 @@ export default function CallsScreen() {
         </IconCircle>
       </View>
 
-      <Glass radius={26} style={{ marginTop: 20, overflow: 'hidden' }}>
+      <Glass radius={22} style={{ marginTop: 20, overflow: 'hidden' }}>
         {log.length === 0 ? (
           <View style={{ padding: 28, alignItems: 'center' }}>
             <Text style={{ fontFamily: fontFamilies.semibold, color: tokens.text2, textAlign: 'center' }}>
@@ -46,7 +46,7 @@ export default function CallsScreen() {
                 key={c.id}
                 style={{ flexDirection: 'row', alignItems: 'center', gap: 13, padding: 13, paddingHorizontal: 16, borderBottomWidth: i === log.length - 1 ? 0 : 1, borderBottomColor: tokens.glassBorder }}
               >
-                <Avatar hue={contact?.avatar_hue ?? 200} size={50} />
+                <Avatar hue={contact?.avatar_hue ?? 200} size={50} label={contact?.display_name || contact?.username} />
                 <View style={{ flex: 1 }}>
                   <Text style={{ fontSize: 15.5, fontFamily: fontFamilies.bold, color: missed ? '#ff5a6e' : tokens.text }}>{contact?.display_name ?? contact?.username ?? c.peerId}</Text>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 3 }}>

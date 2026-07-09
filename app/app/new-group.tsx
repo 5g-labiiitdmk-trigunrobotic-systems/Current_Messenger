@@ -83,12 +83,12 @@ export default function NewGroupScreen() {
         <Text style={{ fontSize: 12.5, fontFamily: fontFamilies.bold, color: a1 }}>{selected.size} selected</Text>
       </View>
 
-      <Glass radius={26} style={{ overflow: 'hidden' }}>
+      <Glass radius={22} style={{ overflow: 'hidden' }}>
         {approved.map((c, i) => {
           const checked = selected.has(c.id);
           return (
             <Pressable key={c.id} onPress={() => toggle(c.id)} style={{ flexDirection: 'row', alignItems: 'center', gap: 13, padding: 11, paddingHorizontal: 16, borderBottomWidth: i === approved.length - 1 ? 0 : 1, borderBottomColor: tokens.glassBorder }}>
-              <Avatar hue={c.avatar_hue} size={44} />
+              <Avatar hue={c.avatar_hue} size={44} label={c.display_name || c.username} />
               <View style={{ flex: 1 }}>
                 <Text style={{ fontSize: 15, fontFamily: fontFamilies.bold, color: tokens.text }}>{c.display_name || c.username}</Text>
                 <Text style={{ fontSize: 12.5, color: tokens.text2, fontFamily: fontFamilies.medium }}>@{c.username}</Text>

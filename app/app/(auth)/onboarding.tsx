@@ -18,7 +18,7 @@ export default function OnboardingScreen() {
         <Text style={[styles.title, { color: tokens.text, textShadowColor: tokens.glowColor }]}>Current</Text>
         <Text style={[styles.tagline, { color: tokens.text2 }]}>Private messaging, simplified</Text>
 
-        <Glass radius={30} style={{ width: '100%', marginTop: 40, padding: 22 }}>
+        <Glass radius={22} style={{ width: '100%', marginTop: 40, padding: 22 }}>
           <ShimmerSweep />
           <Text style={[styles.cardTitle, { color: tokens.text }]}>End-to-end encrypted by default</Text>
           <Text style={[styles.cardBody, { color: tokens.text2 }]}>

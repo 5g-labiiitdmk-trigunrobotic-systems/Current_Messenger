@@ -33,7 +33,7 @@ export function AppLockGate({ children }: { children: React.ReactNode }) {
     <View style={{ flex: 1 }}>
       <BokehBackground />
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40, gap: 20 }}>
-        <Glass radius={28} style={{ padding: 28, alignItems: 'center', gap: 14 }}>
+        <Glass radius={22} style={{ padding: 28, alignItems: 'center', gap: 14 }}>
           <Text style={{ fontSize: 18, fontFamily: fontFamilies.heavy, color: tokens.text }}>Current is locked</Text>
           <Text style={{ fontSize: 13, fontFamily: fontFamilies.medium, color: tokens.text2, textAlign: 'center' }}>Unlock with Face ID / fingerprint to continue.</Text>
           <Pressable onPress={tryUnlock}>

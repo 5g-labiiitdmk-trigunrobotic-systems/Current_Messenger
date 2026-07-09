@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, Pressable, Alert } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path, Circle } from 'react-native-svg';
 import { ScreenScaffold } from '../../src/components/ScreenScaffold';
 import { Glass } from '../../src/components/Glass';
@@ -14,7 +15,7 @@ import { useAuthStore } from '../../src/state/authStore';
 
 export default function GroupInfoScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { tokens, a1 } = useTheme();
+  const { tokens, a1, a2 } = useTheme();
   const group = useGroupStore((s) => s.groups[id ?? '']);
   const leave = useGroupStore((s) => s.leave);
   const approved = useContactStore((s) => s.approved);
@@ -60,12 +61,12 @@ export default function GroupInfoScreen() {
       </View>
 
       <View style={{ alignItems: 'center', marginTop: 20 }}>
-        <View style={{ width: 92, height: 92, borderRadius: 28, backgroundColor: '#3fae4f', alignItems: 'center', justifyContent: 'center' }}>
+        <LinearGradient colors={[a1, a2]} start={{ x: 0.15, y: 0 }} end={{ x: 0.85, y: 1 }} style={{ width: 92, height: 92, borderRadius: 28, alignItems: 'center', justifyContent: 'center' }}>
           <Svg width={44} height={44} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2}>
             <Path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
             <Circle cx={9} cy={7} r={4} />
           </Svg>
-        </View>
+        </LinearGradient>
         <Text style={{ fontSize: 22, fontFamily: fontFamilies.black, color: tokens.text, marginTop: 14 }}>{group.name}</Text>
         <Text style={{ fontSize: 13, fontFamily: fontFamilies.medium, color: tokens.text2, marginTop: 2 }}>
           {group.memberIds.length} members{group.isBroadcast ? ' · broadcast channel' : ''}
@@ -73,10 +74,10 @@ export default function GroupInfoScreen() {
       </View>
 
       <Text style={{ fontSize: 12, fontFamily: fontFamilies.heavy, color: tokens.text3, textTransform: 'uppercase', letterSpacing: 0.8, margin: 4, marginTop: 24, marginBottom: 10 }}>Members</Text>
-      <Glass radius={24} style={{ overflow: 'hidden' }}>
+      <Glass radius={22} style={{ overflow: 'hidden' }}>
         {members.map((m, i) => (
           <View key={m.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 13, padding: 12, paddingHorizontal: 16, borderBottomWidth: i === members.length - 1 ? 0 : 1, borderBottomColor: tokens.glassBorder }}>
-            <Avatar hue={m.hue} size={46} />
+            <Avatar hue={m.hue} size={46} label={m.name} />
             <Text style={{ flex: 1, fontSize: 15, fontFamily: fontFamilies.bold, color: tokens.text }}>{m.name}</Text>
             {m.isAdmin && (
               <View style={{ paddingVertical: 5, paddingHorizontal: 11, borderRadius: 10, backgroundColor: 'rgba(124,92,255,0.18)' }}>

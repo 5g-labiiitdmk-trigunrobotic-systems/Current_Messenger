@@ -25,7 +25,7 @@ export default function LabScreen() {
         Experimental features, coming soon. These are wired into navigation but not functionally complete yet.
       </Text>
 
-      <Glass radius={24} style={{ marginTop: 18, overflow: 'hidden' }}>
+      <Glass radius={22} style={{ marginTop: 18, overflow: 'hidden' }}>
         {LAB_FEATURES.map((f, i) => (
           <Pressable key={f.key} onPress={() => router.push(`/lab/${f.key}`)} style={{ flexDirection: 'row', alignItems: 'center', gap: 14, padding: 14, borderBottomWidth: i === LAB_FEATURES.length - 1 ? 0 : 1, borderBottomColor: tokens.glassBorder }}>
             <View style={{ width: 38, height: 38, borderRadius: 11, backgroundColor: tokens.glassBg2, borderWidth: 1, borderColor: tokens.glassBorder, alignItems: 'center', justifyContent: 'center' }}>

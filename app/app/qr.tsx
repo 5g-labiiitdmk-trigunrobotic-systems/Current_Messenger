@@ -62,7 +62,7 @@ export default function QrScreen() {
 
       {tab === 'mine' ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <Glass radius={30} style={{ padding: 28, alignItems: 'center' }}>
+          <Glass radius={22} style={{ padding: 28, alignItems: 'center' }}>
             <View style={{ backgroundColor: '#fff', padding: 16, borderRadius: 20 }}>
               <QRCode value={`${QR_PREFIX}${profile?.id ?? ''}`} size={200} color="#1c1830" backgroundColor="#fff" />
             </View>

@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, TextInput, Pressable, FlatList, KeyboardAvoidingView, Platform } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path, Circle } from 'react-native-svg';
 import { Glass } from '../../src/components/Glass';
 import { MessageBubble } from '../../src/components/MessageBubble';
@@ -15,7 +16,7 @@ import { useAuthStore } from '../../src/state/authStore';
 
 export default function GroupChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { tokens, a1 } = useTheme();
+  const { tokens, a1, a2 } = useTheme();
   const insets = useSafeAreaInsets();
   const me = useAuthStore((s) => s.session?.user.id);
   const group = useGroupStore((s) => s.groups[id ?? '']);
@@ -76,12 +77,12 @@ export default function GroupChatScreen() {
                 <Path d="M15 18l-6-6 6-6" />
               </Svg>
             </Pressable>
-            <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: '#3fae4f', alignItems: 'center', justifyContent: 'center' }}>
+            <LinearGradient colors={[a1, a2]} start={{ x: 0.15, y: 0 }} end={{ x: 0.85, y: 1 }} style={{ width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' }}>
               <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2}>
                 <Path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
                 <Circle cx={9} cy={7} r={4} />
               </Svg>
-            </View>
+            </LinearGradient>
             <View style={{ flex: 1 }}>
               <Text style={{ fontSize: 16, fontFamily: fontFamilies.heavy, color: tokens.text }}>{group.name}</Text>
               <Text style={{ fontSize: 12, fontFamily: fontFamilies.medium, color: tokens.text2 }}>

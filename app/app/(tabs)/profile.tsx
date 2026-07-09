@@ -38,17 +38,23 @@ export default function ProfileScreen() {
         </IconCircle>
       </View>
 
-      <Glass radius={30} style={{ marginTop: 22, padding: 24, alignItems: 'center' }}>
+      <Glass radius={22} style={{ marginTop: 22, padding: 24, alignItems: 'center' }}>
         <ShimmerSweep />
-        <Avatar hue={profile?.avatar_hue ?? 265} size={104} online ringWidth={3} />
+        <Avatar hue={profile?.avatar_hue ?? 265} size={104} online ringWidth={3} label={profile?.display_name || profile?.username} />
         <Text style={{ fontSize: 23, fontFamily: fontFamilies.black, color: tokens.text, marginTop: 14 }}>{profile?.display_name || profile?.username || '—'}</Text>
         <Text style={{ fontSize: 14, color: tokens.text2, fontFamily: fontFamilies.semibold }}>@{profile?.username ?? ''}</Text>
-        <View style={{ marginTop: 14, flexDirection: 'row', alignItems: 'center', gap: 7, paddingVertical: 8, paddingHorizontal: 16, borderRadius: 14, backgroundColor: 'rgba(124,92,255,0.16)', borderWidth: 1, borderColor: tokens.glassBorder }}>
+        <Pressable
+          onPress={() => router.push('/privacy')}
+          style={{ marginTop: 14, flexDirection: 'row', alignItems: 'center', gap: 7, paddingVertical: 8, paddingHorizontal: 16, borderRadius: 14, backgroundColor: 'rgba(124,92,255,0.16)', borderWidth: 1, borderColor: tokens.glassBorder }}
+        >
           <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={a1} strokeWidth={2.3}>
             <Path d="M12 2l8 4v6c0 5-3.4 8.5-8 10-4.6-1.5-8-5-8-10V6l8-4Z" />
           </Svg>
-          <Text style={{ fontSize: 12.5, fontFamily: fontFamilies.bold, color: a1 }}>Privacy is peace of mind</Text>
-        </View>
+          <Text style={{ fontSize: 12.5, fontFamily: fontFamilies.bold, color: a1 }}>View privacy dashboard</Text>
+          <Svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke={a1} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+            <Path d="M9 18l6-6-6-6" />
+          </Svg>
+        </Pressable>
       </Glass>
 
       <Glass radius={22} style={{ marginTop: 16, padding: 18 }}>
@@ -61,7 +67,7 @@ export default function ProfileScreen() {
         </Text>
       </Glass>
 
-      <Glass radius={24} style={{ marginTop: 16, overflow: 'hidden' }}>
+      <Glass radius={22} style={{ marginTop: 16, overflow: 'hidden' }}>
         {SETTINGS.map((s, i) => (
           <Pressable key={s.key} onPress={() => router.push(s.route)} style={{ flexDirection: 'row', alignItems: 'center', gap: 14, padding: 14, borderBottomWidth: i === SETTINGS.length - 1 ? 0 : 1, borderBottomColor: tokens.glassBorder }}>
             <View style={{ width: 38, height: 38, borderRadius: 11, backgroundColor: tokens.glassBg2, borderWidth: 1, borderColor: tokens.glassBorder, alignItems: 'center', justifyContent: 'center' }}>

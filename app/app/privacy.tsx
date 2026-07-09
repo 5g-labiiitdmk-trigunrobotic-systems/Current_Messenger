@@ -59,7 +59,7 @@ export default function PrivacyScreen() {
         <Text style={{ fontSize: 24, fontFamily: fontFamilies.black, color: tokens.text }}>Privacy Dashboard</Text>
       </View>
 
-      <Glass radius={26} style={{ marginTop: 20, padding: 20, flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+      <Glass radius={22} style={{ marginTop: 20, padding: 20, flexDirection: 'row', alignItems: 'center', gap: 16 }}>
         <View style={{ width: 54, height: 54, borderRadius: 16, backgroundColor: '#15a55c', alignItems: 'center', justifyContent: 'center' }}>
           <Svg width={26} height={26} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
             <Path d="M12 2l8 4v6c0 5-3.4 8.5-8 10-4.6-1.5-8-5-8-10V6l8-4ZM9 12l2 2 4-4" />
@@ -72,7 +72,7 @@ export default function PrivacyScreen() {
       </Glass>
 
       <View style={{ flexDirection: 'row', gap: 12, marginTop: 14 }}>
-        <Glass radius={24} style={{ flex: 1, padding: 18, alignItems: 'center' }}>
+        <Glass radius={22} style={{ flex: 1, padding: 18, alignItems: 'center' }}>
           <View style={{ width: 88, height: 88, alignItems: 'center', justifyContent: 'center' }}>
             <Svg width={88} height={88} viewBox="0 0 88 88" style={{ transform: [{ rotate: '-90deg' }] }}>
               <Defs>
@@ -91,7 +91,7 @@ export default function PrivacyScreen() {
           </View>
           <Text style={{ fontSize: 12.5, fontFamily: fontFamilies.bold, color: tokens.text, marginTop: 10 }}>Security score</Text>
         </Glass>
-        <Glass radius={24} style={{ flex: 1, padding: 18, justifyContent: 'center', gap: 12 }}>
+        <Glass radius={22} style={{ flex: 1, padding: 18, justifyContent: 'center', gap: 12 }}>
           <View style={{ alignItems: 'center' }}>
             <Text style={{ fontSize: 30, fontFamily: fontFamilies.black, color: tokens.text }}>{devices.length}</Text>
             <Text style={{ fontSize: 11.5, fontFamily: fontFamilies.semibold, color: tokens.text2, marginTop: 4 }}>Active devices</Text>

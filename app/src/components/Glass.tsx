@@ -26,12 +26,19 @@ export function Glass({
 }: GlassProps) {
   const { tokens, mode } = useTheme();
   const fill = variant === 'bg2' ? tokens.glassBg2 : variant === 'field' ? tokens.field : tokens.glassBg;
+  // Approximates the source design's --g-sh: a real box-shadow can layer an
+  // inset highlight + inset shadow + outer glow at once; RN can't do inset
+  // shadows or multiple shadows on one node, so the outer glow is a native
+  // shadow (stronger/theme-aware to match `0 12px 34px rgba(0,0,0,.55)` in
+  // dark mode) and the two inset edges are simulated with a pair of corner
+  // gradients (light top-left, dark bottom-right) layered inside the panel.
+  const outerShadow = mode === 'light' ? styles.shadowLight : styles.shadowDark;
 
   return (
     <View
       style={[
         { borderRadius: radius, overflow: 'hidden' },
-        shadow && styles.shadow,
+        shadow && outerShadow,
         style,
       ]}
     >
@@ -52,7 +59,7 @@ export function Glass({
           },
         ]}
       />
-      {/* top bevel highlight — simulates light hitting the glass edge */}
+      {/* top-left bevel highlight — simulates light hitting the glass edge */}
       <LinearGradient
         pointerEvents="none"
         colors={[tokens.bevelHighlight, 'rgba(255,255,255,0)']}
@@ -60,17 +67,32 @@ export function Glass({
         end={{ x: 0.6, y: 1 }}
         style={[StyleSheet.absoluteFill, { opacity: mode === 'light' ? 0.35 : 0.18, borderRadius: radius }]}
       />
+      {/* bottom-right inset shadow — grounds the panel the way a real inset shadow would */}
+      <LinearGradient
+        pointerEvents="none"
+        colors={['rgba(0,0,0,0)', tokens.bevelShadow]}
+        start={{ x: 0.35, y: 0.35 }}
+        end={{ x: 1, y: 1 }}
+        style={[StyleSheet.absoluteFill, { opacity: mode === 'light' ? 0.5 : 0.7, borderRadius: radius }]}
+      />
       <View style={{ borderRadius: radius }}>{children}</View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  shadow: {
+  shadowLight: {
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.16,
     shadowRadius: 22,
     elevation: 8,
+  },
+  shadowDark: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.55,
+    shadowRadius: 30,
+    elevation: 14,
   },
 });

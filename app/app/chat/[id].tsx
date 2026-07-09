@@ -203,7 +203,7 @@ export default function ChatScreen() {
               <Path d="M15 18l-6-6 6-6" />
             </Svg>
           </Pressable>
-          <Avatar hue={contact.avatar_hue} size={42} online={isOnline} />
+          <Avatar hue={contact.avatar_hue} size={42} online={isOnline} label={contact.display_name || contact.username} />
           <View style={{ flex: 1 }}>
             <Text style={{ fontSize: 16, fontFamily: fontFamilies.heavy, color: tokens.text }}>{contact.display_name || contact.username}</Text>
             <Text style={{ fontSize: 12, fontFamily: fontFamilies.semibold, color: isOnline ? '#34d27b' : tokens.text2 }}>{statusLabel}</Text>

@@ -41,7 +41,7 @@ export function TabBar({ state, navigation }: BottomTabBarProps) {
 
   return (
     <View style={{ position: 'absolute', left: 18, right: 18, bottom: insets.bottom + 8 }}>
-      <Glass radius={28} variant="bg2" style={{ height: 66 }}>
+      <Glass radius={22} variant="bg2" style={{ height: 66 }}>
         <View style={{ flexDirection: 'row', height: 66, alignItems: 'center', justifyContent: 'space-around', paddingHorizontal: 8 }}>
           {state.routes.map((route, i) => {
             const focused = state.index === i;

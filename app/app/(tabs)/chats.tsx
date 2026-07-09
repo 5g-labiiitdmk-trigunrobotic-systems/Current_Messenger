@@ -65,7 +65,7 @@ export default function ChatsScreen() {
         {approved.slice(0, 8).map((c) => (
           <Pressable key={c.id} onPress={() => router.push(`/chat/${c.id}`)} style={{ alignItems: 'center', gap: 6 }}>
             <View style={{ padding: 2.5, borderRadius: 32 }}>
-              <Avatar hue={c.avatar_hue} size={58} />
+              <Avatar hue={c.avatar_hue} size={58} label={c.display_name || c.username} />
             </View>
             <Text style={{ fontSize: 11, fontFamily: fontFamilies.semibold, color: tokens.text2, maxWidth: 62 }} numberOfLines={1}>
               {c.display_name || c.username}
@@ -104,7 +104,7 @@ export default function ChatsScreen() {
         })}
       </View>
 
-      <Glass radius={26} style={{ marginTop: 18, overflow: 'hidden' }}>
+      <Glass radius={22} style={{ marginTop: 18, overflow: 'hidden' }}>
         {filtered.length === 0 ? (
           <View style={{ padding: 28, alignItems: 'center' }}>
             <Text style={{ fontFamily: fontFamilies.semibold, color: tokens.text2, textAlign: 'center' }}>
@@ -121,7 +121,7 @@ export default function ChatsScreen() {
                 pressed && { backgroundColor: tokens.glassBg2 },
               ]}
             >
-              <Avatar hue={row.hue} size={54} online={row.online} />
+              <Avatar hue={row.hue} size={54} online={row.online} label={row.name} />
               <View style={{ flex: 1, minWidth: 0 }}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                   <Text style={{ fontSize: 15.5, fontFamily: fontFamilies.bold, color: tokens.text }} numberOfLines={1}>

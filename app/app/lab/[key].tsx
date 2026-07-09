@@ -26,7 +26,7 @@ export default function LabFeatureScreen() {
       </View>
 
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 }}>
-        <Glass radius={30} style={{ padding: 30, alignItems: 'center', gap: 16 }}>
+        <Glass radius={22} style={{ padding: 30, alignItems: 'center', gap: 16 }}>
           <View style={{ width: 64, height: 64, borderRadius: 20, backgroundColor: 'rgba(124,92,255,0.16)', alignItems: 'center', justifyContent: 'center' }}>
             <Svg width={30} height={30} viewBox="0 0 24 24" fill="none" stroke={a1} strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round">
               <Path d={feature?.icon ?? 'M12 8v4l3 3'} />
