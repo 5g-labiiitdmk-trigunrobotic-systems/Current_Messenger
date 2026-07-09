@@ -25,7 +25,18 @@ export async function getOrCreateDeviceKeyPair(): Promise<KeyPairB64> {
   return kp;
 }
 
+/**
+ * Called on every auth state change (app launch, foreground, token refresh —
+ * not just "new device"), but getOrCreateDeviceKeyPair() returns the SAME
+ * public key across all of those for a given device. Blindly inserting here
+ * created a new device_keys row every single time, so "Active devices"
+ * counted app launches instead of devices. Skip if this exact key is
+ * already on record for this user.
+ */
 export async function publishPublicKey(userId: string, publicKey: string) {
+  const { data: existing } = await supabase.from('device_keys').select('id').eq('user_id', userId).eq('public_key', publicKey).maybeSingle();
+  if (existing) return;
+
   const deviceLabel = Platform.OS === 'ios' ? 'iOS device' : 'Android device';
   const applicationId = Application.applicationId ?? undefined;
   await supabase.from('device_keys').insert({

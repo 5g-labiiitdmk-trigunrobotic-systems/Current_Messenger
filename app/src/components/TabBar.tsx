@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Pressable, Text, Platform, StyleSheet } from 'react-native';
+import { View, Pressable, Text, StyleSheet } from 'react-native';
 import type { BottomTabBarProps } from 'expo-router/tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
@@ -58,12 +58,10 @@ export function TabBar({ state, navigation }: BottomTabBarProps) {
           to the screen bottom — content scrolling underneath fades into a
           blur instead of hard-cutting against an opaque bar edge. */}
       <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: floorHeight }}>
-        <BlurView
-          intensity={40}
-          tint={mode === 'light' ? 'light' : 'dark'}
-          experimentalBlurMethod={Platform.OS === 'android' ? 'dimezisBlurView' : undefined}
-          style={StyleSheet.absoluteFill}
-        />
+        {/* Android: leave blurMethod unset (see Glass.tsx) — dimezisBlurView's
+            native SurfaceView has compositing quirks with sibling layers on
+            top of it, which the gradient below is. */}
+        <BlurView intensity={40} tint={mode === 'light' ? 'light' : 'dark'} style={StyleSheet.absoluteFill} />
         <LinearGradient
           colors={['transparent', tokens.tabBg]}
           locations={[0, 0.45]}

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, Platform, type ViewStyle, type StyleProp } from 'react-native';
+import { View, StyleSheet, type ViewStyle, type StyleProp } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../theme/useTheme';
@@ -49,10 +49,18 @@ export function Glass({
         style,
       ]}
     >
+      {/* Android: 'dimezisBlurView' renders via a native SurfaceView that
+          does NOT respect this panel's overflow:hidden/borderRadius clip —
+          it bled out as an unclipped rectangle behind rounded cards (the
+          reported "ghost rectangle" bug survived the previous elevation/
+          backgroundColor fix because this was the real cause, not that).
+          Leaving blurMethod unset on Android falls back to 'none' — a
+          plain semi-transparent View with no native-surface compositing,
+          so it clips correctly. iOS's blur uses UIVisualEffectView, a
+          completely different path unaffected by this, so it's untouched. */}
       <BlurView
         intensity={intensity}
         tint={mode === 'light' ? 'light' : 'dark'}
-        experimentalBlurMethod={Platform.OS === 'android' ? 'dimezisBlurView' : undefined}
         style={StyleSheet.absoluteFill}
       />
       <View

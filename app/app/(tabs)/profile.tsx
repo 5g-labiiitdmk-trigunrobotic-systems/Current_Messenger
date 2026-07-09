@@ -19,7 +19,7 @@ const SETTINGS = [
   { key: 'appearance', label: 'Appearance', sub: 'Theme, wallpaper, mode', icon: 'M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6L5.6 18.4', route: '/settings' as const },
   { key: 'devices', label: 'Devices', sub: 'Active sessions & keys', icon: 'M4 4h16v12H4zM2 20h20M9 16v4M15 16v4', route: '/privacy' as const },
   { key: 'lab', label: 'Lab', sub: 'AR filters, games, bots — coming soon', icon: 'M9 2v6l-5 9a2 2 0 0 0 2 3h12a2 2 0 0 0 2-3l-5-9V2M9 2h6', route: '/lab' as const },
-  { key: 'help', label: 'Help & Support', sub: 'FAQ, contact, about', icon: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20ZM9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.8.4-1 .9-1 1.7M12 17h.01', route: '/settings' as const },
+  { key: 'help', label: 'Help & Support', sub: 'FAQ, contact, about', icon: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20ZM9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.8.4-1 .9-1 1.7M12 17h.01', route: '/help' as const },
 ];
 
 export default function ProfileScreen() {

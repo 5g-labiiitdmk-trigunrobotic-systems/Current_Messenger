@@ -9,6 +9,7 @@ import { IconCircle } from '../src/components/Buttons';
 import { SwitchToggle } from '../src/components/SwitchToggle';
 import { useTheme } from '../src/theme/useTheme';
 import { fontFamilies, accentPalettes } from '../src/theme/tokens';
+import { wallpapers, type WallpaperKey } from '../src/theme/wallpapers';
 import { useThemeStore } from '../src/state/themeStore';
 import { useSettingsStore } from '../src/state/settingsStore';
 import { useAuthStore } from '../src/state/authStore';
@@ -31,6 +32,8 @@ export default function SettingsScreen() {
   const toggleMode = useThemeStore((s) => s.toggleMode);
   const accentKey = useThemeStore((s) => s.accentKey);
   const setAccent = useThemeStore((s) => s.setAccent);
+  const wallpaperKey = useThemeStore((s) => s.wallpaperKey);
+  const setWallpaper = useThemeStore((s) => s.setWallpaper);
   const { pushNotifications, showPreviews, toggle } = useSettingsStore();
   const signOut = useAuthStore((s) => s.signOut);
   const profile = useAuthStore((s) => s.profile);
@@ -71,6 +74,27 @@ export default function SettingsScreen() {
                     <View style={{ flex: 1, backgroundColor: c1, opacity: 0.85 }} />
                   </View>
                   <Text style={{ fontSize: 11, fontFamily: fontFamilies.semibold, color: tokens.text2 }}>{a.label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </ScrollView>
+      </Glass>
+
+      <SectionLabel>Background</SectionLabel>
+      <Glass radius={22} style={{ padding: 16 }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <View style={{ flexDirection: 'row', gap: 12 }}>
+            {(Object.keys(wallpapers) as WallpaperKey[]).map((key) => {
+              const w = wallpapers[key];
+              const [c1, c2] = w.swatch;
+              const active = wallpaperKey === key;
+              return (
+                <Pressable key={key} onPress={() => setWallpaper(key)} style={{ alignItems: 'center', gap: 6 }}>
+                  <View style={{ width: 58, height: 58, borderRadius: 18, backgroundColor: c2, borderWidth: active ? 3 : 0, borderColor: tokens.text, overflow: 'hidden' }}>
+                    <View style={{ flex: 1, backgroundColor: c1, opacity: 0.85 }} />
+                  </View>
+                  <Text style={{ fontSize: 11, fontFamily: fontFamilies.semibold, color: tokens.text2 }}>{w.label}</Text>
                 </Pressable>
               );
             })}
