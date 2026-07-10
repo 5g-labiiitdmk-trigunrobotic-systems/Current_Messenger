@@ -61,6 +61,11 @@ export default function RootLayout() {
     useCallStore.getState().wire();
     const unsub = useCallStore.subscribe((s, prev) => {
       if (s.incoming && !prev.incoming) router.push('/incoming-call');
+      // Outgoing call just placed — get the caller into the in-call screen.
+      if (s.phase === 'ringing-out' && prev.phase === 'idle' && s.peerId) router.push(`/call/${s.peerId}`);
+      // Incoming call just accepted — replace (not push) so the call screen's
+      // own back button doesn't return to the now-gone incoming-call screen.
+      if (s.phase === 'connecting' && prev.phase === 'ringing-in' && s.peerId) router.replace(`/call/${s.peerId}`);
     });
     return unsub;
   }, []);
@@ -97,6 +102,7 @@ export default function RootLayout() {
               <Stack.Screen name="group-chat/[id]" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="group-info/[id]" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="incoming-call" options={{ presentation: 'fullScreenModal' }} />
+              <Stack.Screen name="call/[id]" options={{ presentation: 'fullScreenModal', gestureEnabled: false }} />
               <Stack.Screen name="new-group" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="privacy" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />

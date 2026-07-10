@@ -9,10 +9,41 @@ import { pingOfflineRecipient } from './pushPing.js';
 const PORT = Number(process.env.PORT) || 8787;
 const AUTH_TIMEOUT_MS = 10_000;
 
+// TURN credentials are secrets — they must never be baked into the app
+// bundle, so the client fetches them from the already-trusted relay server
+// at call time instead. STUN alone is enough for most direct P2P
+// connections; TURN only matters as a relay fallback on strict NATs, so
+// it's fine for this to be a plain unauthenticated GET (the credentials
+// themselves are what's gated, e.g. Metered's time-limited API keys — see
+// docs/SETUP.md). If no TURN_* env vars are set, only STUN is returned.
+function getIceServers(): RTCIceServerConfig[] {
+  const servers: RTCIceServerConfig[] = [{ urls: 'stun:stun.l.google.com:19302' }];
+  const turnUrls = process.env.TURN_URLS;
+  if (turnUrls) {
+    servers.push({
+      urls: turnUrls.split(',').map((u) => u.trim()),
+      username: process.env.TURN_USERNAME,
+      credential: process.env.TURN_CREDENTIAL,
+    });
+  }
+  return servers;
+}
+
+interface RTCIceServerConfig {
+  urls: string | string[];
+  username?: string;
+  credential?: string;
+}
+
 const server = http.createServer((req, res) => {
   if (req.url === '/health') {
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify({ ok: true, online: relayState.onlineUserIds().length, storesMessages: false }));
+    return;
+  }
+  if (req.url === '/ice-servers') {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ iceServers: getIceServers() }));
     return;
   }
   res.writeHead(404);

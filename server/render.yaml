@@ -18,3 +18,12 @@ services:
       # message_transfer_log without a code change or redeploy.
       - key: ENABLE_TRANSFER_LOG
         value: "true"
+      # Optional — TURN relay fallback for calling on strict NATs. See
+      # docs/SETUP.md section 3.5. Calling works STUN-only (no TURN) if
+      # these are left unset; only strict-NAT connections need TURN.
+      - key: TURN_URLS
+        sync: false
+      - key: TURN_USERNAME
+        sync: false
+      - key: TURN_CREDENTIAL
+        sync: false

@@ -88,6 +88,13 @@
       "@react-native-firebase/app",
       "@react-native-firebase/auth",
       [
+        "@config-plugins/react-native-webrtc",
+        {
+          "cameraPermission": "Current uses the camera for video calls.",
+          "microphonePermission": "Current uses the microphone for voice and video calls."
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "image": "./assets/current-logo.png",

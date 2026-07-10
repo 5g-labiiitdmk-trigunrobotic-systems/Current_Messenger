@@ -108,6 +108,39 @@ is in place (gitignored — it's a credential file, not committed).
    `server`, add the two env vars in the dashboard. Railway and Fly.io work
    too; just set the same two env vars and run `npm run build && npm start`.
    Once deployed, update `EXPO_PUBLIC_RELAY_WS_URL` to `wss://your-app.onrender.com`.
+5. Optional: `ENABLE_TRANSFER_LOG=false` disables writes to
+   `message_transfer_log` (metadata only — sender/recipient/byte size, never
+   content) without a code change, just an env var + restart.
+
+## 3.5 TURN server (for calling on strict NATs)
+
+Calling works over the relay's existing signaling with just STUN (the
+free `stun.l.google.com` default, no setup needed) for devices on
+permissive networks. A TURN relay is only needed as a fallback when direct
+peer-to-peer fails — common on mobile carrier networks and corporate
+Wi-Fi. Without one, those calls will simply fail to connect; nothing
+breaks, calling on friendlier networks is unaffected.
+
+Recommended for this app's current scale: **[Metered.ca](https://www.metered.ca)**'s
+free tier (500MB relayed bandwidth/month, no card required) — sign up,
+grab the TURN credentials from their dashboard, then set on the relay
+server:
+
+```
+TURN_URLS=turn:<your-subdomain>.metered.live:80,turn:<your-subdomain>.metered.live:443
+TURN_USERNAME=<from Metered dashboard>
+TURN_CREDENTIAL=<from Metered dashboard>
+```
+
+The relay serves these to the app at call time via `GET /ice-servers` —
+never baked into the app bundle. Leave all three unset and calling still
+works, just STUN-only.
+
+Once real usage outgrows the free tier, options in rough cost order:
+Metered's paid plan (~$99/mo, 150GB included), Cloudflare TURN standalone
+($0.05/GB), or self-hosting `coturn` on a small VPS (~$5-6/mo) — **not**
+on this same Render relay instance, since Render's free tier only exposes
+HTTPS/WSS, not the raw UDP relay ports TURN needs.
 
 ## 4. Running the app
 
@@ -119,8 +152,9 @@ npx eas build --profile development --platform android   # or ios
 ```
 
 Plain `npx expo start` will launch fine for UI iteration, but auth (phone
-OTP) won't work until you're running the EAS dev build with the native
-Firebase module linked.
+OTP) and calling (WebRTC) won't work until you're running the EAS dev
+build with the native Firebase and react-native-webrtc modules linked —
+both require a custom dev client, not Expo Go.
 
 ## 5. What's intentionally not wired up
 
