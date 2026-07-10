@@ -5,7 +5,7 @@ import Svg, { Path } from 'react-native-svg';
 import { ScreenScaffold } from '../../src/components/ScreenScaffold';
 import { AuthHeader } from '../../src/components/AuthHeader';
 import { GlassField } from '../../src/components/GlassField';
-import { PrimaryButton, GlassButton } from '../../src/components/Buttons';
+import { PrimaryButton } from '../../src/components/Buttons';
 import { useTheme } from '../../src/theme/useTheme';
 import { fontFamilies } from '../../src/theme/tokens';
 import { supabase } from '../../src/lib/supabase';
@@ -44,7 +44,17 @@ export default function LoginScreen() {
     await useAuthStore.getState().refreshProfile();
     setLoading(false);
     const needsSetup = useAuthStore.getState().needsProfileSetup;
-    router.replace(needsSetup ? '/(auth)/finish-setup' : '/(tabs)/chats');
+    if (needsSetup) {
+      // Covers both an incomplete signup (missing email/phone verification)
+      // and a fully-verified account with no TOTP factor enrolled yet —
+      // finish-setup.tsx routes each case to the right screen.
+      router.replace('/(auth)/finish-setup');
+      return;
+    }
+    // Account is fully set up, including a verified TOTP factor — every
+    // login (not just signup) requires a fresh 2FA challenge before tabs.
+    useAuthStore.setState({ mfaVerified: false });
+    router.replace('/(auth)/totp-verify');
   };
 
   const onForgot = async () => {
@@ -93,16 +103,6 @@ export default function LoginScreen() {
       </View>
 
       <PrimaryButton title="Log in" onPress={onSubmit} loading={loading} style={{ marginTop: 26 }} />
-
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 22 }}>
-        <View style={{ flex: 1, height: 1, backgroundColor: tokens.glassBorder }} />
-        <Text style={{ fontSize: 12, color: tokens.text3, fontFamily: fontFamilies.semibold }}>or</Text>
-        <View style={{ flex: 1, height: 1, backgroundColor: tokens.glassBorder }} />
-      </View>
-      <View style={{ flexDirection: 'row', gap: 12 }}>
-        <GlassButton title="Google" height={52} style={{ flex: 1, opacity: 0.5 }} onPress={() => appAlert('Not available', 'Current requires verified email sign-in.')} />
-        <GlassButton title="Apple" height={52} style={{ flex: 1, opacity: 0.5 }} onPress={() => appAlert('Not available', 'Current requires verified email sign-in.')} />
-      </View>
     </ScreenScaffold>
   );
 }

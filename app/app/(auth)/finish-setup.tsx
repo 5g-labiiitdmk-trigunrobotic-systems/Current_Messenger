@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import { ScreenScaffold } from '../../src/components/ScreenScaffold';
@@ -7,24 +7,22 @@ import { useTheme } from '../../src/theme/useTheme';
 import { fontFamilies } from '../../src/theme/tokens';
 import { useAuthStore } from '../../src/state/authStore';
 import { useSignupStore } from '../../src/state/signupStore';
-import { finalizeAccount } from '../../src/lib/account';
-import { generateFriendlyUsername } from '../../src/lib/usernameGen';
-import { appAlert } from '../../src/state/alertStore';
 
 /**
- * Landing spot for a resumed session (e.g. the app was killed mid-signup, or
- * the user just tapped the email confirmation link). Once email is verified,
- * this is also the single place that creates the public.users row — the
- * in-memory signup wizard's username can't survive a restart, so a cold-start
- * resume falls back to a randomly generated one (never derived from the
- * email address — that would leak it into a public field).
+ * Landing spot for a resumed session (app killed mid-signup, or the user
+ * just tapped the email confirmation link) and for a returning login that's
+ * missing a required step. Routes to whichever step is still incomplete:
+ * email → phone → TOTP enrollment → tabs. A cold-start resume can't recover
+ * the in-memory signup wizard's username/phone, so it restarts the
+ * phone+TOTP mini-flow from add-phone — the same trade-off this screen
+ * already accepted pre-TOTP for a lost username.
  */
 export default function FinishSetupScreen() {
   const { tokens } = useTheme();
   const session = useAuthStore((s) => s.session);
   const profile = useAuthStore((s) => s.profile);
+  const needsProfileSetup = useAuthStore((s) => s.needsProfileSetup);
   const set = useSignupStore((s) => s.set);
-  const finalizing = useRef(false);
 
   useEffect(() => {
     if (!session) {
@@ -38,33 +36,24 @@ export default function FinishSetupScreen() {
       return;
     }
     if (!profile) {
-      if (finalizing.current) return;
-      finalizing.current = true;
-      (async () => {
-        const pendingUsername = useSignupStore.getState().username;
-        let username = pendingUsername || generateFriendlyUsername();
-        let succeeded = false;
-        for (let attempt = 0; attempt < 3 && !succeeded; attempt++) {
-          try {
-            await finalizeAccount({ userId: session.user.id, username, email: session.user.email ?? '' });
-            succeeded = true;
-          } catch {
-            username = generateFriendlyUsername(); // likely a username collision — try a fresh one
-          }
-        }
-        finalizing.current = false;
-        if (!succeeded) {
-          appAlert('Could not finish setup', 'Please try signing in again.');
-          router.replace('/(auth)/onboarding');
-          return;
-        }
-        await useAuthStore.getState().refreshProfile();
-        useSignupStore.getState().reset();
-      })();
+      // No public.users row yet — phone verification hasn't happened
+      // (finalizeAccount only ever runs from totp-setup.tsx, after phone
+      // verification). Restart the phone+TOTP mini-flow from scratch.
+      set({ email: session.user.email ?? '' });
+      router.replace('/(auth)/add-phone');
+      return;
+    }
+    if (needsProfileSetup) {
+      // Profile row exists (email + phone already verified) but no
+      // verified TOTP factor — either mid-signup-interrupted or an older
+      // account created before TOTP existed. Either way, TOTP enrollment
+      // is the only thing left.
+      set({ username: profile.username, email: profile.email, phone: profile.phone ?? '' });
+      router.replace('/(auth)/totp-setup');
       return;
     }
     router.replace('/(tabs)/chats');
-  }, [session, profile]);
+  }, [session, profile, needsProfileSetup]);
 
   return (
     <ScreenScaffold scroll={false}>

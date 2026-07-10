@@ -4,7 +4,7 @@ import { router } from 'expo-router';
 import { ScreenScaffold } from '../../src/components/ScreenScaffold';
 import { AuthHeader } from '../../src/components/AuthHeader';
 import { GlassField } from '../../src/components/GlassField';
-import { PrimaryButton, GlassButton } from '../../src/components/Buttons';
+import { PrimaryButton } from '../../src/components/Buttons';
 import { useTheme } from '../../src/theme/useTheme';
 import { fontFamilies } from '../../src/theme/tokens';
 import { useSignupStore } from '../../src/state/signupStore';
@@ -76,26 +76,6 @@ export default function SignupScreen() {
       </View>
 
       <PrimaryButton title="Continue — verify email" onPress={onSubmit} loading={loading} style={{ marginTop: 24 }} />
-
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 22 }}>
-        <View style={{ flex: 1, height: 1, backgroundColor: tokens.glassBorder }} />
-        <Text style={{ fontSize: 12, color: tokens.text3, fontFamily: fontFamilies.semibold }}>social sign-in disabled</Text>
-        <View style={{ flex: 1, height: 1, backgroundColor: tokens.glassBorder }} />
-      </View>
-      <View style={{ flexDirection: 'row', gap: 12 }}>
-        <GlassButton
-          title="Google"
-          height={52}
-          style={{ flex: 1, opacity: 0.5 }}
-          onPress={() => appAlert('Verified email required', 'Current requires a verified email for security — social sign-in is intentionally unavailable.')}
-        />
-        <GlassButton
-          title="Apple"
-          height={52}
-          style={{ flex: 1, opacity: 0.5 }}
-          onPress={() => appAlert('Verified email required', 'Current requires a verified email for security — social sign-in is intentionally unavailable.')}
-        />
-      </View>
 
       <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 24, gap: 4 }}>
         <Text style={{ fontSize: 13.5, color: tokens.text2, fontFamily: fontFamilies.regular }}>Already have an account?</Text>

@@ -69,7 +69,7 @@ export default function GroupChatScreen() {
   return (
     <View style={{ flex: 1 }}>
       <BokehBackground />
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <Pressable onPress={() => router.push(`/group-info/${id}`)}>
           <Glass radius={0} bordered={false} style={{ paddingTop: insets.top + 8, paddingBottom: 12, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 11 }}>
             <Pressable onPress={() => router.back()} style={{ width: 38, height: 38, alignItems: 'center', justifyContent: 'center' }}>
@@ -83,9 +83,11 @@ export default function GroupChatScreen() {
                 <Circle cx={9} cy={7} r={4} />
               </Svg>
             </LinearGradient>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 16, fontFamily: fontFamilies.heavy, color: tokens.text }}>{group.name}</Text>
-              <Text style={{ fontSize: 12, fontFamily: fontFamilies.medium, color: tokens.text2 }}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text numberOfLines={1} ellipsizeMode="tail" style={{ fontSize: 16, fontFamily: fontFamilies.heavy, color: tokens.text }}>
+                {group.name}
+              </Text>
+              <Text numberOfLines={1} style={{ fontSize: 12, fontFamily: fontFamilies.medium, color: tokens.text2 }}>
                 {group.memberIds.length} members{group.isBroadcast ? ' · broadcast' : ''}
               </Text>
             </View>

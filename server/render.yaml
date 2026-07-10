@@ -14,3 +14,7 @@ services:
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
+      # Optional. Defaults to on. Set to "false" to stop writing to
+      # message_transfer_log without a code change or redeploy.
+      - key: ENABLE_TRANSFER_LOG
+        value: "true"

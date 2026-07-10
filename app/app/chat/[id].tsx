@@ -235,7 +235,12 @@ export default function ChatScreen() {
   return (
     <View style={{ flex: 1 }}>
       <BokehBackground />
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      {/* behavior={undefined} on Android meant this component did nothing
+          at all there — the message input sat behind the keyboard with no
+          avoidance whatsoever. 'height' shrinks the container instead of
+          padding it, which is the correct mode for Android (padding mode
+          double-offsets when combined with the OS's own resize behavior). */}
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <Glass radius={0} bordered={false} style={{ paddingTop: insets.top + 8, paddingBottom: 12, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 11 }}>
           <Pressable onPress={() => router.back()} style={{ width: 38, height: 38, alignItems: 'center', justifyContent: 'center' }}>
             <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={tokens.text} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
@@ -243,9 +248,15 @@ export default function ChatScreen() {
             </Svg>
           </Pressable>
           <Avatar hue={contact.avatar_hue} size={42} online={isOnline} label={contact.display_name || contact.username} />
-          <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 16, fontFamily: fontFamilies.heavy, color: tokens.text }}>{contact.display_name || contact.username}</Text>
-            <Text style={{ fontSize: 12, fontFamily: fontFamilies.semibold, color: isOnline ? '#34d27b' : tokens.text2 }}>{statusLabel}</Text>
+          {/* minWidth: 0 lets this flex child shrink below its content's
+              natural width — without it, numberOfLines/ellipsizeMode on the
+              name below has no effect and a long unbroken username (e.g. no
+              spaces) wraps character-by-character instead of truncating. */}
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text numberOfLines={1} ellipsizeMode="tail" style={{ fontSize: 16, fontFamily: fontFamilies.heavy, color: tokens.text }}>
+              {contact.display_name || contact.username}
+            </Text>
+            <Text numberOfLines={1} style={{ fontSize: 12, fontFamily: fontFamilies.semibold, color: isOnline ? '#34d27b' : tokens.text2 }}>{statusLabel}</Text>
           </View>
           <Pressable onPress={() => ring(contact.id, 'voice')} style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center' }}>
             <Svg width={19} height={19} viewBox="0 0 24 24" fill="none" stroke={tokens.text} strokeWidth={1.9}>

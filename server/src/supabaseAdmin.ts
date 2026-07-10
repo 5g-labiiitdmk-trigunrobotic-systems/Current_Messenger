@@ -60,6 +60,11 @@ export async function getUsername(userId: string): Promise<string | null> {
   return data.username;
 }
 
+// Set ENABLE_TRANSFER_LOG=false on Render (or unset it) to stop writing to
+// message_transfer_log entirely — no code change or redeploy needed, just
+// flip the env var and restart the service. Defaults to on.
+const TRANSFER_LOG_ENABLED = process.env.ENABLE_TRANSFER_LOG !== 'false';
+
 /**
  * Metadata-only delivery log: one row per successfully delivered message.
  * NEVER logs message content — the payload is opaque ciphertext that never
@@ -67,6 +72,7 @@ export async function getUsername(userId: string): Promise<string | null> {
  * a logging failure must never block or fail an actual delivery.
  */
 export function logTransfer(senderId: string, recipientId: string, byteSize: number): void {
+  if (!TRANSFER_LOG_ENABLED) return;
   supabaseAdmin
     .from('message_transfer_log')
     .insert({ sender_id: senderId, recipient_id: recipientId, byte_size: byteSize })

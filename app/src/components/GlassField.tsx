@@ -16,9 +16,13 @@ export function GlassField({ label, rightIcon, style, ...rest }: GlassFieldProps
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
         <View style={{ flex: 1 }}>
           <Text style={{ fontSize: 11, fontFamily: fontFamilies.bold, color: tokens.text3, textTransform: 'uppercase', letterSpacing: 0.6 }}>{label}</Text>
+          {/* RN doesn't support styling placeholder text separately from a
+              typed value in one TextInput — both share this `style`.
+              medium (was semibold) keeps typed content perfectly legible
+              while making the hint text read as a hint, not real content. */}
           <TextInput
             placeholderTextColor={tokens.text3}
-            style={[{ fontSize: 16, fontFamily: fontFamilies.semibold, color: tokens.text, marginTop: 3, padding: 0 }, style]}
+            style={[{ fontSize: 16, fontFamily: fontFamilies.medium, color: tokens.text, marginTop: 3, padding: 0 }, style]}
             {...rest}
           />
         </View>

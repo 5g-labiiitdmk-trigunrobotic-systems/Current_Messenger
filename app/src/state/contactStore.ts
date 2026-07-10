@@ -24,6 +24,18 @@ interface ContactState {
   unblock: (userId: string) => Promise<void>;
 }
 
+// refresh() is triggered a lot — on mount, after sendRequest/respond/block,
+// and by the realtime subscription below, which (see wire()) fires on
+// EVERY user's contact_requests activity app-wide, not just this user's own.
+// With no ordering guard, two overlapping calls could resolve out of order:
+// if an earlier-started call happens to resolve LAST, its now-stale
+// snapshot overwrites a newer, more-complete one — an approved contact
+// that's genuinely still approved would appear to vanish from
+// Chats/Contacts until the next refresh happened to fire. This was the
+// most likely real cause of "chats randomly disappear" — sequence-guarding
+// so only the most-recently-issued call's response can ever apply.
+let refreshSeq = 0;
+
 export const useContactStore = create<ContactState>((set, get) => ({
   approved: [],
   incoming: [],
@@ -46,6 +58,7 @@ export const useContactStore = create<ContactState>((set, get) => ({
   refresh: async () => {
     const me = useAuthStore.getState().session?.user.id;
     if (!me) return;
+    const mySeq = ++refreshSeq;
     set({ loading: true });
 
     const [{ data: reqs }, { data: blocks }] = await Promise.all([
@@ -55,6 +68,8 @@ export const useContactStore = create<ContactState>((set, get) => ({
         .or(`sender_id.eq.${me},receiver_id.eq.${me}`),
       supabase.from('blocked_users').select('blocked_id').eq('blocker_id', me),
     ]);
+
+    if (mySeq !== refreshSeq) return; // a newer refresh() call has since started — this response is stale, drop it
 
     const blockedIds = (blocks ?? []).map((b) => b.blocked_id);
     const all = (reqs ?? []) as any[];
@@ -131,6 +146,11 @@ export const useContactStore = create<ContactState>((set, get) => ({
     const me = useAuthStore.getState().session?.user.id;
     if (!me) return;
     await supabase.from('blocked_users').insert({ blocker_id: me, blocked_id: userId, is_report: true, reason });
+    // A row in blocked_users counts as a block regardless of is_report (see
+    // refresh()'s filter), so this genuinely does also block them — the UI
+    // already says so. Match block()'s optimistic update so that's reflected
+    // immediately instead of waiting for the next refresh().
+    set((s) => ({ blocked: [...s.blocked, userId], approved: s.approved.filter((c) => c.id !== userId) }));
   },
 
   unblock: async (userId) => {
