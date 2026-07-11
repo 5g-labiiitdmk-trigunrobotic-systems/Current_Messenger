@@ -30,8 +30,22 @@ class RelayState {
     this.connections.set(userId, { userId, socket, lastSeenAt: Date.now() });
   }
 
-  removeConnection(userId: string) {
+  /**
+   * Only removes the connection if `socket` is still the one currently
+   * registered for `userId`. This matters because a reconnect (network
+   * handoff, app backgrounding, etc.) replaces the map entry with a new
+   * socket via addConnection() *before* the old socket's TCP-level 'close'
+   * event necessarily fires — that belated close event used to call this
+   * with no way to tell it was stale, deleting the brand-new live
+   * connection and broadcasting a false "offline" for a genuinely-online
+   * user. Returns whether anything was actually removed, so the caller
+   * only broadcasts "offline" for a real disconnect, not a stale one.
+   */
+  removeConnection(userId: string, socket: WebSocket): boolean {
+    const current = this.connections.get(userId);
+    if (!current || current.socket !== socket) return false;
     this.connections.delete(userId);
+    return true;
   }
 
   getSocket(userId: string): WebSocket | undefined {

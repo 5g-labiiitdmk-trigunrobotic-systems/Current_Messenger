@@ -75,6 +75,8 @@ wss.on('connection', (socket) => {
     }
   }, AUTH_TIMEOUT_MS);
 
+  socket.on('pong', () => missedPongs.set(socket, 0));
+
   socket.on('message', async (raw) => {
     let event: ClientEvent;
     try {
@@ -176,12 +178,40 @@ wss.on('connection', (socket) => {
 
   socket.on('close', () => {
     clearTimeout(authTimer);
-    if (userId) {
-      relayState.removeConnection(userId);
+    missedPongs.delete(socket);
+    // Guarded: if this socket already got replaced by a reconnect, it's
+    // stale — its belated close must not evict the newer live connection
+    // or tell everyone else the (still-online) user went offline.
+    if (userId && relayState.removeConnection(userId, socket)) {
       broadcastPresence(userId, 'offline');
     }
   });
 });
+
+// Proactive dead-connection detection. Without this, the only way the
+// server learns a socket is dead is the OS/TCP layer eventually firing
+// 'close' — which on mobile networks (backgrounding, carrier NAT timeouts,
+// wifi/cellular handoffs) can take minutes, during which a genuinely-gone
+// user still looks "online" and messages sent to them vanish silently
+// (hard-fail-if-offline, no queueing). A 30s ping interval with 2 missed
+// pongs tolerated (~60-90s total grace) balances catching real drops
+// reasonably fast against not killing a connection over one slow/lost
+// pong on a flaky real-world mobile link.
+const HEARTBEAT_INTERVAL_MS = 30_000;
+const MAX_MISSED_PONGS = 2;
+const missedPongs = new WeakMap<WebSocket, number>();
+
+setInterval(() => {
+  wss.clients.forEach((socket) => {
+    const missed = missedPongs.get(socket) ?? 0;
+    if (missed >= MAX_MISSED_PONGS) {
+      socket.terminate(); // fires 'close' above, which does the guarded cleanup
+      return;
+    }
+    missedPongs.set(socket, missed + 1);
+    socket.ping();
+  });
+}, HEARTBEAT_INTERVAL_MS);
 
 async function handleMessageSend(userId: string, event: Extract<ClientEvent, { type: 'message:send' }>) {
   const socket = relayState.getSocket(userId)!;
