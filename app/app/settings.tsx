@@ -36,10 +36,29 @@ export default function SettingsScreen() {
   const wallpaperKey = useThemeStore((s) => s.wallpaperKey);
   const setWallpaper = useThemeStore((s) => s.setWallpaper);
   const { pushNotifications, showPreviews, toggle } = useSettingsStore();
-  const signOut = useAuthStore((s) => s.signOut);
+  const storeSignOut = useAuthStore((s) => s.signOut);
   const profile = useAuthStore((s) => s.profile);
   const updateProfile = useAuthStore((s) => s.updateProfile);
   const statusVisibility = profile?.status_visibility ?? 'everyone';
+
+  const onLogOut = async () => {
+    try {
+      await storeSignOut();
+    } catch (e: any) {
+      appAlert('Could not log out', e?.message ?? 'Please try again.');
+      return;
+    }
+    // storeSignOut() clears session/profile in authStore, but nothing else
+    // in the app reacts to that by navigating anywhere — there's no global
+    // "session became null" redirect guard. Without this, the screen just
+    // sits here logged-out-but-still-rendered until the app is relaunched.
+    // dismissAll() first so the authenticated stack (tabs, this settings
+    // screen, wherever the user came from) isn't left sitting underneath
+    // the login screen in history — otherwise pressing back after logging
+    // out could reveal a stale authenticated screen.
+    router.dismissAll();
+    router.replace('/(auth)/login');
+  };
 
   return (
     <ScreenScaffold>
@@ -123,7 +142,7 @@ export default function SettingsScreen() {
         ))}
       </Glass>
 
-      <Pressable onPress={signOut} style={{ marginTop: 22 }}>
+      <Pressable onPress={onLogOut} style={{ marginTop: 22 }}>
         <View style={{ height: 52, borderRadius: 18, backgroundColor: 'rgba(255,90,110,0.12)', borderWidth: 1, borderColor: 'rgba(255,90,110,0.3)', alignItems: 'center', justifyContent: 'center' }}>
           <Text style={{ color: '#ff5a6e', fontFamily: fontFamilies.bold, fontSize: 14.5 }}>Log out</Text>
         </View>
