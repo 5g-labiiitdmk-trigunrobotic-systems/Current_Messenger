@@ -35,13 +35,15 @@ export type ClientEvent =
   | { type: 'group:invite'; groupId: string; to: string }
   | { type: 'group:leave'; groupId: string }
   | { type: 'call:signal'; to: string; signal: Record<string, unknown> }
+  | { type: 'session:request'; to: string }
+  | { type: 'session:respond'; peerId: string; accept: boolean }
   | { type: 'ping' };
 
 export type ServerEvent =
   | { type: 'auth:ok'; userId: string }
   | { type: 'auth:error'; message: string }
   | { type: 'message:sent'; tempId: string; messageId: string; sentAt: string }
-  | { type: 'message:failed'; tempId: string; reason: 'recipient_offline' | 'not_contact' | 'blocked' | 'not_group_member' | 'broadcast_read_only' | 'unauthenticated' }
+  | { type: 'message:failed'; tempId: string; reason: 'recipient_offline' | 'not_contact' | 'blocked' | 'not_group_member' | 'broadcast_read_only' | 'unauthenticated' | 'session_not_approved' }
   | { type: 'message:receive'; messageId: string; from: string; groupId?: string; kind: MessageKind; payload: EncryptedPayload; meta?: Record<string, unknown>; sentAt: string }
   | { type: 'typing'; from: string; groupId?: string; isTyping: boolean }
   | { type: 'read'; from: string; groupId?: string; messageId: string }
@@ -50,5 +52,11 @@ export type ServerEvent =
   | { type: 'group:invited'; groupId: string; name: string; from: string; memberIds: string[]; isBroadcast?: boolean }
   | { type: 'group:member_left'; groupId: string; userId: string }
   | { type: 'call:signal'; from: string; signal: Record<string, unknown> }
+  | { type: 'session:request'; from: string }
+  | { type: 'session:requested'; to: string }
+  | { type: 'session:request_failed'; to: string; reason: 'recipient_offline' | 'not_contact' }
+  | { type: 'session:accepted'; from: string }
+  | { type: 'session:rejected'; from: string; reason: 'declined' | 'timeout' | 'peer_disconnected' }
+  | { type: 'session:request_withdrawn'; from: string }
   | { type: 'error'; message: string }
   | { type: 'pong' };

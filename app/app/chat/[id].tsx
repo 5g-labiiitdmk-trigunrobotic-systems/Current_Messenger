@@ -15,10 +15,20 @@ import { useContactStore } from '../../src/state/contactStore';
 import { usePresenceStore } from '../../src/state/presenceStore';
 import { useCallStore } from '../../src/state/callStore';
 import { useAuthStore } from '../../src/state/authStore';
+import { useChatSessionStore } from '../../src/state/chatSessionStore';
 import { appAlert } from '../../src/state/alertStore';
 import { isPresenceVisible } from '../../src/lib/presencePolicy';
 import { pickImageBase64, getCurrentLocationOnce, startVoiceRecording, stopVoiceRecording, playAudioBase64 } from '../../src/lib/media';
 import { useAudioRecorder, RecordingPresets } from 'expo-audio';
+import type { RejectReason } from '../../src/state/chatSessionStore';
+
+const SESSION_REJECT_LABEL: Record<RejectReason, string> = {
+  declined: "They haven't accepted this chat request.",
+  timeout: 'No response yet.',
+  peer_disconnected: 'They disconnected before responding.',
+  recipient_offline: "They're offline right now.",
+  not_contact: "You're not connected as contacts.",
+};
 
 export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -33,6 +43,32 @@ export default function ChatScreen() {
   const { block, report } = useContactStore();
   const ring = useCallStore((s) => s.ring);
   const approved = useContactStore((s) => s.approved);
+  const sessionState = useChatSessionStore((s) => s.sessions[id ?? ''] ?? 'none');
+  const sessionRejectReason = useChatSessionStore((s) => s.rejectReasons[id ?? '']);
+  const hasIncomingRequest = useChatSessionStore((s) => !!s.incomingFrom[id ?? '']);
+  const requestSession = useChatSessionStore((s) => s.requestSession);
+  const respondToRequest = useChatSessionStore((s) => s.respondToRequest);
+
+  // Long-term contact approval no longer means messages flow freely
+  // forever — every fresh session (bounded by both sides staying
+  // continuously connected since it was last accepted; see
+  // server/src/state.ts) needs its own accept, even between two
+  // already-approved contacts. Request one as soon as the chat is opened,
+  // rather than waiting for the first message send to fail — same idea as
+  // the incoming-call flow, just async instead of live. Skipped if THEY
+  // already have a request in to us — auto-firing our own request back
+  // would hit the relay's glare-resolution and silently auto-accept,
+  // which would bypass the explicit Accept/Decline this is supposed to
+  // require (see chatSessionStore's incomingFrom doc comment).
+  useEffect(() => {
+    if (id && sessionState === 'none' && !hasIncomingRequest) requestSession(id);
+  }, [id, sessionState, hasIncomingRequest]);
+
+  // Guards against the narrow race where sessionState still stale-shows
+  // 'accepted' from a prior session while a fresh incoming request has
+  // since arrived (their side reconnected and re-requested before this
+  // client's own reconnect/auth:ok reset had a chance to clear it).
+  const canSend = sessionState === 'accepted' && !hasIncomingRequest;
 
   const key = getThreadKey(id ?? '', false);
   const allMessages = threads[key] ?? [];
@@ -282,6 +318,47 @@ export default function ChatScreen() {
           </Pressable>
         </Glass>
 
+        {hasIncomingRequest ? (
+          <View style={{ paddingHorizontal: 14, paddingTop: 10 }}>
+            <Glass radius={16} style={{ padding: 13, flexDirection: 'row', alignItems: 'center', gap: 10 }} variant="bg2">
+              <Svg width={17} height={17} viewBox="0 0 24 24" fill="none" stroke={a1} strokeWidth={2}>
+                <Path d="M4 11h16v10H4z" />
+                <Path d="M8 11V7a4 4 0 0 1 8 0v4" />
+              </Svg>
+              <Text style={{ flex: 1, fontSize: 12.5, fontFamily: fontFamilies.medium, color: tokens.text2 }}>
+                {contact.display_name || contact.username} wants to start a chat session.
+              </Text>
+              <Pressable onPress={() => respondToRequest(id!, false)}>
+                <Text style={{ fontSize: 12.5, fontFamily: fontFamilies.bold, color: '#ff5a6e' }}>Decline</Text>
+              </Pressable>
+              <Pressable onPress={() => respondToRequest(id!, true)}>
+                <Text style={{ fontSize: 12.5, fontFamily: fontFamilies.bold, color: a1 }}>Accept</Text>
+              </Pressable>
+            </Glass>
+          </View>
+        ) : (
+          sessionState !== 'accepted' && (
+            <View style={{ paddingHorizontal: 14, paddingTop: 10 }}>
+              <Glass radius={16} style={{ padding: 13, flexDirection: 'row', alignItems: 'center', gap: 10 }} variant="bg2">
+                <Svg width={17} height={17} viewBox="0 0 24 24" fill="none" stroke={a1} strokeWidth={2}>
+                  <Path d="M4 11h16v10H4z" />
+                  <Path d="M8 11V7a4 4 0 0 1 8 0v4" />
+                </Svg>
+                <Text style={{ flex: 1, fontSize: 12.5, fontFamily: fontFamilies.medium, color: tokens.text2 }}>
+                  {sessionState === 'pending'
+                    ? `Waiting for ${contact.display_name || contact.username} to accept this chat…`
+                    : SESSION_REJECT_LABEL[sessionRejectReason ?? 'declined']}
+                </Text>
+                {sessionState === 'rejected' && (
+                  <Pressable onPress={() => requestSession(id!)}>
+                    <Text style={{ fontSize: 12.5, fontFamily: fontFamilies.bold, color: a1 }}>Try again</Text>
+                  </Pressable>
+                )}
+              </Glass>
+            </View>
+          )
+        )}
+
         {searchOpen && (
           <View style={{ paddingHorizontal: 14, paddingVertical: 8 }}>
             <Glass radius={16} style={{ paddingHorizontal: 14, paddingVertical: 9 }} variant="field">
@@ -371,8 +448,12 @@ export default function ChatScreen() {
           </View>
         )}
 
-        <Glass radius={0} bordered={false} style={{ paddingHorizontal: 14, paddingTop: 10, paddingBottom: insets.bottom + 12, flexDirection: 'row', alignItems: 'center', gap: 9 }}>
-          <Pressable onPress={onAttach} style={{ width: 42, height: 42, alignItems: 'center', justifyContent: 'center' }}>
+        <Glass
+          radius={0}
+          bordered={false}
+          style={{ paddingHorizontal: 14, paddingTop: 10, paddingBottom: insets.bottom + 12, flexDirection: 'row', alignItems: 'center', gap: 9, opacity: canSend ? 1 : 0.5 }}
+        >
+          <Pressable onPress={onAttach} disabled={!canSend} style={{ width: 42, height: 42, alignItems: 'center', justifyContent: 'center' }}>
             <Glass radius={21} style={{ width: 42, height: 42, alignItems: 'center', justifyContent: 'center' }}>
               <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={tokens.text2} strokeWidth={2} strokeLinecap="round">
                 <Path d="M12 5v14M5 12h14" />
@@ -383,13 +464,13 @@ export default function ChatScreen() {
             <TextInput
               value={draft}
               onChangeText={onChangeDraft}
-              placeholder={recording ? 'Recording…' : 'Message…'}
+              placeholder={!canSend ? 'Waiting to be accepted…' : recording ? 'Recording…' : 'Message…'}
               placeholderTextColor={tokens.text3}
-              editable={!recording}
+              editable={!recording && canSend}
               style={{ fontSize: 15, color: tokens.text, fontFamily: fontFamilies.regular }}
             />
           </Glass>
-          <Pressable onPress={draft.trim() ? onSend : onMic}>
+          <Pressable onPress={draft.trim() ? onSend : onMic} disabled={!canSend}>
             <View style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: recording ? '#ff5a6e' : a1, alignItems: 'center', justifyContent: 'center' }}>
               {draft.trim() ? (
                 <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">

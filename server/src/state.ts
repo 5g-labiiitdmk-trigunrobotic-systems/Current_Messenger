@@ -22,9 +22,37 @@ interface Group {
   createdAt: number;
 }
 
+interface PendingSession {
+  requesterId: string;
+  targetId: string;
+  requestedAt: number;
+}
+
 class RelayState {
   private connections = new Map<string, Connection>(); // userId -> connection
   private groups = new Map<string, Group>();
+
+  /**
+   * Per-session chat requests, on top of (not instead of) the long-term
+   * contact-approval gate in supabaseAdmin.ts's areApprovedContacts(). A
+   * "session" here means: both people have been continuously connected to
+   * the relay since the session was last accepted. The moment either side
+   * disconnects, the session is gone — reconnecting requires a fresh
+   * request+accept, even between two already-approved contacts. This ties
+   * session validity to the one piece of state the relay already tracks
+   * (live connections), consistent with the relay's zero-persistence,
+   * live-only design — there's no separate expiry timer or stored history,
+   * it's just "are you both still here right now."
+   *
+   * Deliberately in-memory only, like everything else here: a relay
+   * restart resets all sessions, same as it resets presence and groups.
+   */
+  private activeSessions = new Set<string>(); // canonical pairKey
+  private pendingSessions = new Map<string, PendingSession>(); // canonical pairKey -> request
+
+  private pairKey(a: string, b: string): string {
+    return [a, b].sort().join(':');
+  }
 
   addConnection(userId: string, socket: WebSocket) {
     this.connections.set(userId, { userId, socket, lastSeenAt: Date.now() });
@@ -63,6 +91,58 @@ class RelayState {
   touch(userId: string) {
     const c = this.connections.get(userId);
     if (c) c.lastSeenAt = Date.now();
+  }
+
+  hasActiveSession(a: string, b: string): boolean {
+    return this.activeSessions.has(this.pairKey(a, b));
+  }
+
+  getPendingSession(a: string, b: string): PendingSession | undefined {
+    return this.pendingSessions.get(this.pairKey(a, b));
+  }
+
+  requestSession(requesterId: string, targetId: string) {
+    this.pendingSessions.set(this.pairKey(requesterId, targetId), { requesterId, targetId, requestedAt: Date.now() });
+  }
+
+  /** Resolves a pending request. `accepted: false` also revokes any existing active session. */
+  resolveSession(a: string, b: string, accepted: boolean) {
+    const key = this.pairKey(a, b);
+    this.pendingSessions.delete(key);
+    if (accepted) this.activeSessions.add(key);
+    else this.activeSessions.delete(key);
+  }
+
+  clearPendingSession(a: string, b: string) {
+    this.pendingSessions.delete(this.pairKey(a, b));
+  }
+
+  /**
+   * Called on disconnect. Ends every session (active or pending) involving
+   * this user and reports who needs telling what, so index.ts can send the
+   * right event to each — an already-*active* session ending needs no
+   * extra notice (the existing presence:offline broadcast already covers
+   * it contextually), but a *pending* request left hanging by either side
+   * disconnecting would otherwise leave the other party's UI stuck.
+   */
+  clearSessionsFor(userId: string): { notifyWithdrawn: string[]; notifyRejected: string[] } {
+    const notifyWithdrawn: string[] = []; // this user was the requester — tell the target their prompt is moot
+    const notifyRejected: string[] = []; // this user was the target — tell the requester it failed
+
+    for (const key of [...this.activeSessions]) {
+      const [x, y] = key.split(':');
+      if (x === userId || y === userId) this.activeSessions.delete(key);
+    }
+    for (const [key, pending] of [...this.pendingSessions]) {
+      if (pending.requesterId === userId) {
+        notifyWithdrawn.push(pending.targetId);
+        this.pendingSessions.delete(key);
+      } else if (pending.targetId === userId) {
+        notifyRejected.push(pending.requesterId);
+        this.pendingSessions.delete(key);
+      }
+    }
+    return { notifyWithdrawn, notifyRejected };
   }
 
   createGroup(id: string, name: string, ownerId: string, memberIds: string[], isBroadcast = false): Group {

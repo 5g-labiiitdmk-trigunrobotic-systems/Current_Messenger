@@ -23,7 +23,7 @@ export async function pingOfflineRecipient(recipientId: string, senderUsername: 
   lastPingAt.set(recipientId, Date.now());
 
   try {
-    await fetch(EXPO_PUSH_URL, {
+    const res = await fetch(EXPO_PUSH_URL, {
       method: 'POST',
       headers: { 'content-type': 'application/json', accept: 'application/json' },
       body: JSON.stringify({
@@ -34,7 +34,21 @@ export async function pingOfflineRecipient(recipientId: string, senderUsername: 
         priority: 'high',
       }),
     });
-  } catch {
+    // Expo's push API returns 200 even for a per-notification failure (e.g.
+    // an invalid/unregistered token) — the actual outcome is inside the
+    // response body's ticket, not the HTTP status. Logging this is the only
+    // way "push isn't arriving" is ever diagnosable from server logs at
+    // all; this was previously a fully silent catch-and-drop with zero
+    // visibility into whether pushes were even being attempted correctly.
+    const body: any = await res.json().catch(() => null);
+    const ticket = body?.data;
+    if (!res.ok || ticket?.status === 'error') {
+      // eslint-disable-next-line no-console
+      console.error('[push] Expo push send failed:', res.status, JSON.stringify(ticket ?? body));
+    }
+  } catch (e: any) {
+    // eslint-disable-next-line no-console
+    console.error('[push] Expo push request threw:', e?.message ?? e);
     // best-effort only — a failed ping must never block or retry the message send
   }
 }

@@ -54,17 +54,30 @@ Supabase isn't on it), so none of this has been verified live from within a
 session — verify from your own machine/device, or add the host to this
 environment's egress allowlist if you want a future session able to check.
 
-## 2. Phone verification — removed
+## 2. Phone verification — removed (but `google-services.json` still matters — see below)
 
 Phone verification (Firebase Phone Auth) was built, then removed, twice
 this project's history — most recently because Firebase's Phone Auth
 provider requires the pay-as-you-go **Blaze** billing plan, which this
 project is avoiding for now. Email verification (Supabase, section 1
 above) is the sole signup requirement. `@react-native-firebase/*` is no
-longer a dependency and there's nothing to configure here. If phone
-verification comes back later (e.g. once Blaze is acceptable), the old
-Firebase project (`current-7798d` on console.firebase.google.com) and the
-debug keystore fingerprints below are still around for reference:
+longer a dependency and there's nothing to configure here.
+
+**Important — don't delete `app/google-services.json` again.** It was
+briefly deleted as part of this removal on the (wrong) assumption it was
+phone-auth-only. It's actually also required for **Android push
+notifications** (section 4's `expo-notifications`, unrelated to
+`@react-native-firebase`) — `expo-notifications`'s Android implementation
+depends directly on `com.google.firebase:firebase-messaging` natively,
+and Expo's prebuild only applies the Google Services Gradle plugin (which
+that native FCM SDK needs to initialize against the right Firebase
+project) when `android.googleServicesFile` is set. Removing it silently
+broke push notifications as a side effect of an unrelated cleanup — fixed
+by restoring both the file and the `android.googleServicesFile` field in
+`app.json`. If phone verification comes back later (e.g. once Blaze is
+acceptable), the old Firebase project (`current-7798d` on
+console.firebase.google.com) and the debug keystore fingerprints below
+are still around for reference:
 ```
 SHA1:   1B:11:AC:8C:6E:9B:EB:F0:44:B2:90:A3:B5:FB:B1:50:DC:F6:84:AF
 SHA256: 20:93:59:00:3C:50:63:E3:FB:C9:3D:6F:D3:DB:A4:25:43:49:79:46:61:FE:12:60:26:AA:69:5E:6A:3C:DE:E7

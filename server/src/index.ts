@@ -171,6 +171,14 @@ wss.on('connection', (socket) => {
         if (s) send(s, { type: 'call:signal', from: userId, signal: event.signal });
         break;
       }
+      case 'session:request': {
+        await handleSessionRequest(userId, event.to);
+        break;
+      }
+      case 'session:respond': {
+        handleSessionRespond(userId, event.peerId, event.accept);
+        break;
+      }
       default:
         break;
     }
@@ -184,6 +192,15 @@ wss.on('connection', (socket) => {
     // or tell everyone else the (still-online) user went offline.
     if (userId && relayState.removeConnection(userId, socket)) {
       broadcastPresence(userId, 'offline');
+      const { notifyWithdrawn, notifyRejected } = relayState.clearSessionsFor(userId);
+      for (const targetId of notifyWithdrawn) {
+        const s = relayState.getSocket(targetId);
+        if (s) send(s, { type: 'session:request_withdrawn', from: userId });
+      }
+      for (const requesterId of notifyRejected) {
+        const s = relayState.getSocket(requesterId);
+        if (s) send(s, { type: 'session:rejected', from: userId, reason: 'peer_disconnected' });
+      }
     }
   });
 });
@@ -283,10 +300,23 @@ async function handleMessageSend(userId: string, event: Extract<ClientEvent, { t
   }
   if (!relayState.isOnline(to)) {
     // ABSOLUTE CORE RULE: no queueing, no persistence. Recipient offline = hard fail.
+    // Checked before the session gate below: an offline recipient can
+    // never have an active session anyway (disconnecting clears it — see
+    // clearSessionsFor), so this ordering just reports the more specific,
+    // actionable reason instead of a technically-true-but-less-useful one.
     send(socket, { type: 'message:failed', tempId: event.tempId, reason: 'recipient_offline' });
     getUsername(userId)
       .then((senderUsername) => pingOfflineRecipient(to, senderUsername))
       .catch(() => {});
+    return;
+  }
+  if (!relayState.hasActiveSession(userId, to)) {
+    // Long-term contact approval is necessary but no longer sufficient —
+    // every fresh session (see state.ts) needs its own accept too. The
+    // client is expected to have already sent session:request when the
+    // chat screen opened rather than relying on this to trigger one as a
+    // side effect, so this is a hard stop, not an implicit request.
+    send(socket, { type: 'message:failed', tempId: event.tempId, reason: 'session_not_approved' });
     return;
   }
 
@@ -302,6 +332,72 @@ async function handleMessageSend(userId: string, event: Extract<ClientEvent, { t
   });
   send(socket, { type: 'message:sent', tempId: event.tempId, messageId, sentAt });
   logTransfer(userId, to, byteSize);
+}
+
+// How long a target has to accept/decline before the requester is told
+// there's been no response. Longer than the call ring timeout (45s) since
+// this is asynchronous by nature — the target may not have the app open
+// at all — not a live, urgent ring.
+const SESSION_REQUEST_TIMEOUT_MS = 60_000;
+
+async function handleSessionRequest(userId: string, to: string) {
+  const socket = relayState.getSocket(userId)!;
+  if (!(await areApprovedContacts(userId, to))) {
+    send(socket, { type: 'session:request_failed', to, reason: 'not_contact' });
+    return;
+  }
+  if (relayState.hasActiveSession(userId, to)) {
+    // Already accepted (e.g. a stale re-request from a client that hasn't
+    // caught up) — just re-confirm rather than re-asking.
+    send(socket, { type: 'session:accepted', from: to });
+    return;
+  }
+  // Glare: the other side already asked us and we haven't answered yet —
+  // messaging them back is itself consent, so resolve both directions at
+  // once instead of leaving two pending requests deadlocked on each other.
+  const reversePending = relayState.getPendingSession(to, userId);
+  if (reversePending && reversePending.requesterId === to) {
+    relayState.resolveSession(userId, to, true);
+    send(socket, { type: 'session:accepted', from: to });
+    const targetSocket = relayState.getSocket(to);
+    if (targetSocket) send(targetSocket, { type: 'session:accepted', from: userId });
+    return;
+  }
+
+  const targetSocket = relayState.getSocket(to);
+  if (!targetSocket) {
+    // Can't ask someone who isn't here — consistent with the rest of this
+    // relay's hard-fail-if-offline rule, no pending state is created.
+    send(socket, { type: 'session:request_failed', to, reason: 'recipient_offline' });
+    return;
+  }
+
+  relayState.requestSession(userId, to);
+  // Captured so this specific timer can tell "still my own still-pending
+  // request" apart from "A re-requested after I'd already have timed out,
+  // and that newer request happens to share the same pairKey" — without
+  // this, a stale timer from an earlier request could prematurely reject
+  // a fresh one that A re-sent in the meantime.
+  const requestedAt = relayState.getPendingSession(userId, to)!.requestedAt;
+  send(socket, { type: 'session:requested', to });
+  send(targetSocket, { type: 'session:request', from: userId });
+
+  setTimeout(() => {
+    const pending = relayState.getPendingSession(userId, to);
+    if (!pending || pending.requesterId !== userId || pending.requestedAt !== requestedAt) return;
+    relayState.clearPendingSession(userId, to);
+    const requesterSocket = relayState.getSocket(userId);
+    if (requesterSocket) send(requesterSocket, { type: 'session:rejected', from: to, reason: 'timeout' });
+  }, SESSION_REQUEST_TIMEOUT_MS);
+}
+
+function handleSessionRespond(userId: string, peerId: string, accept: boolean) {
+  const pending = relayState.getPendingSession(peerId, userId);
+  if (!pending || pending.requesterId !== peerId || pending.targetId !== userId) return; // no matching pending request — ignore
+  relayState.resolveSession(userId, peerId, accept);
+  const requesterSocket = relayState.getSocket(peerId);
+  if (!requesterSocket) return; // requester disconnected in the meantime; clearSessionsFor already handled notifying (moot) or will on their close
+  send(requesterSocket, accept ? { type: 'session:accepted', from: userId } : { type: 'session:rejected', from: userId, reason: 'declined' });
 }
 
 async function forwardToRecipients(userId: string, to: string | undefined, groupId: string | undefined, sendFn: (targetId: string) => void) {

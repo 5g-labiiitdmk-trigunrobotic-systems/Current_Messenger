@@ -17,6 +17,7 @@ import { usePresenceStore } from '../src/state/presenceStore';
 import { useContactStore } from '../src/state/contactStore';
 import { useGroupStore } from '../src/state/groupStore';
 import { useCallStore } from '../src/state/callStore';
+import { useChatSessionStore } from '../src/state/chatSessionStore';
 import { AppLockGate } from '../src/components/AppLockGate';
 import { AppAlertHost } from '../src/components/AppAlertHost';
 import { appAlert } from '../src/state/alertStore';
@@ -59,6 +60,7 @@ export default function RootLayout() {
     useContactStore.getState().wire();
     useGroupStore.getState().wire();
     useCallStore.getState().wire();
+    useChatSessionStore.getState().wire();
     const unsub = useCallStore.subscribe((s, prev) => {
       if (s.incoming && !prev.incoming) router.push('/incoming-call');
       // Outgoing call just placed — get the caller into the in-call screen.
