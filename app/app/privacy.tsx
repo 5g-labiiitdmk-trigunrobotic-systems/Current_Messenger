@@ -111,8 +111,8 @@ export default function PrivacyScreen() {
               <Path d="M8 11V7a4 4 0 0 1 8 0v4" />
             </Svg>
             <View>
-              <Text style={{ fontSize: 14.5, fontFamily: fontFamilies.bold, color: tokens.text }}>Two-factor verification</Text>
-              <Text style={{ fontSize: 11.5, color: tokens.text2, fontFamily: fontFamilies.medium }}>Email + phone, always required</Text>
+              <Text style={{ fontSize: 14.5, fontFamily: fontFamilies.bold, color: tokens.text }}>Email verification</Text>
+              <Text style={{ fontSize: 11.5, color: tokens.text2, fontFamily: fontFamilies.medium }}>Required for every account</Text>
             </View>
           </View>
           <View style={{ paddingVertical: 6, paddingHorizontal: 12, borderRadius: 10, backgroundColor: 'rgba(52,210,123,0.16)' }}>

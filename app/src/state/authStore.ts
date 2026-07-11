@@ -67,7 +67,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ profileError: error.message });
       return;
     }
-    set({ profile: data as UserRow | null, needsProfileSetup: !data || !data.email_verified || !data.phone_verified, profileError: null });
+    set({ profile: data as UserRow | null, needsProfileSetup: !data || !data.email_verified, profileError: null });
   },
 
   updateProfile: async (patch) => {

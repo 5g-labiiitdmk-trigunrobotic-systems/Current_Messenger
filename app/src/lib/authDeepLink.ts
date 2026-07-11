@@ -11,8 +11,8 @@ import { supabase } from './supabase';
  * This must be a fixed literal string, not `Linking.createURL(...)` — that
  * helper can bake in the local Metro dev-server host when running in a
  * development client connected to a packager, making the URL differ per
- * machine/network. Since Firebase Phone Auth already requires a real
- * dev-client/standalone build (never Expo Go) for this whole app, the
+ * machine/network. Since react-native-webrtc (calling) already requires a
+ * real dev-client/standalone build (never Expo Go) for this whole app, the
  * scheme is always exactly "current" — so we hardcode it, and this exact
  * string must be added to Supabase's Auth -> URL Configuration -> Redirect
  * URLs allow-list, or the confirmation link will fail with an error page

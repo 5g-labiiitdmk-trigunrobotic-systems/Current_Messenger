@@ -54,46 +54,24 @@ Supabase isn't on it), so none of this has been verified live from within a
 session — verify from your own machine/device, or add the host to this
 environment's egress allowlist if you want a future session able to check.
 
-## 2. Firebase (phone OTP)
+## 2. Phone verification — removed
 
-Project: **`current-7798d`** (console.firebase.google.com). Android app
-package `com.current.app` is already registered and `app/google-services.json`
-is in place (gitignored — it's a credential file, not committed).
-
-1. **Build → Authentication → Sign-in method**: enable **Phone**, if not
-   already on.
-2. Add an iOS app in the same Firebase project with bundle ID
-   `com.current.app` (matches `app.json`'s `expo.ios.bundleIdentifier`), then
-   download `GoogleService-Info.plist` into `app/GoogleService-Info.plist`.
-   Skip this if you're only building for Android right now.
-3. Add your app's SHA-1/SHA-256 signing fingerprints in the Firebase console
-   (Project settings → Your apps → the Android app) — Phone Auth on Android
-   uses Play Integrity and will silently fail without this.
-
-   **For local/debug builds**, a debug keystore is already generated at
-   `app/credentials/debug.keystore` (gitignored — alias `current-debug`,
-   store/key password `android`). Its fingerprints, already added below for
-   convenience, are:
-   ```
-   SHA1:   1B:11:AC:8C:6E:9B:EB:F0:44:B2:90:A3:B5:FB:B1:50:DC:F6:84:AF
-   SHA256: 20:93:59:00:3C:50:63:E3:FB:C9:3D:6F:D3:DB:A4:25:43:49:79:46:61:FE:12:60:26:AA:69:5E:6A:3C:DE:E7
-   ```
-   Add both to the Firebase console now if you want phone auth working in
-   local/EAS-development-client builds signed with this keystore.
-
-   **For production/Play Store builds**, this debug keystore must NOT be
-   used — EAS will generate (or let you upload) a separate release keystore
-   once you run `eas login && eas init && eas credentials`. Add *that*
-   keystore's SHA-1/SHA-256 to Firebase as a second entry before shipping;
-   Firebase supports multiple fingerprints per app.
-4. **Important**: this app uses `@react-native-firebase` (native SDK), which
-   means it cannot run in plain Expo Go. You need an EAS development build:
-   ```
-   cd app
-   npx eas build --profile development --platform android
-   ```
-   (or `ios`, once you've added the iOS app above). Install that build on
-   your device/simulator instead of using the Expo Go app.
+Phone verification (Firebase Phone Auth) was built, then removed, twice
+this project's history — most recently because Firebase's Phone Auth
+provider requires the pay-as-you-go **Blaze** billing plan, which this
+project is avoiding for now. Email verification (Supabase, section 1
+above) is the sole signup requirement. `@react-native-firebase/*` is no
+longer a dependency and there's nothing to configure here. If phone
+verification comes back later (e.g. once Blaze is acceptable), the old
+Firebase project (`current-7798d` on console.firebase.google.com) and the
+debug keystore fingerprints below are still around for reference:
+```
+SHA1:   1B:11:AC:8C:6E:9B:EB:F0:44:B2:90:A3:B5:FB:B1:50:DC:F6:84:AF
+SHA256: 20:93:59:00:3C:50:63:E3:FB:C9:3D:6F:D3:DB:A4:25:43:49:79:46:61:FE:12:60:26:AA:69:5E:6A:3C:DE:E7
+```
+(from `app/credentials/debug.keystore`, alias `current-debug`, store/key
+password `android` — unrelated to Firebase itself, this is a generic
+Android debug-signing keystore and stays regardless.)
 
 ## 3. Relay server
 
@@ -151,19 +129,20 @@ cp .env.example .env   # fill in Supabase values + relay URL
 npx eas build --profile development --platform android   # or ios
 ```
 
-Plain `npx expo start` will launch fine for UI iteration, but auth (phone
-OTP) and calling (WebRTC) won't work until you're running the EAS dev
-build with the native Firebase and react-native-webrtc modules linked —
-both require a custom dev client, not Expo Go.
+Plain `npx expo start` will launch fine for UI iteration, but calling
+(WebRTC) won't work until you're running the EAS dev build with the
+native react-native-webrtc module linked — it requires a custom dev
+client, not Expo Go.
 
 ## 5. What's intentionally not wired up
 
 - **Play Store submission** — out of scope for this pass per your request.
-  `app.json` uses `com.current.app` as the bundle ID/package (matching the
-  Firebase project) — change it if you register something else on Play Console.
-- **Real-time WebRTC audio/video** — calling is live ring/accept/decline
-  signaling only (see `src/state/callStore.ts`); there's no audio/video
-  media transport. Building that is a separate, large subsystem.
+  `app.json` uses `com.current.app` as the bundle ID/package — change it if
+  you register something else on Play Console.
+- **Background calling (CallKit/ConnectionService)** — calling is real
+  WebRTC audio/video (see `src/state/callStore.ts`), but there's no native
+  VoIP-push/CallKit integration, so a call backgrounded for long enough may
+  get throttled by the OS. A separate, native-entitlements follow-up.
 - **AR filters, mini-games, voice changer, doodle, co-watching, business
   profiles, bots, widget presence, topics within groups** — UI shells only
   (`app/lab/`), per the agreed scope. See `src/data/labFeatures.ts` for what

@@ -14,7 +14,6 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.current.app",
-      "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "NSCameraUsageDescription": "Current uses the camera to scan contact QR codes and take photos to share in chats.",
         "NSMicrophoneUsageDescription": "Current uses the microphone for voice messages and voice/video calls.",
@@ -25,7 +24,6 @@
     "android": {
       "package": "com.current.app",
       "backgroundColor": "#141416",
-      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#141416",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -85,8 +83,6 @@
           "enableBackgroundRecording": false
         }
       ],
-      "@react-native-firebase/app",
-      "@react-native-firebase/auth",
       [
         "@config-plugins/react-native-webrtc",
         {

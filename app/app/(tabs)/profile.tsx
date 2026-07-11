@@ -13,8 +13,8 @@ import { fontFamilies } from '../../src/theme/tokens';
 import { useAuthStore } from '../../src/state/authStore';
 
 const SETTINGS = [
-  { key: 'account', label: 'Account', sub: 'Username, email, phone', icon: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM4 21c0-4 3.6-7 8-7s8 3 8 7', route: '/settings' as const },
-  { key: 'privacy', label: 'Privacy & Security', sub: 'Encryption, 2FA, blocked', icon: 'M12 2l8 4v6c0 5-3.4 8.5-8 10-4.6-1.5-8-5-8-10V6l8-4ZM9 12l2 2 4-4', route: '/privacy' as const },
+  { key: 'account', label: 'Account', sub: 'Username, email', icon: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM4 21c0-4 3.6-7 8-7s8 3 8 7', route: '/settings' as const },
+  { key: 'privacy', label: 'Privacy & Security', sub: 'Encryption, verification, blocked', icon: 'M12 2l8 4v6c0 5-3.4 8.5-8 10-4.6-1.5-8-5-8-10V6l8-4ZM9 12l2 2 4-4', route: '/privacy' as const },
   { key: 'notif', label: 'Notifications', sub: 'Push, sounds, previews', icon: 'M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M10 21a2 2 0 0 0 4 0', route: '/settings' as const },
   { key: 'appearance', label: 'Appearance', sub: 'Theme, wallpaper, mode', icon: 'M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6L5.6 18.4', route: '/settings' as const },
   { key: 'devices', label: 'Devices', sub: 'Active sessions & keys', icon: 'M4 4h16v12H4zM2 20h20M9 16v4M15 16v4', route: '/privacy' as const },

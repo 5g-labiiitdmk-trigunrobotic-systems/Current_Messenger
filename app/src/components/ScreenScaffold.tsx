@@ -1,5 +1,5 @@
 import React from 'react';
-import { ScrollView, View, StyleSheet, type ViewStyle, type StyleProp } from 'react-native';
+import { ScrollView, View, StyleSheet, KeyboardAvoidingView, Platform, type ViewStyle, type StyleProp } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeIn } from 'react-native-reanimated';
@@ -47,18 +47,28 @@ export function ScreenScaffold({ children, scroll = true, padded = true, tabBar 
   return (
     <View style={{ flex: 1 }}>
       <BokehBackground />
-      <Animated.View entering={FadeIn.duration(350)} style={{ flex: 1 }}>
-        <Container
-          {...(containerProps as any)}
-          style={[
-            padded && { paddingHorizontal: 18, paddingTop: insets.top + 14 },
-            !scroll && { flex: 1, paddingBottom: bottomClearance },
-            style,
-          ]}
-        >
-          {children}
-        </Container>
-      </Animated.View>
+      {/* Every screen built on ScreenScaffold gets keyboard avoidance for
+          free — this was previously missing entirely at the shared level,
+          which meant every screen with a text input (login, signup,
+          settings, new-group, contacts search, ...) individually had the
+          same "input hidden behind the open keyboard" bug the chat screens
+          had before their own fix. 'height' on Android, not 'padding' —
+          'padding' mode double-offsets there when combined with the OS's
+          own resize behavior; see the identical fix in chat/[id].tsx. */}
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <Animated.View entering={FadeIn.duration(350)} style={{ flex: 1 }}>
+          <Container
+            {...(containerProps as any)}
+            style={[
+              padded && { paddingHorizontal: 18, paddingTop: insets.top + 14 },
+              !scroll && { flex: 1, paddingBottom: bottomClearance },
+              style,
+            ]}
+          >
+            {children}
+          </Container>
+        </Animated.View>
+      </KeyboardAvoidingView>
       {/* Status-bar scrim: near-opaque for most of its height (not a soft
           ~55% fade — that still reads as overlapping text), only fading to
           transparent in its last few pixels, so scrolled content is
