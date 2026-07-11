@@ -92,6 +92,12 @@
         }
       ],
       [
+        "expo-sqlite",
+        {
+          "useSQLCipher": true
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "image": "./assets/current-logo.png",

@@ -162,15 +162,30 @@ client, not Expo Go.
   each would take to actually build.
 - **Payments** — explicitly deferred per your instructions; nothing here.
 
-## 6. The zero-storage guarantee, concretely
+## 6. The zero-*server*-storage guarantee, concretely
 
-- Message content only ever exists as JS objects in the Expo app's memory
-  (`src/state/chatStore.ts`) and as JSON passing through the relay server's
-  request handler (`server/src/index.ts`) — never written to a variable that
-  outlives the function call, never logged, never in a database.
+Message content is now persisted **on-device only** (`src/lib/localDb.ts`,
+SQLite/SQLCipher — see below) — this was a deliberate architecture change
+away from the original fully-ephemeral design. The guarantee that still
+holds, unchanged, is that the server side never stores it:
+
+- Message content only ever exists as JS objects in transit through the
+  relay server's request handler (`server/src/index.ts`) — never written to
+  a variable that outlives the function call, never logged, never in
+  Supabase or any server-side database.
 - Supabase Postgres holds exactly 4 tables (`supabase/migrations/0001_init.sql`):
   accounts, contact approvals, blocks, and public encryption keys. Grep the
   schema — there is no messages/history table to remove by accident later.
+- Local chat history (`src/lib/localDb.ts`) is a separate SQLite database
+  per (user, device), encrypted at rest via SQLCipher (expo-sqlite's
+  built-in support, enabled via the `useSQLCipher` plugin option in
+  app.json) with a random 256-bit key generated once per account and held
+  only in the platform secure enclave (`expo-secure-store` — iOS Keychain /
+  Android Keystore), never derived from the password, never synced
+  anywhere. It never syncs to another device or to any server — losing the
+  device means losing that device's local history, same as losing any
+  other on-device-only secret. **Requires a custom dev/production build**,
+  same as calling — SQLCipher isn't available in Expo Go.
 - Group identity/membership lives only in the relay server's in-memory `Map`
   (`server/src/state.ts`). Restart the relay and every group is gone —
   members just re-invite each other, which takes one tap.

@@ -67,7 +67,7 @@ export default function PrivacyScreen() {
         </View>
         <View>
           <Text style={{ fontSize: 16, fontFamily: fontFamilies.heavy, color: tokens.text }}>You're fully encrypted</Text>
-          <Text style={{ fontSize: 12.5, color: tokens.text2, fontFamily: fontFamilies.medium, marginTop: 2 }}>All 1-1 chats are end-to-end secured, live-relay only</Text>
+          <Text style={{ fontSize: 12.5, color: tokens.text2, fontFamily: fontFamilies.medium, marginTop: 2 }}>All 1-1 chats are end-to-end secured, saved only on your device</Text>
         </View>
       </Glass>
 

@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { relayClient } from '../lib/relayClient';
 import { encryptMessage, decryptMessage } from '../lib/crypto';
 import { getOrCreateDeviceKeyPair, fetchPublicKey } from '../lib/keystore';
+import { loadAllThreads, loadPinned, saveMessage, renameMessageId, setPinned } from '../lib/localDb';
 import type { MessageKind, ServerEvent } from '../types/relay';
 import { useAuthStore } from './authStore';
 
@@ -33,8 +34,8 @@ function chatKey(peerOrGroupId: string, isGroup: boolean) {
 const RICH_KINDS = new Set<MessageKind>(['voice', 'media', 'location', 'sticker', 'poll', 'doodle', 'mood', 'game']);
 
 interface ChatState {
-  threads: Record<string, ChatMessage[]>; // session-only, in-memory, never persisted to disk
-  typing: Record<string, boolean>;
+  threads: Record<string, ChatMessage[]>; // hydrated from + kept in sync with on-device SQLite (localDb.ts) — see hydrateFromLocal
+  typing: Record<string, boolean>; // session-only, never persisted — a stale "is typing" on relaunch would be actively wrong, not just stale
   pinned: Record<string, string[]>;
   wired: boolean;
   wire: () => void;
@@ -51,6 +52,29 @@ interface ChatState {
   clearThread: (key: string) => void;
 }
 
+let hydrated = false;
+
+/**
+ * Loads this account's on-device chat history (see src/lib/localDb.ts) into
+ * the in-memory store once, right when a session becomes available. Merges
+ * rather than overwrites in case any live relay traffic already landed in
+ * `threads` in the brief window before hydration completes — local rows are
+ * only added for message ids not already present in memory.
+ */
+async function hydrateFromLocal(userId: string) {
+  if (hydrated) return;
+  hydrated = true;
+  const [localThreads, localPinned] = await Promise.all([loadAllThreads(userId), loadPinned(userId)]);
+  useChatStore.setState((s) => {
+    const threads: Record<string, ChatMessage[]> = { ...localThreads };
+    for (const [key, list] of Object.entries(s.threads)) {
+      const existingIds = new Set((threads[key] ?? []).map((m) => m.id));
+      threads[key] = [...(threads[key] ?? []), ...list.filter((m) => !existingIds.has(m.id))].sort((a, b) => a.sentAt.localeCompare(b.sentAt));
+    }
+    return { threads, pinned: { ...localPinned, ...s.pinned } };
+  });
+}
+
 export const useChatStore = create<ChatState>((set, get) => ({
   threads: {},
   typing: {},
@@ -60,24 +84,52 @@ export const useChatStore = create<ChatState>((set, get) => ({
   wire: () => {
     if (get().wired) return;
     set({ wired: true });
+
+    const existingUserId = useAuthStore.getState().session?.user.id;
+    if (existingUserId) hydrateFromLocal(existingUserId);
+    useAuthStore.subscribe((s, prev) => {
+      const userId = s.session?.user.id;
+      if (userId && userId !== prev.session?.user.id) hydrateFromLocal(userId);
+    });
+
     relayClient.on(async (event: ServerEvent) => {
       const me = useAuthStore.getState().session?.user.id;
       if (!me) return;
 
       if (event.type === 'message:sent') {
+        let updatedKey: string | null = null;
+        let updatedMsg: ChatMessage | null = null;
         set((s) => ({
           threads: mapThreads(s.threads, (key, list) =>
-            list.map((m) => (m.tempId === event.tempId ? { ...m, id: event.messageId, status: 'sent' as const } : m))
+            list.map((m) => {
+              if (m.tempId !== event.tempId) return m;
+              updatedKey = key;
+              updatedMsg = { ...m, id: event.messageId, status: 'sent' as const };
+              return updatedMsg;
+            })
           ),
         }));
+        if (updatedKey && updatedMsg) {
+          renameMessageId(me, event.tempId, event.messageId)
+            .then(() => saveMessage(me, updatedKey!, updatedMsg!))
+            .catch(() => {});
+        }
       }
 
       if (event.type === 'message:failed') {
+        let updatedKey: string | null = null;
+        let updatedMsg: ChatMessage | null = null;
         set((s) => ({
           threads: mapThreads(s.threads, (key, list) =>
-            list.map((m) => (m.tempId === event.tempId ? { ...m, status: 'failed' as const, failReason: event.reason } : m))
+            list.map((m) => {
+              if (m.tempId !== event.tempId) return m;
+              updatedKey = key;
+              updatedMsg = { ...m, status: 'failed' as const, failReason: event.reason };
+              return updatedMsg;
+            })
           ),
         }));
+        if (updatedKey && updatedMsg) saveMessage(me, updatedKey, updatedMsg).catch(() => {});
       }
 
       if (event.type === 'message:receive') {
@@ -116,43 +168,54 @@ export const useChatStore = create<ChatState>((set, get) => ({
         };
 
         if (event.kind === 'reaction' && event.meta?.targetMessageId) {
+          let updatedMsg: ChatMessage | null = null;
           set((s) => ({
             threads: {
               ...s.threads,
-              [key]: (s.threads[key] ?? []).map((m) =>
-                m.id === event.meta!.targetMessageId
-                  ? { ...m, reactions: { ...m.reactions, [event.from]: String(event.meta!.emoji) } }
-                  : m
-              ),
+              [key]: (s.threads[key] ?? []).map((m) => {
+                if (m.id !== event.meta!.targetMessageId) return m;
+                updatedMsg = { ...m, reactions: { ...m.reactions, [event.from]: String(event.meta!.emoji) } };
+                return updatedMsg;
+              }),
             },
           }));
+          if (updatedMsg) saveMessage(me, key, updatedMsg).catch(() => {});
           return;
         }
         if (event.kind === 'edit' && event.meta?.targetMessageId) {
+          let updatedMsg: ChatMessage | null = null;
           set((s) => ({
             threads: {
               ...s.threads,
-              [key]: (s.threads[key] ?? []).map((m) => (m.id === event.meta!.targetMessageId ? { ...m, text, edited: true } : m)),
+              [key]: (s.threads[key] ?? []).map((m) => {
+                if (m.id !== event.meta!.targetMessageId) return m;
+                updatedMsg = { ...m, text, edited: true };
+                return updatedMsg;
+              }),
             },
           }));
+          if (updatedMsg) saveMessage(me, key, updatedMsg).catch(() => {});
           return;
         }
         if (event.kind === 'poll_vote' && event.meta?.targetMessageId) {
           const optionIndex = Number(event.meta.optionIndex);
+          let updatedMsg: ChatMessage | null = null;
           set((s) => ({
             threads: {
               ...s.threads,
-              [key]: (s.threads[key] ?? []).map((m) =>
-                m.id === event.meta!.targetMessageId
-                  ? { ...m, meta: { ...m.meta, votes: { ...(m.meta?.votes as Record<string, number> | undefined), [event.from]: optionIndex } } }
-                  : m
-              ),
+              [key]: (s.threads[key] ?? []).map((m) => {
+                if (m.id !== event.meta!.targetMessageId) return m;
+                updatedMsg = { ...m, meta: { ...m.meta, votes: { ...(m.meta?.votes as Record<string, number> | undefined), [event.from]: optionIndex } } };
+                return updatedMsg;
+              }),
             },
           }));
+          if (updatedMsg) saveMessage(me, key, updatedMsg).catch(() => {});
           return;
         }
 
         set((s) => ({ threads: { ...s.threads, [key]: [...(s.threads[key] ?? []), msg] } }));
+        saveMessage(me, key, msg).catch(() => {});
       }
 
       if (event.type === 'typing') {
@@ -162,9 +225,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       if (event.type === 'read') {
         const key = chatKey(event.groupId ?? event.from, !!event.groupId);
+        let updatedMsg: ChatMessage | null = null;
         set((s) => ({
-          threads: { ...s.threads, [key]: (s.threads[key] ?? []).map((m) => (m.id === event.messageId ? { ...m, status: 'read' as const } : m)) },
+          threads: {
+            ...s.threads,
+            [key]: (s.threads[key] ?? []).map((m) => {
+              if (m.id !== event.messageId) return m;
+              updatedMsg = { ...m, status: 'read' as const };
+              return updatedMsg;
+            }),
+          },
         }));
+        if (updatedMsg) saveMessage(me, key, updatedMsg).catch(() => {});
       }
     });
   },
@@ -190,15 +262,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
       reactions: {},
     };
     set((s) => ({ threads: { ...s.threads, [key]: [...(s.threads[key] ?? []), optimistic] } }));
+    saveMessage(me, key, optimistic).catch(() => {});
 
     // 1-1: encrypt to the recipient's public key. Group: relay fans out — for
     // the simple-E2E scope we encrypt individually per online member below.
     if (!isGroup) {
       const recipientKey = await fetchPublicKey(targetId);
       if (!recipientKey) {
-        set((s) => ({
-          threads: { ...s.threads, [key]: (s.threads[key] ?? []).map((m) => (m.tempId === tempId ? { ...m, status: 'failed', failReason: 'no_key' } : m)) },
-        }));
+        const failed = { ...optimistic, status: 'failed' as const, failReason: 'no_key' };
+        set((s) => ({ threads: { ...s.threads, [key]: (s.threads[key] ?? []).map((m) => (m.tempId === tempId ? failed : m)) } }));
+        saveMessage(me, key, failed).catch(() => {});
         return;
       }
       const payload = encryptMessage(text, recipientKey, kp.secretKey);
@@ -249,11 +322,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
       reactions: {},
     };
     set((s) => ({ threads: { ...s.threads, [key]: [...(s.threads[key] ?? []), optimistic] } }));
+    saveMessage(me, key, optimistic).catch(() => {});
 
     const json = JSON.stringify(content);
     const encryptTo = isGroup ? kp.publicKey : await fetchPublicKey(targetId);
     if (!encryptTo) {
-      set((s) => ({ threads: { ...s.threads, [key]: (s.threads[key] ?? []).map((m) => (m.tempId === tempId ? { ...m, status: 'failed', failReason: 'no_key' } : m)) } }));
+      const failed = { ...optimistic, status: 'failed' as const, failReason: 'no_key' };
+      set((s) => ({ threads: { ...s.threads, [key]: (s.threads[key] ?? []).map((m) => (m.tempId === tempId ? failed : m)) } }));
+      saveMessage(me, key, failed).catch(() => {});
       return;
     }
     const payload = encryptMessage(json, encryptTo, kp.secretKey);
@@ -288,9 +364,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const me = useAuthStore.getState().session?.user.id;
     if (!me) return;
     const key = chatKey(targetId, isGroup);
+    let updatedMsg: ChatMessage | null = null;
     set((s) => ({
-      threads: { ...s.threads, [key]: (s.threads[key] ?? []).map((m) => (m.id === messageId ? { ...m, reactions: { ...m.reactions, [me]: emoji } } : m)) },
+      threads: {
+        ...s.threads,
+        [key]: (s.threads[key] ?? []).map((m) => {
+          if (m.id !== messageId) return m;
+          updatedMsg = { ...m, reactions: { ...m.reactions, [me]: emoji } };
+          return updatedMsg;
+        }),
+      },
     }));
+    if (updatedMsg) saveMessage(me, key, updatedMsg).catch(() => {});
     relayClient.send({
       type: 'message:send',
       tempId: `react-${Date.now()}`,
@@ -306,14 +391,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const me = useAuthStore.getState().session?.user.id;
     if (!me) return;
     const key = chatKey(targetId, isGroup);
+    let updatedMsg: ChatMessage | null = null;
     set((s) => ({
       threads: {
         ...s.threads,
-        [key]: (s.threads[key] ?? []).map((m) =>
-          m.id === messageId ? { ...m, meta: { ...m.meta, votes: { ...(m.meta?.votes as Record<string, number> | undefined), [me]: optionIndex } } } : m
-        ),
+        [key]: (s.threads[key] ?? []).map((m) => {
+          if (m.id !== messageId) return m;
+          updatedMsg = { ...m, meta: { ...m.meta, votes: { ...(m.meta?.votes as Record<string, number> | undefined), [me]: optionIndex } } };
+          return updatedMsg;
+        }),
       },
     }));
+    if (updatedMsg) saveMessage(me, key, updatedMsg).catch(() => {});
     relayClient.send({
       type: 'message:send',
       tempId: `vote-${Date.now()}`,
@@ -326,10 +415,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   editMessage: (targetId, isGroup, messageId, newText) => {
+    const me = useAuthStore.getState().session?.user.id;
     const key = chatKey(targetId, isGroup);
+    let updatedMsg: ChatMessage | null = null;
     set((s) => ({
-      threads: { ...s.threads, [key]: (s.threads[key] ?? []).map((m) => (m.id === messageId ? { ...m, text: newText, edited: true } : m)) },
+      threads: {
+        ...s.threads,
+        [key]: (s.threads[key] ?? []).map((m) => {
+          if (m.id !== messageId) return m;
+          updatedMsg = { ...m, text: newText, edited: true };
+          return updatedMsg;
+        }),
+      },
     }));
+    if (me && updatedMsg) saveMessage(me, key, updatedMsg).catch(() => {});
     (async () => {
       const kp = await getOrCreateDeviceKeyPair();
       if (!isGroup) {
@@ -342,17 +441,33 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   deleteLocal: (targetId, isGroup, messageId) => {
+    const me = useAuthStore.getState().session?.user.id;
     const key = chatKey(targetId, isGroup);
-    set((s) => ({ threads: { ...s.threads, [key]: (s.threads[key] ?? []).map((m) => (m.id === messageId ? { ...m, deleted: true, text: undefined } : m)) } }));
+    let updatedMsg: ChatMessage | null = null;
+    set((s) => ({
+      threads: {
+        ...s.threads,
+        [key]: (s.threads[key] ?? []).map((m) => {
+          if (m.id !== messageId) return m;
+          updatedMsg = { ...m, deleted: true, text: undefined };
+          return updatedMsg;
+        }),
+      },
+    }));
+    if (me && updatedMsg) saveMessage(me, key, updatedMsg).catch(() => {});
   },
 
   togglePin: (targetId, isGroup, messageId) => {
+    const me = useAuthStore.getState().session?.user.id;
     const key = chatKey(targetId, isGroup);
+    let nowPinned = false;
     set((s) => {
       const cur = s.pinned[key] ?? [];
-      const next = cur.includes(messageId) ? cur.filter((id) => id !== messageId) : [...cur, messageId];
+      nowPinned = !cur.includes(messageId);
+      const next = nowPinned ? [...cur, messageId] : cur.filter((id) => id !== messageId);
       return { pinned: { ...s.pinned, [key]: next } };
     });
+    if (me) setPinned(me, key, messageId, nowPinned).catch(() => {});
   },
 
   clearThread: (key) => set((s) => ({ threads: { ...s.threads, [key]: [] } })),

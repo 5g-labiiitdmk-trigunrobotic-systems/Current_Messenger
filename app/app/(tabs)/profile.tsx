@@ -77,7 +77,8 @@ export default function ProfileScreen() {
           <Text style={{ fontSize: 12.5, fontFamily: fontFamilies.semibold, color: '#34d27b' }}>0 bytes, always</Text>
         </View>
         <Text style={{ fontSize: 12, color: tokens.text2, fontFamily: fontFamilies.regular, marginTop: 6, lineHeight: 17 }}>
-          Messages relay live and are never written to any database — not even encrypted, not even temporarily.
+          Messages relay live and are never written to any server-side database — not even ours, not even encrypted, not even temporarily. They're
+          saved only on your own device, encrypted at rest, purely for your local chat history.
         </Text>
       </Glass>
 
