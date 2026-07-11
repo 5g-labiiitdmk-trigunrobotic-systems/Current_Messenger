@@ -39,7 +39,14 @@ export type ClientEvent =
   | { type: 'call:signal'; to: string; signal: Record<string, unknown> }
   | { type: 'session:request'; to: string }
   | { type: 'session:respond'; peerId: string; accept: boolean }
-  | { type: 'ping' };
+  | { type: 'ping' }
+  // Reply to a server-initiated heartbeat ping (see ServerEvent 'ping').
+  // Deliberately a plain JSON app message, not a native WebSocket
+  // protocol-level pong control frame — React Native's WebSocket has
+  // documented, inconsistent handling of control frames across platforms,
+  // so relying on socket.ping()/'pong' at the transport level risked the
+  // server wrongly believing a perfectly healthy connection was dead.
+  | { type: 'pong' };
 
 export type ServerEvent =
   | { type: 'auth:ok'; userId: string }
@@ -64,4 +71,5 @@ export type ServerEvent =
   | { type: 'session:rejected'; from: string; reason: 'declined' | 'timeout' | 'peer_disconnected' }
   | { type: 'session:request_withdrawn'; from: string } // to the target — the requester disconnected before you responded
   | { type: 'error'; message: string }
-  | { type: 'pong' };
+  | { type: 'pong' } // reply to a client-initiated 'ping' (unused by the current client, kept for compat)
+  | { type: 'ping' }; // server-initiated heartbeat — client must reply with ClientEvent 'pong'

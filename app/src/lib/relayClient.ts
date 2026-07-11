@@ -59,6 +59,14 @@ class RelayClient {
       try {
         const event: ServerEvent = JSON.parse(e.data);
         if (event.type === 'auth:ok') this.setStatus('connected');
+        // Server-initiated heartbeat — reply immediately so the relay
+        // knows this connection is still alive. A plain JSON app message,
+        // not a native WebSocket protocol-level pong control frame — see
+        // the matching comment in server/src/index.ts for why.
+        if (event.type === 'ping') {
+          this.rawSend({ type: 'pong' });
+          return;
+        }
         this.handlers.forEach((h) => h(event));
       } catch {
         // ignore malformed frames

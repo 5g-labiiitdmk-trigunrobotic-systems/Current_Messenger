@@ -37,7 +37,8 @@ export type ClientEvent =
   | { type: 'call:signal'; to: string; signal: Record<string, unknown> }
   | { type: 'session:request'; to: string }
   | { type: 'session:respond'; peerId: string; accept: boolean }
-  | { type: 'ping' };
+  | { type: 'ping' }
+  | { type: 'pong' }; // reply to a server-initiated heartbeat ping — see relayClient.ts
 
 export type ServerEvent =
   | { type: 'auth:ok'; userId: string }
@@ -59,4 +60,5 @@ export type ServerEvent =
   | { type: 'session:rejected'; from: string; reason: 'declined' | 'timeout' | 'peer_disconnected' }
   | { type: 'session:request_withdrawn'; from: string }
   | { type: 'error'; message: string }
-  | { type: 'pong' };
+  | { type: 'pong' }
+  | { type: 'ping' }; // server-initiated heartbeat — relayClient.ts auto-replies with ClientEvent 'pong'

@@ -75,8 +75,6 @@ wss.on('connection', (socket) => {
     }
   }, AUTH_TIMEOUT_MS);
 
-  socket.on('pong', () => missedPongs.set(socket, 0));
-
   socket.on('message', async (raw) => {
     let event: ClientEvent;
     try {
@@ -88,6 +86,14 @@ wss.on('connection', (socket) => {
 
     if (event.type === 'ping') {
       send(socket, { type: 'pong' });
+      return;
+    }
+
+    if (event.type === 'pong') {
+      // Reply to our own heartbeat ping below — see the doc comment there
+      // for why this is a JSON app message instead of a native WebSocket
+      // protocol-level pong control frame.
+      missedPongs.set(socket, 0);
       return;
     }
 
@@ -214,6 +220,23 @@ wss.on('connection', (socket) => {
 // pongs tolerated (~60-90s total grace) balances catching real drops
 // reasonably fast against not killing a connection over one slow/lost
 // pong on a flaky real-world mobile link.
+//
+// Deliberately a JSON app message (ServerEvent 'ping' / ClientEvent
+// 'pong'), NOT native WebSocket protocol-level ping/pong control frames
+// (socket.ping() / socket.on('pong', ...)). This was the original design
+// and it caused a real regression: React Native's WebSocket has
+// documented, inconsistent control-frame handling across iOS/Android
+// (github.com/facebook/react-native issues #23825, #30020, #14855), so
+// pongs weren't reliably reaching the server even from perfectly healthy,
+// actively-used connections. The server would then terminate a live
+// connection every ~60-90s, which briefly flipped presence to offline
+// (self-healing fast enough on reconnect to look "online" at a glance)
+// but also silently wiped the chat-session state that reconnect doesn't
+// automatically restore — the actual cause of "message send fails despite
+// an already-accepted session." A plain JSON message has no such
+// ambiguity: it's handled by the exact same ordinary code path as every
+// other app message, on every platform, with no reliance on control-frame
+// support at all.
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const MAX_MISSED_PONGS = 2;
 const missedPongs = new WeakMap<WebSocket, number>();
@@ -226,7 +249,7 @@ setInterval(() => {
       return;
     }
     missedPongs.set(socket, missed + 1);
-    socket.ping();
+    send(socket, { type: 'ping' });
   });
 }, HEARTBEAT_INTERVAL_MS);
 
