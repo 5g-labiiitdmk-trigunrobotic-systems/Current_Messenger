@@ -10,18 +10,15 @@ import { useSignupStore } from '../../src/state/signupStore';
 
 /**
  * Landing spot for a resumed session (app killed mid-signup, or the user
- * just tapped the email confirmation link) and for a returning login that's
- * missing a required step. Routes to whichever step is still incomplete:
- * email → phone → TOTP enrollment → tabs. A cold-start resume can't recover
- * the in-memory signup wizard's username/phone, so it restarts the
- * phone+TOTP mini-flow from add-phone — the same trade-off this screen
- * already accepted pre-TOTP for a lost username.
+ * just tapped the email confirmation link). Routes to whichever step is
+ * still incomplete: email → phone → tabs. A cold-start resume can't
+ * recover the in-memory signup wizard's username, so a lost-username
+ * resume just restarts the phone verification step from scratch.
  */
 export default function FinishSetupScreen() {
   const { tokens } = useTheme();
   const session = useAuthStore((s) => s.session);
   const profile = useAuthStore((s) => s.profile);
-  const needsProfileSetup = useAuthStore((s) => s.needsProfileSetup);
   const set = useSignupStore((s) => s.set);
 
   useEffect(() => {
@@ -37,23 +34,14 @@ export default function FinishSetupScreen() {
     }
     if (!profile) {
       // No public.users row yet — phone verification hasn't happened
-      // (finalizeAccount only ever runs from totp-setup.tsx, after phone
-      // verification). Restart the phone+TOTP mini-flow from scratch.
+      // (finalizeAccount only ever runs from verify-phone.tsx, once phone
+      // verification succeeds). Restart the phone-verification step.
       set({ email: session.user.email ?? '' });
       router.replace('/(auth)/add-phone');
       return;
     }
-    if (needsProfileSetup) {
-      // Profile row exists (email + phone already verified) but no
-      // verified TOTP factor — either mid-signup-interrupted or an older
-      // account created before TOTP existed. Either way, TOTP enrollment
-      // is the only thing left.
-      set({ username: profile.username, email: profile.email, phone: profile.phone ?? '' });
-      router.replace('/(auth)/totp-setup');
-      return;
-    }
     router.replace('/(tabs)/chats');
-  }, [session, profile, needsProfileSetup]);
+  }, [session, profile]);
 
   return (
     <ScreenScaffold scroll={false}>

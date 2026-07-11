@@ -7,10 +7,14 @@ import { GlassField } from '../../src/components/GlassField';
 import { PrimaryButton } from '../../src/components/Buttons';
 import { useSignupStore } from '../../src/state/signupStore';
 import { confirmPhoneOtp } from '../../src/lib/firebase';
+import { finalizeAccount } from '../../src/lib/account';
+import { supabase } from '../../src/lib/supabase';
+import { useAuthStore } from '../../src/state/authStore';
+import { registerForPushNotifications } from '../../src/lib/push';
 import { appAlert } from '../../src/state/alertStore';
 
 export default function VerifyPhoneScreen() {
-  const { phone, phoneConfirmation, set } = useSignupStore();
+  const { phone, phoneConfirmation, username, email, reset } = useSignupStore();
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -27,11 +31,22 @@ export default function VerifyPhoneScreen() {
     setLoading(true);
     try {
       const cred = await confirmPhoneOtp(phoneConfirmation, code.trim());
-      // Phone is verified, but the account isn't finalized yet — TOTP
-      // enrollment (the next screen) still has to succeed first. Carry the
-      // Firebase UID forward instead of calling finalizeAccount() here.
-      set({ firebaseUid: cred.user.uid });
-      router.replace('/(auth)/totp-setup');
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) throw new Error('No active session — please log in again.');
+
+      await finalizeAccount({
+        userId: session.user.id,
+        username,
+        email,
+        phone,
+        firebaseUid: cred.user.uid,
+      });
+      await useAuthStore.getState().refreshProfile();
+      registerForPushNotifications(session.user.id).catch(() => {});
+      reset();
+      router.replace('/(tabs)/chats');
     } catch (e: any) {
       appAlert('Verification failed', e?.message ?? 'Incorrect code.');
     } finally {
@@ -45,7 +60,7 @@ export default function VerifyPhoneScreen() {
       <View style={{ marginTop: 28 }}>
         <GlassField label="Verification code" placeholder="123456" keyboardType="number-pad" maxLength={6} value={code} onChangeText={setCode} style={{ letterSpacing: 6, fontSize: 20 }} />
       </View>
-      <PrimaryButton title="Verify phone" onPress={onVerify} loading={loading} style={{ marginTop: 22 }} />
+      <PrimaryButton title="Verify & create account" onPress={onVerify} loading={loading} style={{ marginTop: 22 }} />
     </ScreenScaffold>
   );
 }

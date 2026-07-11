@@ -5,7 +5,6 @@ import type { UserRow } from '../types/database';
 import { getOrCreateDeviceKeyPair, publishPublicKey } from '../lib/keystore';
 import { relayClient } from '../lib/relayClient';
 import { registerForPushNotifications } from '../lib/push';
-import { hasVerifiedTotpFactor } from '../lib/totp';
 
 interface AuthState {
   session: Session | null;
@@ -15,16 +14,8 @@ interface AuthState {
    * previously this failed completely silently, leaving profile stuck at
    * null forever with no indication anything was wrong. */
   profileError: string | null;
-  /** true once auth.users exists but public.users row (fully-verified profile) doesn't yet,
-   * OR the account has no verified TOTP factor (retrofits older accounts through totp-setup) */
+  /** true once auth.users exists but public.users row (fully-verified profile) doesn't yet */
   needsProfileSetup: boolean;
-  /** Session-scoped, never persisted. Defaults true so a resumed/restored
-   * session (app relaunch) is trusted rather than re-challenged — that's
-   * the existing AppLockGate biometric feature's job, not this flag's.
-   * Explicitly set false by login.tsx right after a fresh password
-   * sign-in when the account has TOTP enrolled, then back to true once
-   * totp-verify.tsx confirms the code. */
-  mfaVerified: boolean;
   initialize: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   updateProfile: (patch: Partial<Pick<UserRow, 'display_name' | 'bio' | 'status_visibility'>>) => Promise<void>;
@@ -42,7 +33,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   initializing: true,
   profileError: null,
   needsProfileSetup: false,
-  mfaVerified: true,
 
   initialize: async () => {
     const { data } = await supabase.auth.getSession();
@@ -61,7 +51,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           registerForPushNotifications(session.user.id).catch(() => {});
         }
       } else {
-        set({ profile: null, needsProfileSetup: false, mfaVerified: true });
+        set({ profile: null, needsProfileSetup: false });
         relayClient.disconnect();
       }
     });
@@ -77,16 +67,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ profileError: error.message });
       return;
     }
-    let needsSetup = !data || !data.email_verified || !data.phone_verified;
-    if (!needsSetup) {
-      try {
-        if (!(await hasVerifiedTotpFactor())) needsSetup = true;
-      } catch {
-        // MFA check itself failed (network, etc.) — fail open rather than
-        // locking out a returning user with an otherwise-valid profile.
-      }
-    }
-    set({ profile: data as UserRow | null, needsProfileSetup: needsSetup, profileError: null });
+    set({ profile: data as UserRow | null, needsProfileSetup: !data || !data.email_verified || !data.phone_verified, profileError: null });
   },
 
   updateProfile: async (patch) => {
@@ -119,6 +100,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   signOut: async () => {
     relayClient.disconnect();
     await supabase.auth.signOut();
-    set({ session: null, profile: null, needsProfileSetup: false, mfaVerified: true });
+    set({ session: null, profile: null, needsProfileSetup: false });
   },
 }));

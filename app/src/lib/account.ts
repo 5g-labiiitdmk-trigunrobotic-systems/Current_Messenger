@@ -1,10 +1,11 @@
 import { supabase } from './supabase';
 
 /**
- * Creates (or completes) the public.users row once email AND phone are
- * verified and TOTP enrollment has succeeded. This is the single point where
- * an account becomes "real" — before this, the auth.users row exists but the
- * account can't be discovered, added as a contact, or message anyone.
+ * Creates (or completes) the public.users row once both email and phone are
+ * verified — the two mandatory verification factors. This is the single
+ * point where an account becomes "real" — before this, the auth.users row
+ * exists but the account can't be discovered, added as a contact, or
+ * message anyone.
  */
 export async function finalizeAccount(params: {
   userId: string;

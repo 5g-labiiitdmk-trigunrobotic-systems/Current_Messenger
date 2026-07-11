@@ -44,17 +44,7 @@ export default function LoginScreen() {
     await useAuthStore.getState().refreshProfile();
     setLoading(false);
     const needsSetup = useAuthStore.getState().needsProfileSetup;
-    if (needsSetup) {
-      // Covers both an incomplete signup (missing email/phone verification)
-      // and a fully-verified account with no TOTP factor enrolled yet —
-      // finish-setup.tsx routes each case to the right screen.
-      router.replace('/(auth)/finish-setup');
-      return;
-    }
-    // Account is fully set up, including a verified TOTP factor — every
-    // login (not just signup) requires a fresh 2FA challenge before tabs.
-    useAuthStore.setState({ mfaVerified: false });
-    router.replace('/(auth)/totp-verify');
+    router.replace(needsSetup ? '/(auth)/finish-setup' : '/(tabs)/chats');
   };
 
   const onForgot = async () => {

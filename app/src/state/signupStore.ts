@@ -8,10 +8,6 @@ interface SignupState {
   password: string;
   phone: string;
   phoneConfirmation: FirebaseAuthTypes.ConfirmationResult | null;
-  /** Carried forward from verify-phone.tsx to totp-setup.tsx, where
-   * finalizeAccount() is now actually called — account creation is
-   * deferred until TOTP enrollment completes. */
-  firebaseUid: string | null;
   set: (partial: Partial<Omit<SignupState, 'set' | 'reset'>>) => void;
   reset: () => void;
 }
@@ -22,7 +18,6 @@ export const useSignupStore = create<SignupState>((set) => ({
   password: '',
   phone: '',
   phoneConfirmation: null,
-  firebaseUid: null,
   set: (partial) => set(partial),
-  reset: () => set({ username: '', email: '', password: '', phone: '', phoneConfirmation: null, firebaseUid: null }),
+  reset: () => set({ username: '', email: '', password: '', phone: '', phoneConfirmation: null }),
 }));
