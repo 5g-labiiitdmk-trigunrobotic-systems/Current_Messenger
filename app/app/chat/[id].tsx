@@ -283,7 +283,7 @@ export default function ChatScreen() {
               <Path d="M15 18l-6-6 6-6" />
             </Svg>
           </Pressable>
-          <Avatar hue={contact.avatar_hue} size={42} online={isOnline} label={contact.display_name || contact.username} />
+          <Avatar hue={contact.avatar_hue} photoUrl={contact.avatar_url} size={42} online={isOnline} label={contact.display_name || contact.username} />
           {/* minWidth: 0 lets this flex child shrink below its content's
               natural width — without it, numberOfLines/ellipsizeMode on the
               name below has no effect and a long unbroken username (e.g. no

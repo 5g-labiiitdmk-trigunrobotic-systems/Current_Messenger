@@ -13,6 +13,7 @@ export interface ConversationRow {
   isGroup: boolean;
   name: string;
   hue: number;
+  photoUrl: string | null;
   online: boolean;
   preview: string;
   time: string;
@@ -47,6 +48,7 @@ export function useConversationRows(): ConversationRow[] {
         isGroup: false,
         name: contact.display_name || contact.username,
         hue: contact.avatar_hue,
+        photoUrl: contact.avatar_url,
         online: isPresenceVisible(contact) && presence[contact.id]?.status === 'online',
         preview: last ? previewFor(last) : 'Say hello — nothing is stored, so history starts fresh each session.',
         time: last ? timeLabel(last.sentAt) : '',
@@ -66,6 +68,7 @@ export function useConversationRows(): ConversationRow[] {
         isGroup: true,
         name: group.name,
         hue: 128,
+        photoUrl: null,
         online: false,
         preview: last ? previewFor(last) : `${group.memberIds.length} members — this chat exists only while everyone's session lasts.`,
         time: last ? timeLabel(last.sentAt) : '',

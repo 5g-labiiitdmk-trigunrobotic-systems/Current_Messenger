@@ -54,6 +54,19 @@ Supabase isn't on it), so none of this has been verified live from within a
 session — verify from your own machine/device, or add the host to this
 environment's egress allowlist if you want a future session able to check.
 
+**Known limitation — resend uses Supabase's own rate-limited default
+mailer.** No custom SMTP is configured (see above), so both the original
+signup email and any `auth.resend()` call go through Supabase's shared
+built-in email service, which enforces a low per-project rate limit
+specifically because it's meant for development/testing, not real user
+traffic (historically a handful of emails per hour). This is the most
+likely explanation if a resend silently doesn't arrive shortly after the
+original signup email did — the client already surfaces whatever error
+Supabase returns (`verify-email.tsx`'s `onResend`), so check that alert's
+message first. Fix: configure a custom SMTP provider under **Auth → Emails
+→ SMTP Settings** in the Supabase dashboard (Resend is a reasonable choice
+— free tier, simple API-key setup). Can't be fixed from application code.
+
 ## 2. Phone verification — removed (but `google-services.json` still matters — see below)
 
 Phone verification (Firebase Phone Auth) was built, then removed, twice

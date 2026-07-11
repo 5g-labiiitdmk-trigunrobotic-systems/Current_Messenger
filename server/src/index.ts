@@ -4,7 +4,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import type { ClientEvent, ServerEvent } from './protocol.js';
 import { relayState } from './state.js';
 import { verifyUserToken, areApprovedContacts, isBlocked, getUsername, logTransfer } from './supabaseAdmin.js';
-import { pingOfflineRecipient } from './pushPing.js';
+import { pingOfflineRecipient, pingIncomingCall } from './pushPing.js';
 
 const PORT = Number(process.env.PORT) || 8787;
 const AUTH_TIMEOUT_MS = 10_000;
@@ -108,6 +108,12 @@ wss.on('connection', (socket) => {
       clearTimeout(authTimer);
       relayState.addConnection(userId, socket);
       send(socket, { type: 'auth:ok', userId });
+      // Snapshot of who's already online — broadcastPresence below only
+      // reaches sockets that were connected *before* this one, so without
+      // this the newly-connecting client would have no way to learn who
+      // was already online until each of those contacts' presence next
+      // changes for some unrelated reason.
+      send(socket, { type: 'presence:snapshot', onlineUserIds: relayState.onlineUserIds().filter((id) => id !== userId) });
       broadcastPresence(userId, 'online');
       return;
     }
@@ -175,6 +181,16 @@ wss.on('connection', (socket) => {
         if (!(await areApprovedContacts(userId, event.to))) break;
         const s = relayState.getSocket(event.to);
         if (s) send(s, { type: 'call:signal', from: userId, signal: event.signal });
+        if (event.signal.kind === 'ring') {
+          // Fired unconditionally (not gated on relayState.isOnline), since
+          // an open WebSocket doesn't tell us whether the recipient's app is
+          // foregrounded or just backgrounded with the screen off — see
+          // pingIncomingCall's own doc comment.
+          const callKind = event.signal.callKind === 'video' ? 'video' : 'voice';
+          getUsername(userId)
+            .then((callerUsername) => pingIncomingCall(event.to, callerUsername, callKind))
+            .catch(() => {});
+        }
         break;
       }
       case 'session:request': {

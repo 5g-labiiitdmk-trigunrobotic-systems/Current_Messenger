@@ -86,6 +86,18 @@ export default function CallScreen() {
     }
   }, [phase]);
 
+  // Defensive guard: this screen has no accept/decline controls, only
+  // in-call ones (mute/camera/speaker/hangup) — it must never be the first
+  // thing a receiver sees for a call they haven't accepted yet. If it's
+  // ever reached while still 'ringing-in' (e.g. a duplicate/late navigation
+  // event), bounce to the real ringing screen instead of stranding the
+  // user on a screen with no way to answer.
+  useEffect(() => {
+    if (phase === 'ringing-in') {
+      router.replace('/incoming-call');
+    }
+  }, [phase]);
+
   const name = contact?.display_name || contact?.username || 'Unknown';
   const isVideo = kind === 'video' && !cameraOff;
   const showRemoteVideo = isVideo && !!remoteStream;
@@ -113,7 +125,7 @@ export default function CallScreen() {
         {!showRemoteVideo && (
           <>
             <View style={{ marginTop: 60 }}>
-              <Avatar hue={contact?.avatar_hue ?? 265} size={140} label={name} />
+              <Avatar hue={contact?.avatar_hue ?? 265} photoUrl={contact?.avatar_url} size={140} label={name} />
             </View>
             <Text style={{ fontSize: 28, fontFamily: fontFamilies.black, color: '#fff', marginTop: 26 }}>{name}</Text>
           </>

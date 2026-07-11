@@ -11,6 +11,7 @@ export interface UserRow {
   phone_verified: boolean;
   firebase_uid: string | null;
   avatar_hue: number;
+  avatar_url: string | null;
   bio: string;
   status_visibility: 'everyone' | 'contacts' | 'nobody';
   last_seen_at: string | null;

@@ -49,6 +49,7 @@ export type ServerEvent =
   | { type: 'typing'; from: string; groupId?: string; isTyping: boolean }
   | { type: 'read'; from: string; groupId?: string; messageId: string }
   | { type: 'presence'; userId: string; status: 'online' | 'offline'; lastSeenAt?: string }
+  | { type: 'presence:snapshot'; onlineUserIds: string[] }
   | { type: 'group:created'; groupId: string; name: string; memberIds: string[]; isBroadcast?: boolean }
   | { type: 'group:invited'; groupId: string; name: string; from: string; memberIds: string[]; isBroadcast?: boolean }
   | { type: 'group:member_left'; groupId: string; userId: string }

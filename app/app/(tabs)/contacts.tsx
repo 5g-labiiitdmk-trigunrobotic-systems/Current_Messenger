@@ -72,7 +72,7 @@ export default function ContactsScreen() {
         <Glass radius={22} style={{ marginTop: 12, overflow: 'hidden' }}>
           {results.map((u, i) => (
             <View key={u.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderBottomWidth: i === results.length - 1 ? 0 : 1, borderBottomColor: tokens.glassBorder }}>
-              <Avatar hue={u.avatar_hue} size={40} label={u.display_name || u.username} />
+              <Avatar hue={u.avatar_hue} photoUrl={u.avatar_url} size={40} label={u.display_name || u.username} />
               <View style={{ flex: 1 }}>
                 <Text style={{ fontFamily: fontFamilies.bold, color: tokens.text, fontSize: 14.5 }}>{u.display_name || u.username}</Text>
                 <Text style={{ fontFamily: fontFamilies.medium, color: tokens.text2, fontSize: 12.5 }}>@{u.username}</Text>
@@ -99,7 +99,7 @@ export default function ContactsScreen() {
           <Glass radius={22} style={{ overflow: 'hidden' }}>
             {incoming.map((r, i) => (
               <View key={r.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderBottomWidth: i === incoming.length - 1 ? 0 : 1, borderBottomColor: tokens.glassBorder }}>
-                <Avatar hue={r.otherUser.avatar_hue} size={44} label={r.otherUser.display_name || r.otherUser.username} />
+                <Avatar hue={r.otherUser.avatar_hue} photoUrl={r.otherUser.avatar_url} size={44} label={r.otherUser.display_name || r.otherUser.username} />
                 <View style={{ flex: 1 }}>
                   <Text style={{ fontFamily: fontFamilies.bold, color: tokens.text, fontSize: 14.5 }}>{r.otherUser.display_name || r.otherUser.username}</Text>
                   <Text style={{ fontFamily: fontFamilies.medium, color: tokens.text2, fontSize: 12.5 }}>wants to add you</Text>
@@ -146,7 +146,7 @@ export default function ContactsScreen() {
           <View style={{ flexDirection: 'row', gap: 14, flexWrap: 'wrap' }}>
             {onlineNow.map((c) => (
               <Pressable key={c.id} onPress={() => router.push(`/chat/${c.id}`)} style={{ alignItems: 'center', gap: 6 }}>
-                <Avatar hue={c.avatar_hue} size={58} online label={c.display_name || c.username} />
+                <Avatar hue={c.avatar_hue} photoUrl={c.avatar_url} size={58} online label={c.display_name || c.username} />
                 <Text style={{ fontSize: 11, fontFamily: fontFamilies.semibold, color: tokens.text2, maxWidth: 60 }} numberOfLines={1}>
                   {c.display_name || c.username}
                 </Text>
@@ -165,7 +165,7 @@ export default function ContactsScreen() {
         ) : (
           approved.map((c, i) => (
             <Pressable key={c.id} onPress={() => router.push(`/chat/${c.id}`)} style={{ flexDirection: 'row', alignItems: 'center', gap: 13, padding: 11, paddingHorizontal: 16, borderBottomWidth: i === approved.length - 1 ? 0 : 1, borderBottomColor: tokens.glassBorder }}>
-              <Avatar hue={c.avatar_hue} size={46} online={isPresenceVisible(c) && presence[c.id]?.status === 'online'} label={c.display_name || c.username} />
+              <Avatar hue={c.avatar_hue} photoUrl={c.avatar_url} size={46} online={isPresenceVisible(c) && presence[c.id]?.status === 'online'} label={c.display_name || c.username} />
               <View style={{ flex: 1 }}>
                 <Text style={{ fontSize: 15, fontFamily: fontFamilies.bold, color: tokens.text }}>{c.display_name || c.username}</Text>
                 <Text style={{ fontSize: 12.5, color: tokens.text2, fontFamily: fontFamilies.medium, marginTop: 1 }}>@{c.username}</Text>

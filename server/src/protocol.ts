@@ -57,6 +57,12 @@ export type ServerEvent =
   | { type: 'typing'; from: string; groupId?: string; isTyping: boolean }
   | { type: 'read'; from: string; groupId?: string; messageId: string }
   | { type: 'presence'; userId: string; status: 'online' | 'offline'; lastSeenAt?: string }
+  // Sent once, right after auth:ok — presence otherwise only broadcasts
+  // future transitions to already-connected sockets, so without this a
+  // freshly-connecting client never learns who was already online before
+  // it connected (it would only find out once each of those contacts next
+  // disconnects/reconnects/toggles, which could be arbitrarily long after).
+  | { type: 'presence:snapshot'; onlineUserIds: string[] }
   | { type: 'group:created'; groupId: string; name: string; memberIds: string[]; isBroadcast?: boolean }
   | { type: 'group:invited'; groupId: string; name: string; from: string; memberIds: string[]; isBroadcast?: boolean }
   | { type: 'group:member_left'; groupId: string; userId: string }

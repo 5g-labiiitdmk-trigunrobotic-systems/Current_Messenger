@@ -34,8 +34,17 @@ export const usePresenceStore = create<PresenceState>((set, get) => ({
         set((s) => ({ byUser: { ...s.byUser, [event.userId]: { status: event.status, lastSeenAt: event.lastSeenAt } } }));
       }
       if (event.type === 'auth:ok') {
-        // fresh connection — presence map resets, will repopulate as peers act
+        // fresh connection — presence map resets, repopulated by the
+        // presence:snapshot the server sends right after this.
         set({ byUser: {} });
+      }
+      if (event.type === 'presence:snapshot') {
+        const now = new Date().toISOString();
+        set((s) => {
+          const byUser = { ...s.byUser };
+          for (const id of event.onlineUserIds) byUser[id] = { status: 'online', lastSeenAt: now };
+          return { byUser };
+        });
       }
     });
   },

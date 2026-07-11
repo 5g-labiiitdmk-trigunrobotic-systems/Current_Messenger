@@ -127,10 +127,10 @@ function BubbleContent({ m, isMe, a1, a2, tokens, meId, onVote }: any) {
       </Pressable>
     );
   }
-  if (m.kind === 'media' && m.meta?.imageBase64) {
+  if (m.kind === 'media' && m.meta?.base64) {
     return (
       <View style={{ borderRadius: 20, overflow: 'hidden' }}>
-        <Image source={{ uri: `data:${m.meta.mime ?? 'image/jpeg'};base64,${m.meta.imageBase64}` }} style={{ width: 220, height: 220 }} resizeMode="cover" />
+        <Image source={{ uri: `data:${m.meta.mime ?? 'image/jpeg'};base64,${m.meta.base64}` }} style={{ width: 220, height: 220 }} resizeMode="cover" />
       </View>
     );
   }

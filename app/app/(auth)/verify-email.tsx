@@ -22,11 +22,21 @@ import { appAlert } from '../../src/state/alertStore';
  * finish-setup.tsx does the actual account finalization + routing to the
  * main app — this screen just waits for email_confirmed_at to flip.
  */
+// Supabase's own default mailer (no custom SMTP configured — see
+// docs/SETUP.md) throttles resend requests for the same address; repeatedly
+// tapping "Resend" the moment it fails just re-triggers that same limit and
+// makes it look permanently broken. This client-side cooldown is a UX
+// safeguard, not a workaround for the limit itself — if resend keeps
+// failing even after waiting, that's a Supabase-dashboard SMTP setup issue,
+// not something fixable from here.
+const RESEND_COOLDOWN_SEC = 60;
+
 export default function VerifyEmailScreen() {
   const { tokens, a1 } = useTheme();
   const email = useSignupStore((s) => s.email);
   const session = useAuthStore((s) => s.session);
   const [resending, setResending] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
 
   useEffect(() => {
     if (session?.user.email_confirmed_at) {
@@ -34,13 +44,29 @@ export default function VerifyEmailScreen() {
     }
   }, [session]);
 
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const t = setInterval(() => setCooldown((s) => Math.max(0, s - 1)), 1000);
+    return () => clearInterval(t);
+  }, [cooldown > 0]);
+
   const onResend = async () => {
     setResending(true);
     const { error } = await supabase.auth.resend({ type: 'signup', email });
     setResending(false);
-    if (error) appAlert('Could not resend', error.message);
-    else appAlert('Email sent', `A new confirmation link was sent to ${email}. Tap it to continue.`);
+    if (error) {
+      appAlert('Could not resend', error.message);
+      // Even a failed attempt likely still counted against Supabase's own
+      // rate limit — start the cooldown regardless so the next tap doesn't
+      // immediately re-fail the same way.
+      setCooldown(RESEND_COOLDOWN_SEC);
+    } else {
+      appAlert('Email sent', `A new confirmation link was sent to ${email}. Tap it to continue.`);
+      setCooldown(RESEND_COOLDOWN_SEC);
+    }
   };
+
+  const disabled = resending || cooldown > 0;
 
   return (
     <ScreenScaffold>
@@ -56,8 +82,8 @@ export default function VerifyEmailScreen() {
         </Text>
       </Glass>
 
-      <Text onPress={resending ? undefined : onResend} style={{ textAlign: 'center', marginTop: 22, fontSize: 13.5, fontFamily: fontFamilies.bold, color: resending ? tokens.text3 : a1 }}>
-        {resending ? 'Sending…' : "Didn't get it? Resend email"}
+      <Text onPress={disabled ? undefined : onResend} style={{ textAlign: 'center', marginTop: 22, fontSize: 13.5, fontFamily: fontFamilies.bold, color: disabled ? tokens.text3 : a1 }}>
+        {resending ? 'Sending…' : cooldown > 0 ? `Resend available in ${cooldown}s` : "Didn't get it? Resend email"}
       </Text>
     </ScreenScaffold>
   );

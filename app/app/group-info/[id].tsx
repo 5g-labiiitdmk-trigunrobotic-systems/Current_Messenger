@@ -21,6 +21,7 @@ export default function GroupInfoScreen() {
   const leave = useGroupStore((s) => s.leave);
   const approved = useContactStore((s) => s.approved);
   const me = useAuthStore((s) => s.session?.user.id);
+  const myProfile = useAuthStore((s) => s.profile);
 
   if (!group) {
     return (
@@ -31,9 +32,9 @@ export default function GroupInfoScreen() {
   }
 
   const members = group.memberIds.map((uid) => {
-    if (uid === me) return { id: uid, name: 'You', hue: 265, isAdmin: uid === group.ownerId };
+    if (uid === me) return { id: uid, name: 'You', hue: 265, photoUrl: myProfile?.avatar_url ?? null, isAdmin: uid === group.ownerId };
     const c = approved.find((c) => c.id === uid);
-    return { id: uid, name: c?.display_name ?? c?.username ?? 'Member', hue: c?.avatar_hue ?? 200, isAdmin: uid === group.ownerId };
+    return { id: uid, name: c?.display_name ?? c?.username ?? 'Member', hue: c?.avatar_hue ?? 200, photoUrl: c?.avatar_url ?? null, isAdmin: uid === group.ownerId };
   });
 
   const onLeave = () => {
@@ -78,7 +79,7 @@ export default function GroupInfoScreen() {
       <Glass radius={22} style={{ overflow: 'hidden' }}>
         {members.map((m, i) => (
           <View key={m.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 13, padding: 12, paddingHorizontal: 16, borderBottomWidth: i === members.length - 1 ? 0 : 1, borderBottomColor: tokens.glassBorder }}>
-            <Avatar hue={m.hue} size={46} label={m.name} />
+            <Avatar hue={m.hue} photoUrl={m.photoUrl} size={46} label={m.name} />
             <Text style={{ flex: 1, fontSize: 15, fontFamily: fontFamilies.bold, color: tokens.text }}>{m.name}</Text>
             {m.isAdmin && (
               <View style={{ paddingVertical: 5, paddingHorizontal: 11, borderRadius: 10, backgroundColor: 'rgba(124,92,255,0.18)' }}>

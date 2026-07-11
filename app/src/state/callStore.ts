@@ -69,13 +69,16 @@ let pendingRemoteCandidates: unknown[] = [];
 let haveRemoteDescription = false;
 let ringTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
 let iceDisconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let endedResetTimer: ReturnType<typeof setTimeout> | null = null;
 let appStateSub: { remove: () => void } | null = null;
 
 function clearTimers() {
   if (ringTimeoutTimer) clearTimeout(ringTimeoutTimer);
   if (iceDisconnectTimer) clearTimeout(iceDisconnectTimer);
+  if (endedResetTimer) clearTimeout(endedResetTimer);
   ringTimeoutTimer = null;
   iceDisconnectTimer = null;
+  endedResetTimer = null;
 }
 
 function sendSignal(to: string, signal: CallSignal) {
@@ -306,6 +309,10 @@ export const useCallStore = create<CallState>((set, get) => ({
   },
 
   clearEnded: () => {
+    if (endedResetTimer) {
+      clearTimeout(endedResetTimer);
+      endedResetTimer = null;
+    }
     set({ phase: 'idle', peerId: null, kind: null, endReason: null, localStream: null, remoteStream: null, muted: false, cameraOff: false, connectedAt: null });
   },
 }));
@@ -401,4 +408,18 @@ function endCall(get: () => CallState, set: (partial: Partial<CallState>) => voi
     cameraOff: false,
     log,
   });
+
+  // Backstop for the idle->ended->idle cycle. Normally the in-call screen
+  // (call/[id].tsx) clears 'ended' back to 'idle' itself via clearEnded()
+  // after showing the end-of-call state for a moment — but that relies on
+  // that screen component staying mounted long enough to run its own
+  // useEffect timeout, which isn't guaranteed if the user navigates away
+  // immediately. Without this, phase gets stuck at 'ended' forever and
+  // ring()'s idle-only guard silently blocks every future call attempt.
+  endedResetTimer = setTimeout(() => {
+    endedResetTimer = null;
+    if (get().phase === 'ended') {
+      set({ phase: 'idle', peerId: null, kind: null, endReason: null, localStream: null, remoteStream: null, muted: false, cameraOff: false, connectedAt: null });
+    }
+  }, 2500);
 }

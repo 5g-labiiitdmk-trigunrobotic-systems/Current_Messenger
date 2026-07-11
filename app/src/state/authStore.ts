@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { Session } from '@supabase/supabase-js';
+import { decode } from 'base64-arraybuffer';
 import { supabase } from '../lib/supabase';
 import type { UserRow } from '../types/database';
 import { getOrCreateDeviceKeyPair, publishPublicKey } from '../lib/keystore';
@@ -21,6 +22,10 @@ interface AuthState {
   updateProfile: (patch: Partial<Pick<UserRow, 'display_name' | 'bio' | 'status_visibility'>>) => Promise<void>;
   /** Resolves to null on success, or a user-facing error message. */
   changeUsername: (username: string) => Promise<string | null>;
+  /** Uploads to Supabase Storage (never the users table directly) and saves
+   * the resulting public URL on the profile. Resolves to null on success,
+   * or a user-facing error message. */
+  uploadAvatar: (base64: string, mime: string) => Promise<string | null>;
   signOut: () => Promise<void>;
 }
 
@@ -94,6 +99,40 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       return error.code === '23505' ? 'That username is taken — try another.' : error.message;
     }
     set((s) => ({ profile: s.profile ? { ...s.profile, username } : s.profile }));
+    return null;
+  },
+
+  uploadAvatar: async (base64, mime) => {
+    const session = get().session;
+    if (!session) return 'Not signed in.';
+    const ext = mime === 'image/png' ? 'png' : 'jpg';
+    // Path's first segment must match auth.uid() — enforced by the
+    // avatars_owner_* storage policies (migration 0005_avatar_url.sql).
+    // A fresh filename per upload (not a fixed "avatar.jpg") sidesteps
+    // stale-CDN-cache issues where a same-named replacement wouldn't
+    // visibly update for other users for a while.
+    const path = `${session.user.id}/${Date.now()}.${ext}`;
+    const { error: uploadError } = await supabase.storage.from('avatars').upload(path, decode(base64), {
+      contentType: mime,
+      upsert: false,
+    });
+    if (uploadError) return uploadError.message;
+
+    const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(path);
+    const avatarUrl = publicUrlData.publicUrl;
+
+    const previousUrl = get().profile?.avatar_url ?? null;
+    const { error: updateError } = await supabase.from('users').update({ avatar_url: avatarUrl }).eq('id', session.user.id);
+    if (updateError) return updateError.message;
+    set((s) => ({ profile: s.profile ? { ...s.profile, avatar_url: avatarUrl } : s.profile }));
+
+    // Best-effort cleanup of the previous photo — not required for
+    // correctness (the profile row already points at the new one) and must
+    // never fail the upload the user is actually waiting on.
+    if (previousUrl) {
+      const prevPath = previousUrl.split('/avatars/')[1];
+      if (prevPath) supabase.storage.from('avatars').remove([prevPath]).catch(() => {});
+    }
     return null;
   },
 

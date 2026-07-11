@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, Pressable } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, Pressable, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import Svg, { Path, Circle } from 'react-native-svg';
 import { ScreenScaffold } from '../../src/components/ScreenScaffold';
@@ -11,6 +11,8 @@ import { ShimmerSweep } from '../../src/components/ShimmerSweep';
 import { useTheme } from '../../src/theme/useTheme';
 import { fontFamilies } from '../../src/theme/tokens';
 import { useAuthStore } from '../../src/state/authStore';
+import { pickAvatarImage } from '../../src/lib/media';
+import { appAlert } from '../../src/state/alertStore';
 
 const SETTINGS = [
   { key: 'account', label: 'Account', sub: 'Username, email', icon: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM4 21c0-4 3.6-7 8-7s8 3 8 7', route: '/settings' as const },
@@ -27,6 +29,25 @@ export default function ProfileScreen() {
   const profile = useAuthStore((s) => s.profile);
   const profileError = useAuthStore((s) => s.profileError);
   const refreshProfile = useAuthStore((s) => s.refreshProfile);
+  const uploadAvatar = useAuthStore((s) => s.uploadAvatar);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
+  const onPickAvatar = async (source: 'camera' | 'library') => {
+    const picked = await pickAvatarImage(source);
+    if (!picked) return;
+    setUploadingAvatar(true);
+    const err = await uploadAvatar(picked.base64, picked.mime);
+    setUploadingAvatar(false);
+    if (err) appAlert('Could not update photo', err);
+  };
+
+  const onAvatarPress = () => {
+    appAlert('Profile photo', 'Optional — visible to your contacts, same as your username.', [
+      { text: 'Take photo', onPress: () => onPickAvatar('camera') },
+      { text: 'Choose from library', onPress: () => onPickAvatar('library') },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
 
   return (
     <ScreenScaffold tabBar>
@@ -54,7 +75,51 @@ export default function ProfileScreen() {
 
       <Glass radius={22} style={{ marginTop: 22, padding: 24, alignItems: 'center' }}>
         <ShimmerSweep />
-        <Avatar hue={profile?.avatar_hue ?? 265} size={104} online ringWidth={3} label={profile?.display_name || profile?.username} />
+        <Pressable onPress={onAvatarPress} disabled={uploadingAvatar} style={{ width: 104, height: 104 }}>
+          <Avatar
+            hue={profile?.avatar_hue ?? 265}
+            photoUrl={profile?.avatar_url}
+            size={104}
+            online
+            ringWidth={3}
+            label={profile?.display_name || profile?.username}
+          />
+          {uploadingAvatar && (
+            <View
+              style={{
+                position: 'absolute',
+                width: 104,
+                height: 104,
+                borderRadius: 52,
+                backgroundColor: 'rgba(0,0,0,0.45)',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <ActivityIndicator color="#fff" />
+            </View>
+          )}
+          <View
+            style={{
+              position: 'absolute',
+              right: -2,
+              bottom: -2,
+              width: 32,
+              height: 32,
+              borderRadius: 16,
+              backgroundColor: a1,
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderWidth: 2,
+              borderColor: tokens.glassBg,
+            }}
+          >
+            <Svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+              <Path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2Z" />
+              <Circle cx={12} cy={13} r={4} />
+            </Svg>
+          </View>
+        </Pressable>
         <Text style={{ fontSize: 23, fontFamily: fontFamilies.black, color: tokens.text, marginTop: 14 }}>{profile?.display_name || profile?.username || '—'}</Text>
         <Text style={{ fontSize: 14, color: tokens.text2, fontFamily: fontFamilies.semibold }}>@{profile?.username ?? ''}</Text>
         <Pressable

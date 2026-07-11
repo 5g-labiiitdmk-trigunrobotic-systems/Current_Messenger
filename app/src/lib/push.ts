@@ -4,12 +4,20 @@ import { Platform } from 'react-native';
 import { supabase } from './supabase';
 
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: false,
-    shouldSetBadge: false,
-  }),
+  // Message pings stay silent-banner-only (existing behavior) — but a call
+  // notification should actually ring, same as a phone call or WhatsApp
+  // call notification, since it's telling you someone wants you *right now*,
+  // not "catch up whenever." See pingIncomingCall in server/src/pushPing.ts
+  // for the `data: { kind: 'call' }` this checks for.
+  handleNotification: async (notification) => {
+    const isCall = notification.request.content.data?.kind === 'call';
+    return {
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldPlaySound: isCall,
+      shouldSetBadge: false,
+    };
+  },
 });
 
 const projectId = Constants.expoConfig?.extra?.eas?.projectId as string | undefined;
@@ -46,6 +54,18 @@ export async function registerForPushNotifications(userId: string) {
   try {
     if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync('default', { name: 'default', importance: Notifications.AndroidImportance.DEFAULT });
+      // Separate, higher-importance channel for calls — Android needs
+      // HIGH+ importance (with sound) at the channel level to show a
+      // heads-up banner and actually ring; the per-notification
+      // `priority`/`sound` fields alone aren't enough once a channel with
+      // lower importance already exists, and channel settings can't be
+      // changed later except by the user in system settings.
+      await Notifications.setNotificationChannelAsync('calls', {
+        name: 'Calls',
+        importance: Notifications.AndroidImportance.MAX,
+        sound: 'default',
+        vibrationPattern: [0, 250, 250, 250],
+      });
     }
     const { status: existing } = await Notifications.getPermissionsAsync();
     let status = existing;

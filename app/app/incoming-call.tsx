@@ -48,7 +48,7 @@ export default function IncomingCallScreen() {
         <View style={{ marginTop: 50, width: 160, height: 160, alignItems: 'center', justifyContent: 'center' }}>
           <Ring delay={0} />
           <Ring delay={1000} />
-          <Avatar hue={contact?.avatar_hue ?? 265} size={148} ringWidth={4} label={contact?.display_name || contact?.username} />
+          <Avatar hue={contact?.avatar_hue ?? 265} photoUrl={contact?.avatar_url} size={148} ringWidth={4} label={contact?.display_name || contact?.username} />
         </View>
 
         <Text style={{ fontSize: 30, fontFamily: fontFamilies.black, color: tokens.text, marginTop: 34 }}>{contact?.display_name ?? contact?.username ?? 'Unknown'}</Text>

@@ -61,6 +61,19 @@ export default function RootLayout() {
     useGroupStore.getState().wire();
     useCallStore.getState().wire();
     useChatSessionStore.getState().wire();
+
+    // zustand's subscribe() only fires on future transitions, not on state
+    // that already changed before this effect (re-)ran — e.g. this layout
+    // remounting while a call is already ringing/connecting. Catch up once
+    // on whatever the call state already is at mount time so a call in
+    // progress is never silently un-navigated-to.
+    const existingCall = useCallStore.getState();
+    if (existingCall.incoming) {
+      router.push('/incoming-call');
+    } else if (existingCall.peerId && (existingCall.phase === 'ringing-out' || existingCall.phase === 'connecting' || existingCall.phase === 'active')) {
+      router.push(`/call/${existingCall.peerId}`);
+    }
+
     const unsub = useCallStore.subscribe((s, prev) => {
       if (s.incoming && !prev.incoming) router.push('/incoming-call');
       // Outgoing call just placed — get the caller into the in-call screen.
