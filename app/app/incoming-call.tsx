@@ -23,13 +23,21 @@ function Ring({ delay }: { delay: number }) {
 export default function IncomingCallScreen() {
   const { tokens } = useTheme();
   const incoming = useCallStore((s) => s.incoming);
+  const phase = useCallStore((s) => s.phase);
   const accept = useCallStore((s) => s.accept);
   const decline = useCallStore((s) => s.decline);
   const contact = useContactStore((s) => s.approved.find((c) => c.id === incoming?.from));
 
   useEffect(() => {
-    if (!incoming) router.back();
-  }, [incoming]);
+    // `incoming` also goes null the moment accept() fires (phase moves to
+    // 'connecting' in the same set() call) — not just on decline/timeout/
+    // caller-cancel. _layout.tsx's subscriber already replaces this screen
+    // with /call/[id] for that case; without the phase check here, this
+    // effect's own router.back() fires right after and pops that call
+    // screen straight back off, landing the receiver on whatever screen
+    // was underneath instead of the in-call UI.
+    if (!incoming && phase !== 'connecting') router.back();
+  }, [incoming, phase]);
 
   if (!incoming) return null;
 
