@@ -3,6 +3,7 @@ import * as SecureStore from 'expo-secure-store';
 import * as Crypto from 'expo-crypto';
 import { Platform } from 'react-native';
 import type { ChatMessage } from '../state/chatStore';
+import type { CallLogEntry } from '../state/callStore';
 
 /**
  * On-device-only chat history. This is a deliberate architecture change:
@@ -88,6 +89,16 @@ async function getDb(userId: string): Promise<SQLite.SQLiteDatabase> {
       message_id text not null,
       primary key (thread_key, message_id)
     );
+
+    create table if not exists call_logs (
+      id text primary key,
+      peer_id text not null,
+      direction text not null,
+      kind text not null,
+      at text not null,
+      duration_sec integer
+    );
+    create index if not exists idx_call_logs_at on call_logs(at);
   `);
 
   dbCache.set(userId, db);
@@ -201,4 +212,39 @@ export async function deleteThreadLocal(userId: string, threadKey: string): Prom
   const db = await getDb(userId);
   await db.runAsync('delete from messages where thread_key = ?', [threadKey]);
   await db.runAsync('delete from pinned where thread_key = ?', [threadKey]);
+}
+
+/**
+ * Call log: same on-device-only, per-account, SQLCipher-encrypted pattern
+ * as message history above — who called whom, when, for how long, and
+ * whether it was answered/missed/declined. Never touches the server; the
+ * relay has no concept of call history at all (server/src/state.ts's
+ * activeRings is a purely ephemeral, few-seconds-lived ring-in-progress
+ * marker, not a log — see its own doc comment).
+ */
+export async function loadCallLog(userId: string): Promise<CallLogEntry[]> {
+  const db = await getDb(userId);
+  const rows = await db.getAllAsync<any>('select * from call_logs order by at desc');
+  return rows.map((row) => ({
+    id: row.id,
+    peerId: row.peer_id,
+    direction: row.direction,
+    kind: row.kind,
+    at: row.at,
+    durationSec: row.duration_sec ?? undefined,
+  }));
+}
+
+/** Upsert — called at call-start (ring sent/received) and again whenever
+ * that entry changes (relabeled 'missed', duration filled in at call end). */
+export async function saveCallLogEntry(userId: string, entry: CallLogEntry): Promise<void> {
+  const db = await getDb(userId);
+  await db.runAsync(
+    `insert into call_logs (id, peer_id, direction, kind, at, duration_sec)
+     values (?, ?, ?, ?, ?, ?)
+     on conflict(id) do update set
+       peer_id=excluded.peer_id, direction=excluded.direction, kind=excluded.kind,
+       at=excluded.at, duration_sec=excluded.duration_sec`,
+    [entry.id, entry.peerId, entry.direction, entry.kind, entry.at, entry.durationSec ?? null]
+  );
 }

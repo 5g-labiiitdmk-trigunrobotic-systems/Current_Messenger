@@ -4,6 +4,8 @@ import { relayClient } from '../lib/relayClient';
 import type { ServerEvent } from '../types/relay';
 import { RTCPeerConnection, RTCSessionDescription, RTCIceCandidate, mediaDevices, MediaStream } from '../lib/webrtc';
 import { fetchIceServers, type IceServerConfig } from '../lib/iceServers';
+import { useAuthStore } from './authStore';
+import { loadCallLog, saveCallLogEntry } from '../lib/localDb';
 
 export interface CallLogEntry {
   id: string;
@@ -34,7 +36,7 @@ type CallSignal =
   | { kind: 'ice-candidate'; candidate: unknown };
 
 interface CallState {
-  log: CallLogEntry[]; // session-only, never persisted
+  log: CallLogEntry[]; // hydrated from + kept in sync with on-device SQLite (localDb.ts) — see hydrateCallLogFromLocal
   incoming: IncomingCall | null;
   phase: CallPhase;
   peerId: string | null;
@@ -100,6 +102,27 @@ function teardownConnection() {
   appStateSub = null;
 }
 
+let callLogHydrated = false;
+
+/**
+ * Loads this account's on-device call log (see src/lib/localDb.ts) once,
+ * as soon as a session becomes available — same pattern as chatStore.ts's
+ * hydrateFromLocal for message history. Merges rather than overwrites in
+ * case a live call already added an entry in-memory before hydration
+ * completes (e.g. wire() itself firing a signal-driven set() first).
+ */
+async function hydrateCallLogFromLocal(userId: string) {
+  if (callLogHydrated) return;
+  callLogHydrated = true;
+  const local = await loadCallLog(userId);
+  useCallStore.setState((s) => {
+    const existingIds = new Set(s.log.map((e) => e.id));
+    const merged = [...s.log, ...local.filter((e) => !existingIds.has(e.id))];
+    merged.sort((a, b) => b.at.localeCompare(a.at)); // newest first — matches the existing prepend convention below
+    return { log: merged };
+  });
+}
+
 /**
  * Real WebRTC audio/video on top of the existing relay-based signaling.
  * Offer/answer/ICE candidates ride the same call:signal wire message that
@@ -136,6 +159,13 @@ export const useCallStore = create<CallState>((set, get) => ({
       iceServers = servers;
     });
 
+    const existingUserId = useAuthStore.getState().session?.user.id;
+    if (existingUserId) hydrateCallLogFromLocal(existingUserId);
+    useAuthStore.subscribe((s, prev) => {
+      const userId = s.session?.user.id;
+      if (userId && userId !== prev.session?.user.id) hydrateCallLogFromLocal(userId);
+    });
+
     relayClient.on(async (event: ServerEvent) => {
       if (event.type !== 'call:signal') return;
       const signal = event.signal as unknown as CallSignal;
@@ -160,14 +190,17 @@ export const useCallStore = create<CallState>((set, get) => ({
             sendSignal(from, { kind: 'busy' });
             return;
           }
+          const inEntry: CallLogEntry = { id: `${Date.now()}`, peerId: from, direction: 'in', kind: signal.callKind, at: new Date().toISOString() };
           set({
             phase: 'ringing-in',
             incoming: { from, kind: signal.callKind },
             peerId: from,
             kind: signal.callKind,
             endReason: null,
-            log: [{ id: `${Date.now()}`, peerId: from, direction: 'in', kind: signal.callKind, at: new Date().toISOString() }, ...s.log],
+            log: [inEntry, ...s.log],
           });
+          const meIn = useAuthStore.getState().session?.user.id;
+          if (meIn) saveCallLogEntry(meIn, inEntry).catch(() => {});
           break;
         }
         case 'accept': {
@@ -253,13 +286,16 @@ export const useCallStore = create<CallState>((set, get) => ({
     fetchIceServers().then((servers) => {
       iceServers = servers;
     });
+    const outEntry: CallLogEntry = { id: `${Date.now()}`, peerId: to, direction: 'out', kind, at: new Date().toISOString() };
     set((s) => ({
       phase: 'ringing-out',
       peerId: to,
       kind,
       endReason: null,
-      log: [{ id: `${Date.now()}`, peerId: to, direction: 'out', kind, at: new Date().toISOString() }, ...s.log],
+      log: [outEntry, ...s.log],
     }));
+    const meOut = useAuthStore.getState().session?.user.id;
+    if (meOut) saveCallLogEntry(meOut, outEntry).catch(() => {});
     sendSignal(to, { kind: 'ring', callKind: kind });
     ringTimeoutTimer = setTimeout(() => {
       if (get().phase !== 'ringing-out') return;
@@ -403,11 +439,22 @@ function endCall(get: () => CallState, set: (partial: Partial<CallState>) => voi
   const s = get();
   // Only relabel an inbound entry as "missed" — an outbound call that rang
   // out unanswered is still "out" from the caller's own perspective, not
-  // "missed" (that label means "you didn't answer this").
-  const log =
-    reason === 'no-answer' && s.log[0]?.peerId === s.peerId && s.log[0]?.direction === 'in'
-      ? [{ ...s.log[0], direction: 'missed' as const }, ...s.log.slice(1)]
-      : s.log;
+  // "missed" (that label means "you didn't answer this"). Also captures
+  // duration here — the one point every call-ending path passes through —
+  // for any call that actually reached 'active' (connectedAt set).
+  let topEntry = s.log[0];
+  let logChanged = false;
+  if (topEntry && topEntry.peerId === s.peerId) {
+    if (reason === 'no-answer' && topEntry.direction === 'in') {
+      topEntry = { ...topEntry, direction: 'missed' as const };
+      logChanged = true;
+    }
+    if (s.connectedAt) {
+      topEntry = { ...topEntry, durationSec: Math.max(0, Math.round((Date.now() - s.connectedAt) / 1000)) };
+      logChanged = true;
+    }
+  }
+  const log = logChanged ? [topEntry!, ...s.log.slice(1)] : s.log;
   set({
     phase: 'ended',
     endReason: reason,
@@ -418,6 +465,10 @@ function endCall(get: () => CallState, set: (partial: Partial<CallState>) => voi
     cameraOff: false,
     log,
   });
+  if (logChanged && topEntry) {
+    const me = useAuthStore.getState().session?.user.id;
+    if (me) saveCallLogEntry(me, topEntry).catch(() => {});
+  }
 
   // Backstop for the idle->ended->idle cycle. Normally the in-call screen
   // (call/[id].tsx) clears 'ended' back to 'idle' itself via clearEnded()

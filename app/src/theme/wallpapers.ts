@@ -18,7 +18,7 @@ export interface WallpaperDef {
   dark: WallpaperVariant;
 }
 
-export type WallpaperKey = 'default' | 'ocean' | 'sunset' | 'forest' | 'midnight';
+export type WallpaperKey = 'default' | 'ocean' | 'sunset' | 'forest' | 'midnight' | 'aurora' | 'rose' | 'slate';
 
 export const wallpapers: Record<WallpaperKey, WallpaperDef> = {
   default: {
@@ -133,6 +133,77 @@ export const wallpapers: Record<WallpaperKey, WallpaperDef> = {
       pools: [
         { cx: 0.8, cy: 0.22, r: 0.36, color: 'rgba(80,80,95,0.14)' },
         { cx: 0.16, cy: 0.72, r: 0.36, color: 'rgba(60,60,75,0.1)' },
+      ],
+    },
+  },
+  aurora: {
+    label: 'Aurora',
+    swatch: ['#8ed1c9', '#9a7fd4'],
+    light: {
+      wallStops: ['#a8e6d5', '#8ed1e0', '#a390d9', '#d896c9'],
+      orbColor: 'rgba(150,225,205,0.9)',
+      pools: [
+        { cx: 0.86, cy: 0.22, r: 0.34, color: 'rgba(160,230,215,0.9)' },
+        { cx: 0.7, cy: 0.52, r: 0.3, color: 'rgba(150,190,225,0.8)' },
+        { cx: 0.08, cy: 0.28, r: 0.36, color: 'rgba(165,150,220,0.8)' },
+        { cx: 0.04, cy: 0.8, r: 0.36, color: 'rgba(210,150,200,0.7)' },
+      ],
+    },
+    dark: {
+      wallStops: ['#050c0a', '#0a1018', '#050c0a'],
+      orbColor: 'rgba(100,190,175,0.2)',
+      pools: [
+        { cx: 0.82, cy: 0.22, r: 0.36, color: 'rgba(70,170,150,0.2)' },
+        { cx: 0.16, cy: 0.7, r: 0.36, color: 'rgba(100,90,160,0.18)' },
+        { cx: 0.5, cy: 0.5, r: 0.55, color: 'rgba(60,110,120,0.12)' },
+      ],
+    },
+  },
+  rose: {
+    label: 'Rose',
+    swatch: ['#ffb3c1', '#e0607a'],
+    light: {
+      wallStops: ['#ffd6db', '#ffb3c1', '#ff8fa8', '#e0607a'],
+      orbColor: 'rgba(255,185,198,0.9)',
+      pools: [
+        { cx: 0.86, cy: 0.24, r: 0.34, color: 'rgba(255,205,213,0.9)' },
+        { cx: 0.72, cy: 0.52, r: 0.28, color: 'rgba(255,160,180,0.8)' },
+        { cx: 0.08, cy: 0.28, r: 0.36, color: 'rgba(255,180,190,0.8)' },
+        { cx: 0.02, cy: 0.8, r: 0.38, color: 'rgba(224,140,155,0.7)' },
+      ],
+    },
+    dark: {
+      wallStops: ['#140508', '#20080c', '#140508'],
+      orbColor: 'rgba(200,90,115,0.2)',
+      pools: [
+        { cx: 0.8, cy: 0.2, r: 0.36, color: 'rgba(180,70,95,0.22)' },
+        { cx: 0.16, cy: 0.72, r: 0.36, color: 'rgba(140,55,80,0.18)' },
+        { cx: 0.5, cy: 0.5, r: 0.55, color: 'rgba(100,45,60,0.12)' },
+      ],
+    },
+  },
+  slate: {
+    label: 'Slate',
+    swatch: ['#c3ccd6', '#8291a3'],
+    light: {
+      // A cool, muted, low-color option in the same spirit as Midnight but
+      // blue-leaning rather than near-monochrome — for a calmer, more
+      // "professional" feel than the default's warm purple/orange.
+      wallStops: ['#dfe4ea', '#c3ccd6', '#a3b0bf', '#8291a3'],
+      orbColor: 'rgba(190,205,220,0.75)',
+      pools: [
+        { cx: 0.84, cy: 0.24, r: 0.34, color: 'rgba(205,215,228,0.7)' },
+        { cx: 0.7, cy: 0.54, r: 0.28, color: 'rgba(170,190,208,0.6)' },
+        { cx: 0.08, cy: 0.28, r: 0.36, color: 'rgba(185,198,212,0.65)' },
+      ],
+    },
+    dark: {
+      wallStops: ['#08090c', '#0c0f14', '#08090c'],
+      orbColor: 'rgba(110,125,145,0.16)',
+      pools: [
+        { cx: 0.8, cy: 0.22, r: 0.36, color: 'rgba(90,105,125,0.18)' },
+        { cx: 0.16, cy: 0.72, r: 0.36, color: 'rgba(70,85,105,0.14)' },
+        { cx: 0.5, cy: 0.5, r: 0.55, color: 'rgba(55,65,80,0.1)' },
       ],
     },
   },

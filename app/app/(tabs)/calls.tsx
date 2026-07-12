@@ -34,7 +34,7 @@ export default function CallsScreen() {
         {log.length === 0 ? (
           <View style={{ padding: 28, alignItems: 'center' }}>
             <Text style={{ fontFamily: fontFamilies.semibold, color: tokens.text2, textAlign: 'center' }}>
-              No calls this session — call logs aren't stored, so this clears on restart too.
+              No calls yet — your call history is saved on this device only, encrypted at rest.
             </Text>
           </View>
         ) : (
@@ -51,7 +51,9 @@ export default function CallsScreen() {
                   <Text style={{ fontSize: 15.5, fontFamily: fontFamilies.bold, color: missed ? '#ff5a6e' : tokens.text }}>{contact?.display_name ?? contact?.username ?? c.peerId}</Text>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 3 }}>
                     <Text style={{ fontSize: 12.5, color: tokens.text2, fontFamily: fontFamilies.medium }}>
-                      {c.direction === 'in' ? 'Incoming' : c.direction === 'out' ? 'Outgoing' : 'Missed'} · {c.kind} · {new Date(c.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                      {c.direction === 'in' ? 'Incoming' : c.direction === 'out' ? 'Outgoing' : 'Missed'} · {c.kind}
+                      {c.durationSec !== undefined ? ` · ${Math.floor(c.durationSec / 60)}:${String(c.durationSec % 60).padStart(2, '0')}` : ''} ·{' '}
+                      {new Date(c.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
                     </Text>
                   </View>
                 </View>
