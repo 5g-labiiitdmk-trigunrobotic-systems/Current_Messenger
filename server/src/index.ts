@@ -115,6 +115,18 @@ wss.on('connection', (socket) => {
       // changes for some unrelated reason.
       send(socket, { type: 'presence:snapshot', onlineUserIds: relayState.onlineUserIds().filter((id) => id !== userId) });
       broadcastPresence(userId, 'online');
+      // Replay a still-pending incoming ring, if any — the original 'ring'
+      // signal is only ever forwarded live (see the call:signal case
+      // below), so a client that was fully closed when it was sent would
+      // otherwise never learn about it at all. Reuses the exact same
+      // ServerEvent shape as a live ring, so the client's existing 'ring'
+      // handler (callStore.ts) and navigation subscriber (_layout.tsx)
+      // handle this identically to any other incoming call — no separate
+      // client-side code path needed.
+      const pendingRing = relayState.getActiveRingFor(userId);
+      if (pendingRing) {
+        send(socket, { type: 'call:signal', from: pendingRing.callerId, signal: { kind: 'ring', callKind: pendingRing.callKind } });
+      }
       return;
     }
 
@@ -190,6 +202,25 @@ wss.on('connection', (socket) => {
           getUsername(userId)
             .then((callerUsername) => pingIncomingCall(event.to, callerUsername, callKind))
             .catch(() => {});
+          // Recorded regardless of forwarding success — this is what lets a
+          // fully-closed recipient learn about the call once they reconnect
+          // (see the auth:ok handler above), not just a live-only recipient.
+          relayState.recordRing(userId, event.to, callKind);
+        } else if (
+          event.signal.kind === 'accept' ||
+          event.signal.kind === 'decline' ||
+          event.signal.kind === 'busy' ||
+          event.signal.kind === 'timeout' ||
+          event.signal.kind === 'hangup'
+        ) {
+          // Any of these means the call is resolved one way or another —
+          // clear the pending-ring record so a later reconnect doesn't
+          // replay a call that's already over. Signal direction varies (a
+          // caller's own 'timeout' targets the callee; an 'accept' from the
+          // callee targets the caller) so just clear both — deleting a
+          // nonexistent key is a harmless no-op.
+          relayState.clearRing(userId);
+          relayState.clearRing(event.to);
         }
         break;
       }

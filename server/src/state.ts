@@ -28,9 +28,41 @@ interface PendingSession {
   requestedAt: number;
 }
 
+interface ActiveRing {
+  callerId: string;
+  callKind: 'voice' | 'video';
+  ringSentAt: number;
+}
+
+// Matches callStore.ts's own RING_TIMEOUT_MS — a ring record older than
+// this is treated as dead even if nothing ever explicitly cleared it (e.g.
+// the caller's app crashed instead of cleanly sending 'timeout'/'hangup').
+const RING_STALE_MS = 50_000;
+
 class RelayState {
   private connections = new Map<string, Connection>(); // userId -> connection
   private groups = new Map<string, Group>();
+
+  /**
+   * Tracks "is someone currently ringing this user right now" — the one
+   * piece of call state the relay keeps, purely so a client that connects
+   * (or reconnects) *after* the original 'ring' signal was sent can still
+   * learn about it and see a proper ringing screen, instead of the ring
+   * having been silently dropped because their socket didn't exist yet
+   * (see the call:signal case in index.ts — signals to an offline user are
+   * otherwise just discarded, same as everything else this relay forwards).
+   * This is the single most common real path to an incoming call: the
+   * receiver's app was fully closed, a push notification arrived, and they
+   * reopen the app (by tapping the notification or the icon) *after* the
+   * original signal already came and went.
+   *
+   * Deliberately as ephemeral as everything else here — cleared the moment
+   * the call resolves one way or another (see clearRing's call sites in
+   * index.ts) or after RING_STALE_MS, whichever comes first. Not a general
+   * call-history/state store; it only ever answers "is there a ring
+   * pending for this specific person right now."
+   */
+  private activeRings = new Map<string, ActiveRing>(); // calleeId -> ring
 
   /**
    * Per-session chat requests, on top of (not instead of) the long-term
@@ -115,6 +147,26 @@ class RelayState {
 
   clearPendingSession(a: string, b: string) {
     this.pendingSessions.delete(this.pairKey(a, b));
+  }
+
+  recordRing(callerId: string, calleeId: string, callKind: 'voice' | 'video') {
+    this.activeRings.set(calleeId, { callerId, callKind, ringSentAt: Date.now() });
+  }
+
+  /** Returns the pending ring for this callee, or undefined if there is
+   * none or it's older than RING_STALE_MS (treated as dead). */
+  getActiveRingFor(calleeId: string): ActiveRing | undefined {
+    const ring = this.activeRings.get(calleeId);
+    if (!ring) return undefined;
+    if (Date.now() - ring.ringSentAt > RING_STALE_MS) {
+      this.activeRings.delete(calleeId);
+      return undefined;
+    }
+    return ring;
+  }
+
+  clearRing(calleeId: string) {
+    this.activeRings.delete(calleeId);
   }
 
   /**

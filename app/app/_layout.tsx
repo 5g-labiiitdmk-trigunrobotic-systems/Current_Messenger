@@ -21,6 +21,7 @@ import { useChatSessionStore } from '../src/state/chatSessionStore';
 import { AppLockGate } from '../src/components/AppLockGate';
 import { AppAlertHost } from '../src/components/AppAlertHost';
 import { appAlert } from '../src/state/alertStore';
+import { initNotificationRouting } from '../src/lib/push';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -61,6 +62,7 @@ export default function RootLayout() {
     useGroupStore.getState().wire();
     useCallStore.getState().wire();
     useChatSessionStore.getState().wire();
+    initNotificationRouting();
 
     // zustand's subscribe() only fires on future transitions, not on state
     // that already changed before this effect (re-)ran — e.g. this layout

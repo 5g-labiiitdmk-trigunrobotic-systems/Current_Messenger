@@ -144,6 +144,16 @@ export const useCallStore = create<CallState>((set, get) => ({
       switch (signal.kind) {
         case 'ring': {
           const s = get();
+          if (s.phase === 'ringing-in' && s.incoming?.from === from) {
+            // A duplicate/replayed ring for the exact call we're already
+            // showing — e.g. the relay replays a still-pending ring on
+            // every reconnect (server/src/index.ts's auth:ok handler), and
+            // a flaky connection can reconnect more than once while the
+            // ringing screen is still up. Harmless no-op: state already
+            // reflects this call, and treating it as "busy" below would
+            // wrongly end the real call for the caller.
+            break;
+          }
           if (s.phase !== 'idle') {
             // Already on a call — tell the caller instead of silently
             // dropping their ring, and don't touch our current call state.

@@ -1,7 +1,9 @@
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
+import { router } from 'expo-router';
 import { supabase } from './supabase';
+import { useCallStore } from '../state/callStore';
 
 Notifications.setNotificationHandler({
   // Message pings stay silent-banner-only (existing behavior) — but a call
@@ -117,4 +119,48 @@ export async function registerForPushNotifications(userId: string) {
     // eslint-disable-next-line no-console
     console.error('[push] registerForPushNotifications failed:', e?.message ?? e);
   }
+}
+
+function handleCallNotificationTap(data: Record<string, unknown> | undefined) {
+  if (data?.kind !== 'call') return;
+  // Only a fast-path: if the app was already warm and already knows about
+  // this call (e.g. the user backgrounded away from /incoming-call without
+  // answering, then came back via the notification), jump straight there.
+  // For the fully-closed cold-start case, `incoming` won't be populated
+  // yet at this exact moment — the socket has to connect and authenticate
+  // first, which is what triggers the relay to replay the pending ring
+  // (see the auth:ok handler in server/src/index.ts). Once that replay
+  // arrives, _layout.tsx's own navigation subscriber handles it exactly
+  // like any other incoming call — no separate code path needed here for
+  // that case.
+  if (useCallStore.getState().incoming) {
+    router.push('/incoming-call');
+  }
+}
+
+let notificationRoutingInitialized = false;
+
+/**
+ * Wires up notification-tap handling: a tapped call notification should
+ * bring the user to the ringing screen, not just open the app to wherever
+ * it last was. Call once, globally — unlike registerForPushNotifications
+ * (per-sign-in), this doesn't depend on auth state.
+ */
+export function initNotificationRouting() {
+  if (notificationRoutingInitialized) return;
+  notificationRoutingInitialized = true;
+
+  // Cold start via notification tap (app was fully closed): the response
+  // that launched the app isn't delivered through the live listener below,
+  // it has to be fetched explicitly.
+  const lastResponse = Notifications.getLastNotificationResponse();
+  if (lastResponse) {
+    handleCallNotificationTap(lastResponse.notification.request.content.data as Record<string, unknown> | undefined);
+    Notifications.clearLastNotificationResponse();
+  }
+
+  // Warm tap: app already running (foreground or backgrounded, JS alive).
+  Notifications.addNotificationResponseReceivedListener((response) => {
+    handleCallNotificationTap(response.notification.request.content.data as Record<string, unknown> | undefined);
+  });
 }
