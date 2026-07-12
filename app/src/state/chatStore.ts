@@ -454,7 +454,36 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   markRead: (targetId, isGroup, messageId) => {
+    // This only ever notified the *other* party (a read receipt over the
+    // wire, so THEY see a "read" tick on the message they sent) — it never
+    // touched this device's own copy of the messages being read. Since
+    // useConversationRows' unread count (src/data/conversations.ts) is
+    // computed from `m.from !== me && m.status !== 'read'` on the LOCAL
+    // threads state, nothing ever cleared it: opening and reading a chat
+    // sent the receipt out, but the thread's own messages stayed at
+    // whatever status they arrived with, forever, from this device's own
+    // point of view. Marks every currently-unread received message in this
+    // thread as read locally (not just the one messageId the wire receipt
+    // references — opening a chat reads the whole thread, not just its
+    // newest message) and persists each change, the same way every other
+    // status mutation in this store already does.
+    const me = useAuthStore.getState().session?.user.id;
     relayClient.send({ type: 'read', to: isGroup ? undefined : targetId, groupId: isGroup ? targetId : undefined, messageId });
+    if (!me) return;
+    const key = chatKey(targetId, isGroup);
+    const changed: ChatMessage[] = [];
+    set((s) => ({
+      threads: {
+        ...s.threads,
+        [key]: (s.threads[key] ?? []).map((m) => {
+          if (m.from === me || m.status === 'read') return m;
+          const updated = { ...m, status: 'read' as const };
+          changed.push(updated);
+          return updated;
+        }),
+      },
+    }));
+    changed.forEach((m) => saveMessage(me, key, m).catch(() => {}));
   },
 
   react: (targetId, isGroup, messageId, emoji) => {

@@ -22,7 +22,7 @@ export default function GroupChatScreen() {
   const group = useGroupStore((s) => s.groups[id ?? '']);
   const approved = useContactStore((s) => s.approved);
   const threads = useChatStore((s) => s.threads);
-  const { sendText, setTyping, react } = useChatStore();
+  const { sendText, setTyping, react, markRead } = useChatStore();
 
   const key = getThreadKey(id ?? '', true);
   const messages = threads[key] ?? [];
@@ -31,6 +31,11 @@ export default function GroupChatScreen() {
   const typingTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    // Was entirely missing here — unlike chat/[id].tsx's DM screen, this
+    // screen never called markRead() at all, so a group's unread count
+    // never cleared no matter how long it was open.
+    const last = messages[messages.length - 1];
+    if (last && last.from !== me && last.status !== 'read') markRead(id ?? '', true, last.id);
     listRef.current?.scrollToEnd({ animated: true });
   }, [messages.length]);
 
