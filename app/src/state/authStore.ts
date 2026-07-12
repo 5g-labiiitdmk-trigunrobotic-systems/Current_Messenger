@@ -6,6 +6,7 @@ import type { UserRow } from '../types/database';
 import { getOrCreateDeviceKeyPair, publishPublicKey } from '../lib/keystore';
 import { relayClient } from '../lib/relayClient';
 import { registerForPushNotifications } from '../lib/push';
+import { normalizeUsername, usernameFormatError, isUsernameTaken } from '../lib/username';
 
 interface AuthState {
   session: Session | null;
@@ -28,9 +29,6 @@ interface AuthState {
   uploadAvatar: (base64: string, mime: string) => Promise<string | null>;
   signOut: () => Promise<void>;
 }
-
-// Same rule enforced at signup and by the DB check constraint — keep in sync.
-export const USERNAME_RE = /^[a-z0-9_.]{3,24}$/;
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   session: null,
@@ -85,15 +83,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   changeUsername: async (raw) => {
     const session = get().session;
     if (!session) return 'Not signed in.';
-    const username = raw.trim().toLowerCase();
-    if (!USERNAME_RE.test(username)) {
-      return 'Usernames are 3-24 characters: lowercase letters, numbers, "_" or "."';
-    }
+    const username = normalizeUsername(raw);
+    const formatError = usernameFormatError(username);
+    if (formatError) return formatError;
     if (username === get().profile?.username) return null; // no-op
     // Pre-check for a friendly error; the DB unique constraint is the real
     // guarantee, so a race between check and update still surfaces below.
-    const { data: taken } = await supabase.from('users').select('id').eq('username', username).neq('id', session.user.id).maybeSingle();
-    if (taken) return 'That username is taken — try another.';
+    if (await isUsernameTaken(username, session.user.id)) return 'That username is taken — try another.';
     const { error } = await supabase.from('users').update({ username }).eq('id', session.user.id);
     if (error) {
       return error.code === '23505' ? 'That username is taken — try another.' : error.message;

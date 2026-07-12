@@ -44,6 +44,12 @@ export type ClientEvent =
   // trigger — Supabase's contact_requests table remains the actual source
   // of truth, this carries no request data of its own.
   | { type: 'contact:request_sent'; to: string }
+  // contact_requests has no working live-update path on its own — Supabase
+  // Realtime's postgres_changes requires the table to be explicitly added
+  // to the supabase_realtime publication, which was never done (see the
+  // matching ServerEvent below) — so this doubles as the trigger for a
+  // live UI refresh on the recipient's side, not just the push ping.
+  | { type: 'contact:request_responded'; to: string }
   | { type: 'session:request'; to: string }
   | { type: 'session:respond'; peerId: string; accept: boolean }
   | { type: 'ping' }
@@ -74,6 +80,14 @@ export type ServerEvent =
   | { type: 'group:invited'; groupId: string; name: string; from: string; memberIds: string[]; isBroadcast?: boolean }
   | { type: 'group:member_left'; groupId: string; userId: string }
   | { type: 'call:signal'; from: string; signal: Record<string, unknown> }
+  // Tells the client "something about your contact_requests changed, go
+  // refetch" — carries no data of its own, since Supabase's contact_requests
+  // table remains the actual source of truth (see contactStore.ts's
+  // refresh()). This exists because that table was never added to Supabase's
+  // realtime publication, so the client's own postgres_changes subscription
+  // silently never fires; this rides the relay's already-working WebSocket
+  // instead, the same way messages/calls/presence do.
+  | { type: 'contact:refresh' }
   // Per-session chat requests: a long-term approved contact still needs to
   // accept a fresh "session" before either side can exchange messages —
   // see server/src/state.ts's activeSessions for what a "session" means.

@@ -225,14 +225,24 @@ wss.on('connection', (socket) => {
         break;
       }
       case 'contact:request_sent': {
-        // Purely a push-notification trigger — the actual contact_requests
-        // row was already written directly to Supabase by the client (see
-        // contactStore.ts's sendRequest). Deliberately no approval check
-        // here: a contact request is how two users *become* approved
-        // contacts, so requiring that would make this permanently no-op.
+        // The actual contact_requests row was already written directly to
+        // Supabase by the client (see contactStore.ts's sendRequest).
+        // Deliberately no approval check here: a contact request is how two
+        // users *become* approved contacts, so requiring that would make
+        // this permanently no-op.
         getUsername(userId)
           .then((senderUsername) => pingContactRequest(event.to, senderUsername))
           .catch(() => {});
+        const targetSocket = relayState.getSocket(event.to);
+        if (targetSocket) send(targetSocket, { type: 'contact:refresh' });
+        break;
+      }
+      case 'contact:request_responded': {
+        // Live nudge back to the original requester — accepting/declining
+        // is also just a direct Supabase write from the client (see
+        // contactStore.ts's respond()), invisible to the relay otherwise.
+        const requesterSocket = relayState.getSocket(event.to);
+        if (requesterSocket) send(requesterSocket, { type: 'contact:refresh' });
         break;
       }
       case 'session:request': {

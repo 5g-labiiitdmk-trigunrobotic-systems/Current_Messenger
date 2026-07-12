@@ -36,6 +36,7 @@ export type ClientEvent =
   | { type: 'group:leave'; groupId: string }
   | { type: 'call:signal'; to: string; signal: Record<string, unknown> }
   | { type: 'contact:request_sent'; to: string }
+  | { type: 'contact:request_responded'; to: string }
   | { type: 'session:request'; to: string }
   | { type: 'session:respond'; peerId: string; accept: boolean }
   | { type: 'ping' }
@@ -55,6 +56,7 @@ export type ServerEvent =
   | { type: 'group:invited'; groupId: string; name: string; from: string; memberIds: string[]; isBroadcast?: boolean }
   | { type: 'group:member_left'; groupId: string; userId: string }
   | { type: 'call:signal'; from: string; signal: Record<string, unknown> }
+  | { type: 'contact:refresh' }
   | { type: 'session:request'; from: string }
   | { type: 'session:requested'; to: string }
   | { type: 'session:request_failed'; to: string; reason: 'recipient_offline' | 'not_contact' }

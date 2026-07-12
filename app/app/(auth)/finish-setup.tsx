@@ -41,7 +41,15 @@ export default function FinishSetupScreen() {
       if (finalizing.current) return;
       finalizing.current = true;
       (async () => {
-        const pendingUsername = useSignupStore.getState().username;
+        // Prefer, in order: the in-memory signup wizard's choice (fastest,
+        // no round trip, but wiped if the app was closed while checking
+        // email), then the same username stashed durably in Supabase's own
+        // auth.users.user_metadata at signUp() time (see signup.tsx's
+        // options.data) — this is what actually survives that restart —
+        // and only fall back to a random one if genuinely neither exists
+        // (e.g. an account from before this fix, or signup was somehow
+        // skipped entirely).
+        const pendingUsername = useSignupStore.getState().username || (session.user.user_metadata?.username as string | undefined);
         let username = pendingUsername || generateFriendlyUsername();
         let succeeded = false;
         for (let attempt = 0; attempt < 3 && !succeeded; attempt++) {

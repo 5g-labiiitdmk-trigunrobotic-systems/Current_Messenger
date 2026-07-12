@@ -149,6 +149,14 @@ let notificationRoutingInitialized = false;
 export function initNotificationRouting() {
   if (notificationRoutingInitialized) return;
   notificationRoutingInitialized = true;
+  // getLastNotificationResponse/addNotificationResponseReceivedListener
+  // throw "not available on web" — this is native-only functionality (a
+  // real notification tray tap), and this project's own web-based
+  // verification workflow (expo export/start --platform web) needs the
+  // app to still boot without it. Unlike the Android-only channel setup
+  // in registerForPushNotifications, this isn't behind a Platform.OS
+  // check anywhere upstream, so it needs its own guard here.
+  if (Platform.OS === 'web') return;
 
   // Cold start via notification tap (app was fully closed): the response
   // that launched the app isn't delivered through the live listener below,
