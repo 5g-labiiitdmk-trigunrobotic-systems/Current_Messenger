@@ -114,13 +114,23 @@ let callLogHydrated = false;
 async function hydrateCallLogFromLocal(userId: string) {
   if (callLogHydrated) return;
   callLogHydrated = true;
-  const local = await loadCallLog(userId);
-  useCallStore.setState((s) => {
-    const existingIds = new Set(s.log.map((e) => e.id));
-    const merged = [...s.log, ...local.filter((e) => !existingIds.has(e.id))];
-    merged.sort((a, b) => b.at.localeCompare(a.at)); // newest first — matches the existing prepend convention below
-    return { log: merged };
-  });
+  // Shares its underlying database (and getDb()'s own one-time recovery —
+  // see localDb.ts) with chatStore.ts's hydrateFromLocal, which already
+  // surfaces a user-facing alert if loading local data genuinely fails —
+  // no second alert here to avoid double-reporting what's normally the
+  // same underlying incident. Still needs its own try/catch so a failure
+  // here specifically doesn't vanish as a silent unhandled rejection.
+  try {
+    const local = await loadCallLog(userId);
+    useCallStore.setState((s) => {
+      const existingIds = new Set(s.log.map((e) => e.id));
+      const merged = [...s.log, ...local.filter((e) => !existingIds.has(e.id))];
+      merged.sort((a, b) => b.at.localeCompare(a.at)); // newest first — matches the existing prepend convention below
+      return { log: merged };
+    });
+  } catch (err) {
+    console.error('[callStore] failed to load local call log:', err);
+  }
 }
 
 /**

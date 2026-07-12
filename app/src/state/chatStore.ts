@@ -6,6 +6,7 @@ import { loadAllThreads, loadPinned, saveMessage, renameMessageId, setPinned, de
 import type { MessageKind, ServerEvent, EncryptedPayload } from '../types/relay';
 import { useAuthStore } from './authStore';
 import { useGroupStore } from './groupStore';
+import { appAlert } from './alertStore';
 
 export interface ChatMessage {
   id: string; // messageId once known, else tempId while pending
@@ -105,15 +106,28 @@ let hydrated = false;
 async function hydrateFromLocal(userId: string) {
   if (hydrated) return;
   hydrated = true;
-  const [localThreads, localPinned] = await Promise.all([loadAllThreads(userId), loadPinned(userId)]);
-  useChatStore.setState((s) => {
-    const threads: Record<string, ChatMessage[]> = { ...localThreads };
-    for (const [key, list] of Object.entries(s.threads)) {
-      const existingIds = new Set((threads[key] ?? []).map((m) => m.id));
-      threads[key] = [...(threads[key] ?? []), ...list.filter((m) => !existingIds.has(m.id))].sort((a, b) => a.sentAt.localeCompare(b.sentAt));
-    }
-    return { threads, pinned: { ...localPinned, ...s.pinned } };
-  });
+  // getDb() (src/lib/localDb.ts) now recovers on its own from the most
+  // likely real-world failure (a SQLCipher key/file mismatch — see its own
+  // doc comment), but this still has zero handling for whatever's left
+  // over: a second, genuine failure after that recovery attempt, storage
+  // quota errors, etc. Without this, any such failure vanished completely
+  // — local history just looked permanently empty with nothing telling
+  // the user why, indistinguishable from "there was never anything to
+  // load" even though messages really had been sent/received before.
+  try {
+    const [localThreads, localPinned] = await Promise.all([loadAllThreads(userId), loadPinned(userId)]);
+    useChatStore.setState((s) => {
+      const threads: Record<string, ChatMessage[]> = { ...localThreads };
+      for (const [key, list] of Object.entries(s.threads)) {
+        const existingIds = new Set((threads[key] ?? []).map((m) => m.id));
+        threads[key] = [...(threads[key] ?? []), ...list.filter((m) => !existingIds.has(m.id))].sort((a, b) => a.sentAt.localeCompare(b.sentAt));
+      }
+      return { threads, pinned: { ...localPinned, ...s.pinned } };
+    });
+  } catch (err: any) {
+    console.error('[chatStore] failed to load local chat history:', err);
+    appAlert('Local history unavailable', "Your saved messages on this device couldn't be loaded. New messages will still be sent and received normally.");
+  }
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({

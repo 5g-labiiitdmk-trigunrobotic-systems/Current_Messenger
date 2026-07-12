@@ -47,11 +47,66 @@ async function getDbKeyHex(userId: string): Promise<string> {
   return hex;
 }
 
-async function getDb(userId: string): Promise<SQLite.SQLiteDatabase> {
-  const cached = dbCache.get(userId);
-  if (cached) return cached;
+const SCHEMA_SQL = `
+  create table if not exists messages (
+    id text primary key,
+    thread_key text not null,
+    temp_id text not null,
+    from_id text not null,
+    to_id text,
+    group_id text,
+    kind text not null,
+    text text,
+    meta text,
+    sent_at text not null,
+    status text not null,
+    fail_reason text,
+    reply_to_id text,
+    reactions text not null,
+    edited integer not null default 0,
+    deleted integer not null default 0
+  );
+  create index if not exists idx_messages_thread on messages(thread_key);
 
-  const db = await SQLite.openDatabaseAsync(`current-chat-${userId}.db`);
+  create table if not exists pinned (
+    thread_key text not null,
+    message_id text not null,
+    primary key (thread_key, message_id)
+  );
+
+  create table if not exists call_logs (
+    id text primary key,
+    peer_id text not null,
+    direction text not null,
+    kind text not null,
+    at text not null,
+    duration_sec integer
+  );
+  create index if not exists idx_call_logs_at on call_logs(at);
+`;
+
+/**
+ * Opens (or creates) this account's on-disk database, applies its
+ * SQLCipher key, and ensures the schema exists. `isRecoveryAttempt` guards
+ * against retrying forever — see the catch block below.
+ *
+ * The encryption key (SecureStore/Keychain/Keystore) and the encrypted
+ * data (a plain file in app storage) are two independent stores with
+ * nothing cross-referencing them. Anything that desyncs them — Android's
+ * Auto Backup restores app files on reinstall but never Keystore-backed
+ * keys (they're hardware-bound and the OS explicitly excludes them from
+ * backup); an iOS device restore/migration can carry the file without a
+ * THIS_DEVICE_ONLY Keychain item; a Keystore key can be invalidated by a
+ * device security-state change — leaves an old, still-encrypted file
+ * paired with a key that can't open it. This is exactly the failure mode
+ * that only ever shows up for accounts with *some* prior on-device state
+ * (a returning install, a restored backup, a re-signed build), never for
+ * an account whose key and file are both being created fresh together
+ * right now — which is why it can look like "works for new accounts,
+ * broken for old ones" even though the code path is identical for both.
+ */
+async function openAndInitDb(userId: string, dbName: string, isRecoveryAttempt = false): Promise<SQLite.SQLiteDatabase> {
+  const db = await SQLite.openDatabaseAsync(dbName);
 
   if (Platform.OS !== 'web') {
     // SQLCipher only actually exists in the native build (see the
@@ -63,44 +118,34 @@ async function getDb(userId: string): Promise<SQLite.SQLiteDatabase> {
     await db.execAsync(`PRAGMA key = "x'${keyHex}'";`);
   }
 
-  await db.execAsync(`
-    create table if not exists messages (
-      id text primary key,
-      thread_key text not null,
-      temp_id text not null,
-      from_id text not null,
-      to_id text,
-      group_id text,
-      kind text not null,
-      text text,
-      meta text,
-      sent_at text not null,
-      status text not null,
-      fail_reason text,
-      reply_to_id text,
-      reactions text not null,
-      edited integer not null default 0,
-      deleted integer not null default 0
-    );
-    create index if not exists idx_messages_thread on messages(thread_key);
+  try {
+    // The PRAGMA key call above never fails by itself — SQLCipher only
+    // discovers a wrong/mismatched key once it actually tries to read the
+    // file's real content, which is this statement, not the one above.
+    await db.execAsync(SCHEMA_SQL);
+  } catch (err) {
+    if (isRecoveryAttempt) throw err; // already tried a fresh file once — something else is wrong, let it surface for real
 
-    create table if not exists pinned (
-      thread_key text not null,
-      message_id text not null,
-      primary key (thread_key, message_id)
-    );
+    console.error(`[localDb] failed to initialize "${dbName}" (likely an undecryptable/stale local file) — resetting local history for this account:`, err);
+    await db.closeAsync().catch(() => {});
+    await SQLite.deleteDatabaseAsync(dbName).catch(() => {});
+    // The file that just failed is gone; whatever key we hold now (existing
+    // or freshly generated) becomes the correct key for the brand-new file
+    // this creates, so this does not loop — it recovers, once. This cannot
+    // bring back the old, now-unreadable history (that isn't possible
+    // without the original key, same as losing the device that held it),
+    // but it stops every future launch from failing the same way forever.
+    return openAndInitDb(userId, dbName, true);
+  }
 
-    create table if not exists call_logs (
-      id text primary key,
-      peer_id text not null,
-      direction text not null,
-      kind text not null,
-      at text not null,
-      duration_sec integer
-    );
-    create index if not exists idx_call_logs_at on call_logs(at);
-  `);
+  return db;
+}
 
+async function getDb(userId: string): Promise<SQLite.SQLiteDatabase> {
+  const cached = dbCache.get(userId);
+  if (cached) return cached;
+
+  const db = await openAndInitDb(userId, `current-chat-${userId}.db`);
   dbCache.set(userId, db);
   return db;
 }
