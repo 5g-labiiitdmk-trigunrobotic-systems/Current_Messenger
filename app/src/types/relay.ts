@@ -28,7 +28,22 @@ export interface EncryptedPayload {
 
 export type ClientEvent =
   | { type: 'auth'; token: string }
-  | { type: 'message:send'; tempId: string; to?: string; groupId?: string; kind: MessageKind; payload: EncryptedPayload; meta?: Record<string, unknown> }
+  | {
+      type: 'message:send';
+      tempId: string;
+      to?: string;
+      groupId?: string;
+      kind: MessageKind;
+      // DMs: a single payload encrypted to that one recipient. Groups with
+      // real content (text/rich): `payloads`, one ciphertext per member,
+      // each individually encrypted with the same encryptMessage() DMs use
+      // — see chatStore.ts's sendText/sendRich. Group sends with no real
+      // content (reactions, poll votes, etc.) still use `payload` (an
+      // empty dummy — their data is plaintext in `meta`, same as for DMs).
+      payload?: EncryptedPayload;
+      payloads?: Record<string, EncryptedPayload>;
+      meta?: Record<string, unknown>;
+    }
   | { type: 'typing'; to?: string; groupId?: string; isTyping: boolean }
   | { type: 'read'; to?: string; groupId?: string; messageId: string }
   | { type: 'presence:set'; status: 'online' | 'away' }

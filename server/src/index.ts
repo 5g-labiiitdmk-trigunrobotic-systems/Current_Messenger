@@ -325,9 +325,6 @@ async function handleMessageSend(userId: string, event: Extract<ClientEvent, { t
   const socket = relayState.getSocket(userId)!;
   const messageId = crypto.randomUUID();
   const sentAt = new Date().toISOString();
-  // Size of the opaque ciphertext envelope — the only thing about the message
-  // body that is ever recorded anywhere. Content itself never leaves memory.
-  const byteSize = Buffer.byteLength(JSON.stringify(event.payload), 'utf8');
 
   if (event.groupId) {
     const group = relayState.getGroup(event.groupId);
@@ -343,6 +340,16 @@ async function handleMessageSend(userId: string, event: Extract<ClientEvent, { t
     for (const memberId of group.memberIds) {
       if (memberId === userId) continue;
       if (!relayState.isOnline(memberId)) continue; // hard fail per-recipient, no queueing
+      // Pairwise E2E for real content: each member gets their own
+      // ciphertext (event.payloads[memberId]), encrypted client-side
+      // specifically for their public key — see the payloads doc comment
+      // on ClientEvent's message:send. Falls back to the single shared
+      // `payload` for non-content sends (reactions/poll votes/etc, whose
+      // real data is plaintext in `meta` and was never encrypted even for
+      // DMs) — this relay never inspects either, so it can't tell content
+      // from metadata itself; it just forwards whichever the client sent.
+      const memberPayload = event.payloads?.[memberId] ?? event.payload;
+      if (!memberPayload) continue; // sender had no payload for this member (e.g. couldn't fetch their key) — nothing to deliver
       const targetSocket = relayState.getSocket(memberId)!;
       send(targetSocket, {
         type: 'message:receive',
@@ -350,12 +357,12 @@ async function handleMessageSend(userId: string, event: Extract<ClientEvent, { t
         from: userId,
         groupId: event.groupId,
         kind: event.kind,
-        payload: event.payload,
+        payload: memberPayload,
         meta: event.meta,
         sentAt,
       });
       deliveredToAnyone = true;
-      logTransfer(userId, memberId, byteSize);
+      logTransfer(userId, memberId, Buffer.byteLength(JSON.stringify(memberPayload), 'utf8'));
     }
     if (deliveredToAnyone) {
       send(socket, { type: 'message:sent', tempId: event.tempId, messageId, sentAt });
@@ -412,17 +419,20 @@ async function handleMessageSend(userId: string, event: Extract<ClientEvent, { t
   }
 
   const targetSocket = relayState.getSocket(to)!;
+  const dmPayload = event.payload ?? { nonce: '', ciphertext: '' };
   send(targetSocket, {
     type: 'message:receive',
     messageId,
     from: userId,
     kind: event.kind,
-    payload: event.payload,
+    payload: dmPayload,
     meta: event.meta,
     sentAt,
   });
   send(socket, { type: 'message:sent', tempId: event.tempId, messageId, sentAt });
-  logTransfer(userId, to, byteSize);
+  // Size of the opaque ciphertext envelope — the only thing about the message
+  // body that is ever recorded anywhere. Content itself never leaves memory.
+  logTransfer(userId, to, Buffer.byteLength(JSON.stringify(dmPayload), 'utf8'));
 }
 
 // How long a target has to accept/decline before the requester is told

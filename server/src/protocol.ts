@@ -42,7 +42,29 @@ export interface EncryptedPayload {
 
 export type ClientEvent =
   | { type: 'auth'; token: string }
-  | { type: 'message:send'; tempId: string; to?: string; groupId?: string; kind: MessageKind; payload: EncryptedPayload; meta?: Record<string, unknown> }
+  | {
+      type: 'message:send';
+      tempId: string;
+      to?: string;
+      groupId?: string;
+      kind: MessageKind;
+      // DMs (`to` set): a single payload, encrypted to that one recipient's
+      // public key. Groups (`groupId` set) with real content (text/rich
+      // messages): `payloads` instead — one ciphertext per member, each
+      // individually encrypted client-side to that member's own public key
+      // with the exact same encryptMessage() function DMs use (see
+      // chatStore.ts's sendText/sendRich) — genuine pairwise E2E, not a
+      // single ciphertext broadcast to everyone (which nobody but the
+      // sender could ever have opened). Group sends with no real content
+      // (reactions, poll votes, pin/unpin, etc.) still use the single
+      // `payload` — always an empty dummy already, since their actual data
+      // rides in plaintext `meta` and was never encrypted for DMs either.
+      // The relay picks payloads[memberId] first, falling back to `payload`
+      // — see the group branch in handleMessageSend.
+      payload?: EncryptedPayload;
+      payloads?: Record<string, EncryptedPayload>;
+      meta?: Record<string, unknown>;
+    }
   | { type: 'typing'; to?: string; groupId?: string; isTyping: boolean }
   | { type: 'read'; to?: string; groupId?: string; messageId: string }
   | { type: 'presence:set'; status: 'online' | 'away' }

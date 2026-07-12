@@ -3,8 +3,9 @@ import { relayClient } from '../lib/relayClient';
 import { encryptMessage, decryptMessage } from '../lib/crypto';
 import { getOrCreateDeviceKeyPair, fetchPublicKey } from '../lib/keystore';
 import { loadAllThreads, loadPinned, saveMessage, renameMessageId, setPinned, deleteThreadLocal } from '../lib/localDb';
-import type { MessageKind, ServerEvent } from '../types/relay';
+import type { MessageKind, ServerEvent, EncryptedPayload } from '../types/relay';
 import { useAuthStore } from './authStore';
+import { useGroupStore } from './groupStore';
 
 export interface ChatMessage {
   id: string; // messageId once known, else tempId while pending
@@ -32,6 +33,38 @@ function chatKey(peerOrGroupId: string, isGroup: boolean) {
 // rather than sent as plaintext protocol `meta` (which only ever carries
 // opaque routing hints like replyToId/targetMessageId, never content).
 const RICH_KINDS = new Set<MessageKind>(['voice', 'media', 'location', 'sticker', 'poll', 'doodle', 'mood', 'game']);
+
+/**
+ * Pairwise E2E fan-out for group messages: encrypts `plaintext` separately
+ * for every other member of the group, each with their own real,
+ * individually-fetched public key — the exact same encryptMessage()
+ * function 1-1 chats already use, just called once per recipient instead
+ * of once per message. Replaces the old "encrypt with the sender's own
+ * keypair as a placeholder" approach, which produced a ciphertext nobody
+ * but the sender could ever decrypt.
+ *
+ * fetchPublicKey() is itself cached (see keystore.ts), so only the first
+ * message to a given group actually pays for the lookups; every message
+ * after that resolves from memory. Run in parallel rather than a
+ * sequential loop so a group with several members doesn't serialize N
+ * network round trips on that first send.
+ *
+ * A member whose key can't be fetched (e.g. they haven't published one
+ * yet) is silently skipped — they just don't get this specific message,
+ * same as how a 1-1 message to someone with no published key already
+ * fails outright rather than sending anything.
+ */
+async function encryptForGroupMembers(groupId: string, me: string, plaintext: string, secretKey: string): Promise<Record<string, EncryptedPayload>> {
+  const memberIds = useGroupStore.getState().groups[groupId]?.memberIds ?? [];
+  const others = memberIds.filter((id) => id !== me);
+  const keys = await Promise.all(others.map((id) => fetchPublicKey(id)));
+  const payloads: Record<string, EncryptedPayload> = {};
+  others.forEach((id, i) => {
+    const k = keys[i];
+    if (k) payloads[id] = encryptMessage(plaintext, k, secretKey);
+  });
+  return payloads;
+}
 
 interface ChatState {
   threads: Record<string, ChatMessage[]>; // hydrated from + kept in sync with on-device SQLite (localDb.ts) — see hydrateFromLocal
@@ -290,9 +323,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((s) => ({ threads: { ...s.threads, [key]: [...(s.threads[key] ?? []), optimistic] } }));
     saveMessage(me, key, optimistic).catch(() => {});
 
-    // 1-1: encrypt to the recipient's public key. Group: relay fans out — for
-    // the simple-E2E scope we encrypt individually per online member below.
     if (!isGroup) {
+      // 1-1: encrypt to the one recipient's public key.
       const recipientKey = await fetchPublicKey(targetId);
       if (!recipientKey) {
         const failed = { ...optimistic, status: 'failed' as const, failReason: 'no_key' };
@@ -310,19 +342,31 @@ export const useChatStore = create<ChatState>((set, get) => ({
         meta: { ...opts?.meta, replyToId: opts?.replyToId },
       });
     } else {
-      // Group E2E fan-out happens server-side for routing, but payload here is
-      // still per-recipient-encrypted at the protocol's `to` layer in a full
-      // implementation; for this pass group messages use the sender's own
-      // keypair as a placeholder envelope so plumbing (typing/read/reactions)
-      // is real end-to-end even though group-key-distribution is future work.
-      const payload = encryptMessage(text, kp.publicKey, kp.secretKey);
+      // Group: pairwise fan-out — one real ciphertext per member, each
+      // encrypted to their own public key (see encryptForGroupMembers).
+      // No more `plaintextEcho` in meta: that field was a dead leftover
+      // from the very first commit — nothing on the receiving side ever
+      // actually read it, so it never made group text readable for
+      // anyone; it just sent the plaintext through the relay in the
+      // clear for no functional benefit, on top of every recipient's own
+      // decrypt attempt (against the old self-encrypted placeholder
+      // payload) failing and rendering "[unable to decrypt]". This fixes
+      // both problems by making the payload itself genuinely decryptable
+      // per recipient.
+      const payloads = await encryptForGroupMembers(targetId, me, text, kp.secretKey);
+      if (Object.keys(payloads).length === 0) {
+        const failed = { ...optimistic, status: 'failed' as const, failReason: 'no_key' };
+        set((s) => ({ threads: { ...s.threads, [key]: (s.threads[key] ?? []).map((m) => (m.tempId === tempId ? failed : m)) } }));
+        saveMessage(me, key, failed).catch(() => {});
+        return;
+      }
       relayClient.send({
         type: 'message:send',
         tempId,
         groupId: targetId,
         kind: opts?.kind ?? 'text',
-        payload,
-        meta: { ...opts?.meta, replyToId: opts?.replyToId, plaintextEcho: text },
+        payloads,
+        meta: { ...opts?.meta, replyToId: opts?.replyToId },
       });
     }
   },
@@ -351,7 +395,28 @@ export const useChatStore = create<ChatState>((set, get) => ({
     saveMessage(me, key, optimistic).catch(() => {});
 
     const json = JSON.stringify(content);
-    const encryptTo = isGroup ? kp.publicKey : await fetchPublicKey(targetId);
+
+    if (isGroup) {
+      // Pairwise fan-out — same real per-member encryption as sendText,
+      // covering rich content (photos/voice/polls/etc.) too. Previously
+      // this path encrypted with the sender's own keypair as a
+      // placeholder, which no other group member could ever decrypt —
+      // there was no plaintext-meta fallback for rich content the way
+      // sendText had for plain text, so a group photo/poll/voice message
+      // would have rendered as empty/undecryptable to everyone but the
+      // sender the moment any group screen gained the UI to send one.
+      const payloads = await encryptForGroupMembers(targetId, me, json, kp.secretKey);
+      if (Object.keys(payloads).length === 0) {
+        const failed = { ...optimistic, status: 'failed' as const, failReason: 'no_key' };
+        set((s) => ({ threads: { ...s.threads, [key]: (s.threads[key] ?? []).map((m) => (m.tempId === tempId ? failed : m)) } }));
+        saveMessage(me, key, failed).catch(() => {});
+        return;
+      }
+      relayClient.send({ type: 'message:send', tempId, groupId: targetId, kind, payloads, meta: { replyToId } });
+      return;
+    }
+
+    const encryptTo = await fetchPublicKey(targetId);
     if (!encryptTo) {
       const failed = { ...optimistic, status: 'failed' as const, failReason: 'no_key' };
       set((s) => ({ threads: { ...s.threads, [key]: (s.threads[key] ?? []).map((m) => (m.tempId === tempId ? failed : m)) } }));
@@ -359,15 +424,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return;
     }
     const payload = encryptMessage(json, encryptTo, kp.secretKey);
-    relayClient.send({
-      type: 'message:send',
-      tempId,
-      to: isGroup ? undefined : targetId,
-      groupId: isGroup ? targetId : undefined,
-      kind,
-      payload,
-      meta: { replyToId },
-    });
+    relayClient.send({ type: 'message:send', tempId, to: targetId, kind, payload, meta: { replyToId } });
   },
 
   forwardMessage: async (message, toTargetId, toIsGroup) => {
