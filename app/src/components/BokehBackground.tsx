@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { StyleSheet, useWindowDimensions } from 'react-native';
+import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import Svg, { Defs, RadialGradient, Stop, Rect, Circle, LinearGradient as SvgLinearGradient } from 'react-native-svg';
 import Animated, { useAnimatedProps, useSharedValue, withRepeat, withSequence, withTiming, Easing } from 'react-native-reanimated';
 import { useTheme } from '../theme/useTheme';
@@ -32,9 +32,18 @@ export function BokehBackground({ style }: { style?: any }) {
   const { mode } = useTheme();
   const wallpaperKey = useThemeStore((s) => s.wallpaperKey);
   const { width, height } = useWindowDimensions();
-  const variant = (wallpapers[wallpaperKey] ?? wallpapers.default)[mode];
+  const def = wallpapers[wallpaperKey] ?? wallpapers.default;
+  const variant = def[mode];
   const { wallStops, pools, orbColor } = variant;
   const maxDim = Math.max(width, height);
+
+  // Flat wallpapers (see theme/wallpapers.ts) are a plain solid fill —
+  // deliberately skips the gradient defs, blob pools, and drifting orbs
+  // below entirely, not just visually flattens them, for users who want a
+  // genuinely clean, distraction-free background.
+  if (def.flat) {
+    return <View style={[StyleSheet.absoluteFill, style, { backgroundColor: wallStops[0] }]} />;
+  }
 
   return (
     <Svg width={width} height={height} style={[StyleSheet.absoluteFill, style]}>

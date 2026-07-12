@@ -13,12 +13,39 @@ interface WallpaperVariant {
 
 export interface WallpaperDef {
   label: string;
-  swatch: [string, string]; // preview gradient for the picker
+  swatch: [string, string]; // preview gradient for the picker; identical pair for flat wallpapers
+  /** Flat, single-color wallpaper — BokehBackground renders a plain solid
+   * fill (variant's own single wallStops entry) with no gradient, no blob
+   * pools, and no drifting orbs, for users who want a clean look with no
+   * gradient at all. Both `light`/`dark` variants are still required so
+   * the wallpaper still pairs correctly with the light/dark mode toggle —
+   * each variant's single color is chosen to keep that mode's text tokens
+   * (dark text in light mode, light text in dark mode) legible against it,
+   * the same way every gradient wallpaper's light/dark pair already does. */
+  flat?: boolean;
   light: WallpaperVariant;
   dark: WallpaperVariant;
 }
 
-export type WallpaperKey = 'default' | 'ocean' | 'sunset' | 'forest' | 'midnight' | 'aurora' | 'rose' | 'slate';
+export type WallpaperKey =
+  | 'default'
+  | 'ocean'
+  | 'sunset'
+  | 'forest'
+  | 'midnight'
+  | 'aurora'
+  | 'rose'
+  | 'slate'
+  | 'onyx'
+  | 'charcoal'
+  | 'navy'
+  | 'espresso'
+  | 'burgundy'
+  | 'plum'
+  | 'pine'
+  | 'graphite'
+  | 'ivory'
+  | 'pearl';
 
 export const wallpapers: Record<WallpaperKey, WallpaperDef> = {
   default: {
@@ -206,5 +233,84 @@ export const wallpapers: Record<WallpaperKey, WallpaperDef> = {
         { cx: 0.5, cy: 0.5, r: 0.55, color: 'rgba(55,65,80,0.1)' },
       ],
     },
+  },
+
+  // --- Flat, single-color wallpapers below (flat: true) — plain solid
+  // fills with no gradient, blob pools, or drifting orbs (see BokehBackground's
+  // `if (def.flat)` branch). Each pair is chosen the same way every gradient
+  // wallpaper above already is: a genuinely dark color for `dark` mode
+  // (legible against the theme's light text tokens) and a paler tint of the
+  // same color family for `light` mode (legible against the theme's dark
+  // text tokens) — no separate per-wallpaper text-color system needed,
+  // since the app's existing mode-based text tokens already do the work.
+  onyx: {
+    label: 'Onyx',
+    swatch: ['#050505', '#050505'],
+    flat: true,
+    light: { wallStops: ['#f4f4f4'], orbColor: 'transparent', pools: [] },
+    dark: { wallStops: ['#050505'], orbColor: 'transparent', pools: [] },
+  },
+  charcoal: {
+    label: 'Charcoal',
+    swatch: ['#1c1c1e', '#1c1c1e'],
+    flat: true,
+    light: { wallStops: ['#e7e6e6'], orbColor: 'transparent', pools: [] },
+    dark: { wallStops: ['#1c1c1e'], orbColor: 'transparent', pools: [] },
+  },
+  navy: {
+    label: 'Navy',
+    swatch: ['#0a1128', '#0a1128'],
+    flat: true,
+    light: { wallStops: ['#dde4f4'], orbColor: 'transparent', pools: [] },
+    dark: { wallStops: ['#0a1128'], orbColor: 'transparent', pools: [] },
+  },
+  espresso: {
+    label: 'Espresso',
+    swatch: ['#2b1d14', '#2b1d14'],
+    flat: true,
+    light: { wallStops: ['#ecdfd0'], orbColor: 'transparent', pools: [] },
+    dark: { wallStops: ['#2b1d14'], orbColor: 'transparent', pools: [] },
+  },
+  burgundy: {
+    label: 'Burgundy',
+    swatch: ['#2e0a14', '#2e0a14'],
+    flat: true,
+    light: { wallStops: ['#f4dbe0'], orbColor: 'transparent', pools: [] },
+    dark: { wallStops: ['#2e0a14'], orbColor: 'transparent', pools: [] },
+  },
+  plum: {
+    label: 'Plum',
+    swatch: ['#20102f', '#20102f'],
+    flat: true,
+    light: { wallStops: ['#e7dcf1'], orbColor: 'transparent', pools: [] },
+    dark: { wallStops: ['#20102f'], orbColor: 'transparent', pools: [] },
+  },
+  pine: {
+    label: 'Pine',
+    swatch: ['#0c2018', '#0c2018'],
+    flat: true,
+    light: { wallStops: ['#dcefe3'], orbColor: 'transparent', pools: [] },
+    dark: { wallStops: ['#0c2018'], orbColor: 'transparent', pools: [] },
+  },
+  graphite: {
+    label: 'Graphite',
+    swatch: ['#101418', '#101418'],
+    flat: true,
+    light: { wallStops: ['#e0e3e6'], orbColor: 'transparent', pools: [] },
+    dark: { wallStops: ['#101418'], orbColor: 'transparent', pools: [] },
+  },
+  ivory: {
+    label: 'Ivory',
+    swatch: ['#faf7f0', '#faf7f0'],
+    flat: true,
+    light: { wallStops: ['#faf7f0'], orbColor: 'transparent', pools: [] },
+    dark: { wallStops: ['#181510'], orbColor: 'transparent', pools: [] },
+  },
+  pearl: {
+    label: 'Pearl',
+    swatch: ['#f1f0f2', '#f1f0f2'],
+    flat: true,
+    light: { wallStops: ['#f1f0f2'], orbColor: 'transparent', pools: [] },
+    dark: { wallStops: ['#121214'], orbColor: 'transparent', pools: [] },
   },
 };

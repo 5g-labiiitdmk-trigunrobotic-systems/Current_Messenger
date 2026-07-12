@@ -2,7 +2,6 @@ import React from 'react';
 import { View, Pressable, Text, StyleSheet } from 'react-native';
 import type { BottomTabBarProps } from 'expo-router/tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path, Circle } from 'react-native-svg';
 import { Glass } from './Glass';
 import { useTheme } from '../theme/useTheme';
@@ -49,24 +48,9 @@ const LABELS: Record<string, string> = { chats: 'Chats', calls: 'Calls', contact
 export function TabBar({ state, navigation }: BottomTabBarProps) {
   const { tokens, a1, mode } = useTheme();
   const insets = useSafeAreaInsets();
-  const floorHeight = insets.bottom + TAB_BAR_BOTTOM_GAP + TAB_BAR_HEIGHT + 40;
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-      {/* Static floor behind the bar, from just above the pill down to the
-          screen bottom — content scrolling underneath fades to the tab
-          bar's solid tone instead of hard-cutting against its edge. No
-          blur (see Glass.tsx) — a plain gradient into a solid color. */}
-      <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: floorHeight }}>
-        <LinearGradient
-          colors={['transparent', tokens.tabBg]}
-          locations={[0, 0.45]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 0, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
-      </View>
-
       <View style={{ position: 'absolute', left: 18, right: 18, bottom: insets.bottom + TAB_BAR_BOTTOM_GAP }}>
         <Glass
           radius={22}
