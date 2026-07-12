@@ -202,7 +202,11 @@ npx eas build --profile development --platform android   # or ios
 Plain `npx expo start` will launch fine for UI iteration, but calling
 (WebRTC) won't work until you're running the EAS dev build with the
 native react-native-webrtc module linked — it requires a custom dev
-client, not Expo Go.
+client, not Expo Go. Real audio-route selection (earpiece/speaker/
+Bluetooth) and the in-call ringtone need the same rebuild, since they're
+also a native module (react-native-incall-manager — see
+`src/lib/callAudio.ts`), not something a JS-only update to an existing
+dev client picks up.
 
 ## 5. What's intentionally not wired up
 

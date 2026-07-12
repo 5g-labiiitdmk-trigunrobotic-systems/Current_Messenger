@@ -9,6 +9,8 @@ import { useTheme } from '../../src/theme/useTheme';
 import { useCallStore } from '../../src/state/callStore';
 import { useContactStore } from '../../src/state/contactStore';
 import { RTCView } from '../../src/lib/webrtc';
+import type { AudioRoute } from '../../src/lib/callAudio';
+import { appAlert } from '../../src/state/alertStore';
 
 const END_REASON_LABEL: Record<string, string> = {
   hangup: 'Call ended',
@@ -17,6 +19,17 @@ const END_REASON_LABEL: Record<string, string> = {
   'no-answer': 'No answer',
   network: 'Call dropped — network issue',
   failed: "Couldn't connect",
+};
+
+// Only routes a device can actually ever report — a Bluetooth or wired
+// headset entry only appears in availableAudioRoutes when one is genuinely
+// connected (see callAudio.ts), so this is just display metadata, not a
+// gate on what's offered.
+const ROUTE_LABEL: Record<AudioRoute, string> = {
+  EARPIECE: 'Earpiece',
+  SPEAKER_PHONE: 'Speaker',
+  BLUETOOTH: 'Bluetooth',
+  WIRED_HEADSET: 'Headset',
 };
 
 function formatDuration(sec: number): string {
@@ -54,12 +67,13 @@ export default function CallScreen() {
   const remoteStream = useCallStore((s) => s.remoteStream);
   const muted = useCallStore((s) => s.muted);
   const cameraOff = useCallStore((s) => s.cameraOff);
-  const speakerOn = useCallStore((s) => s.speakerOn);
+  const audioRoute = useCallStore((s) => s.audioRoute);
+  const availableAudioRoutes = useCallStore((s) => s.availableAudioRoutes);
   const connectedAt = useCallStore((s) => s.connectedAt);
   const hangup = useCallStore((s) => s.hangup);
   const toggleMute = useCallStore((s) => s.toggleMute);
   const toggleCamera = useCallStore((s) => s.toggleCamera);
-  const toggleSpeaker = useCallStore((s) => s.toggleSpeaker);
+  const setAudioRoute = useCallStore((s) => s.setAudioRoute);
   const clearEnded = useCallStore((s) => s.clearEnded);
   const contact = useContactStore((s) => s.approved.find((c) => c.id === peerId));
   const [elapsed, setElapsed] = useState(0);
@@ -104,6 +118,24 @@ export default function CallScreen() {
 
   const statusText =
     phase === 'ringing-out' ? 'Calling…' : phase === 'connecting' ? 'Connecting…' : phase === 'active' ? formatDuration(elapsed) : phase === 'ended' ? (endReason ? END_REASON_LABEL[endReason] ?? 'Call ended' : 'Call ended') : '';
+
+  // WhatsApp-style route picker: only ever lists routes the device reports
+  // as actually available right now (see availableAudioRoutes in
+  // callStore.ts/callAudio.ts) — a Bluetooth entry only shows up once a
+  // Bluetooth audio device is genuinely connected, same as a real dialer.
+  const onOpenAudioRoutePicker = () => {
+    if (availableAudioRoutes.length === 0) return;
+    appAlert(
+      'Audio output',
+      undefined,
+      availableAudioRoutes
+        .map((route) => ({
+          text: audioRoute === route ? `${ROUTE_LABEL[route]}  ✓` : ROUTE_LABEL[route],
+          onPress: () => setAudioRoute(route),
+        }))
+        .concat([{ text: 'Cancel', style: 'cancel' } as any])
+    );
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: '#0a0a0c' }}>
@@ -188,13 +220,22 @@ export default function CallScreen() {
           )}
 
           <View style={{ alignItems: 'center', gap: 9 }}>
-            <ControlButton onPress={toggleSpeaker} active={speakerOn}>
-              <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={speakerOn ? '#0a0a0c' : '#fff'} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <ControlButton onPress={onOpenAudioRoutePicker} active={audioRoute === 'SPEAKER_PHONE' || audioRoute === 'BLUETOOTH'}>
+              <Svg
+                width={22}
+                height={22}
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke={audioRoute === 'SPEAKER_PHONE' || audioRoute === 'BLUETOOTH' ? '#0a0a0c' : '#fff'}
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <Path d="M11 5L6 9H2v6h4l5 4V5z" />
                 <Path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" />
               </Svg>
             </ControlButton>
-            <Text style={styles.label}>Speaker</Text>
+            <Text style={styles.label}>{audioRoute ? ROUTE_LABEL[audioRoute] : 'Audio'}</Text>
           </View>
 
           <View style={{ alignItems: 'center', gap: 9 }}>

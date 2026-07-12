@@ -6,6 +6,15 @@ import { RTCPeerConnection, RTCSessionDescription, RTCIceCandidate, mediaDevices
 import { fetchIceServers, type IceServerConfig } from '../lib/iceServers';
 import { useAuthStore } from './authStore';
 import { loadCallLog, saveCallLogEntry } from '../lib/localDb';
+import {
+  startCallAudioSession,
+  stopCallAudioSession,
+  chooseAudioRoute,
+  subscribeToAudioRouteChanges,
+  playIncomingRingtone,
+  stopIncomingRingtone,
+  type AudioRoute,
+} from '../lib/callAudio';
 
 export interface CallLogEntry {
   id: string;
@@ -46,7 +55,13 @@ interface CallState {
   remoteStream: InstanceType<typeof MediaStream> | null;
   muted: boolean;
   cameraOff: boolean;
-  speakerOn: boolean;
+  /** Real OS-level audio route (earpiece/speaker/Bluetooth/wired headset —
+   * see src/lib/callAudio.ts), not a UI-only toggle. `availableAudioRoutes`
+   * only ever lists routes the device actually currently has (a Bluetooth
+   * headset only appears once one is connected), same as a real phone
+   * dialer's route picker. */
+  audioRoute: AudioRoute | null;
+  availableAudioRoutes: AudioRoute[];
   connectedAt: number | null;
   wired: boolean;
   wire: () => void;
@@ -56,7 +71,7 @@ interface CallState {
   hangup: () => void;
   toggleMute: () => void;
   toggleCamera: () => void;
-  toggleSpeaker: () => void;
+  setAudioRoute: (route: AudioRoute) => void;
   clearEnded: () => void;
 }
 
@@ -73,6 +88,7 @@ let ringTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
 let iceDisconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let endedResetTimer: ReturnType<typeof setTimeout> | null = null;
 let appStateSub: { remove: () => void } | null = null;
+let audioRouteUnsub: (() => void) | null = null;
 
 function clearTimers() {
   if (ringTimeoutTimer) clearTimeout(ringTimeoutTimer);
@@ -89,6 +105,10 @@ function sendSignal(to: string, signal: CallSignal) {
 
 function teardownConnection() {
   clearTimers();
+  stopIncomingRingtone(); // no-op if it wasn't playing — always safe to call on any call-ending path
+  stopCallAudioSession();
+  audioRouteUnsub?.();
+  audioRouteUnsub = null;
   if (pc) {
     // react-native-webrtc's close() also stops remote tracks; local tracks
     // are ours to stop explicitly so the camera/mic light actually turns off.
@@ -158,7 +178,8 @@ export const useCallStore = create<CallState>((set, get) => ({
   remoteStream: null,
   muted: false,
   cameraOff: false,
-  speakerOn: false,
+  audioRoute: null,
+  availableAudioRoutes: [],
   connectedAt: null,
   wired: false,
 
@@ -209,6 +230,11 @@ export const useCallStore = create<CallState>((set, get) => ({
             endReason: null,
             log: [inEntry, ...s.log],
           });
+          // Plays even with the app open/foregrounded — the OS push
+          // notification's own sound (see src/lib/push.ts) only covers the
+          // backgrounded/killed case; nothing was making any sound at all
+          // for a live incoming-call screen before this.
+          playIncomingRingtone();
           const meIn = useAuthStore.getState().session?.user.id;
           if (meIn) saveCallLogEntry(meIn, inEntry).catch(() => {});
           break;
@@ -319,6 +345,7 @@ export const useCallStore = create<CallState>((set, get) => ({
     const s = get();
     if (s.phase !== 'ringing-in' || !s.peerId) return;
     clearTimers();
+    stopIncomingRingtone();
     set({ phase: 'connecting', incoming: null });
     sendSignal(s.peerId, { kind: 'accept' });
     try {
@@ -333,6 +360,7 @@ export const useCallStore = create<CallState>((set, get) => ({
   decline: () => {
     const from = get().peerId;
     if (from) sendSignal(from, { kind: 'decline' });
+    stopIncomingRingtone();
     set({ phase: 'idle', incoming: null, peerId: null, kind: null });
   },
 
@@ -356,12 +384,17 @@ export const useCallStore = create<CallState>((set, get) => ({
     set({ cameraOff: next });
   },
 
-  toggleSpeaker: () => {
-    // react-native-webrtc's audio routing (InCallManager-style speaker
-    // toggle) is a native-module call outside webrtc.ts's re-exported
-    // surface — tracked as follow-up; this flips the UI/intent state so the
-    // control isn't dead, but doesn't yet force the OS audio route.
-    set((s) => ({ speakerOn: !s.speakerOn }));
+  setAudioRoute: (route) => {
+    // Real OS-level routing via react-native-incall-manager (src/lib/callAudio.ts)
+    // — replaces the old toggleSpeaker, which only flipped a UI boolean and
+    // never actually forced the audio route, the most likely cause of
+    // "speaker volume is too low" (the call was very plausibly always
+    // still routing through the earpiece regardless of what the toggle
+    // showed). chooseAudioRoute() resolves with the authoritative
+    // post-change state rather than relying solely on the async event.
+    chooseAudioRoute(route)
+      .then(({ availableRoutes, selectedRoute }) => set({ audioRoute: selectedRoute, availableAudioRoutes: availableRoutes }))
+      .catch(() => {});
   },
 
   clearEnded: () => {
@@ -369,7 +402,7 @@ export const useCallStore = create<CallState>((set, get) => ({
       clearTimeout(endedResetTimer);
       endedResetTimer = null;
     }
-    set({ phase: 'idle', peerId: null, kind: null, endReason: null, localStream: null, remoteStream: null, muted: false, cameraOff: false, connectedAt: null });
+    set({ phase: 'idle', peerId: null, kind: null, endReason: null, localStream: null, remoteStream: null, muted: false, cameraOff: false, audioRoute: null, availableAudioRoutes: [], connectedAt: null });
   },
 }));
 
@@ -377,6 +410,16 @@ async function startLocalMedia(get: () => CallState, set: (partial: Partial<Call
   const kind = get().kind;
   const stream = await mediaDevices.getUserMedia({ audio: true, video: kind === 'video' });
   set({ localStream: stream as any });
+
+  // Real in-call audio session — proximity sensor, correct default route
+  // (earpiece for voice, speaker for video, matching any standard phone
+  // dialer), and Bluetooth/wired-headset detection. Must start before the
+  // route-change subscription below means anything (see callAudio.ts).
+  startCallAudioSession(kind === 'video' ? 'video' : 'audio');
+  audioRouteUnsub?.();
+  audioRouteUnsub = subscribeToAudioRouteChanges(({ availableRoutes, selectedRoute }) => {
+    set({ audioRoute: selectedRoute, availableAudioRoutes: availableRoutes });
+  });
 
   pc = new RTCPeerConnection({ iceServers });
   stream.getTracks().forEach((track: any) => pc!.addTrack(track, stream as any));
@@ -473,6 +516,8 @@ function endCall(get: () => CallState, set: (partial: Partial<CallState>) => voi
     remoteStream: null,
     muted: false,
     cameraOff: false,
+    audioRoute: null,
+    availableAudioRoutes: [],
     log,
   });
   if (logChanged && topEntry) {
@@ -490,7 +535,7 @@ function endCall(get: () => CallState, set: (partial: Partial<CallState>) => voi
   endedResetTimer = setTimeout(() => {
     endedResetTimer = null;
     if (get().phase === 'ended') {
-      set({ phase: 'idle', peerId: null, kind: null, endReason: null, localStream: null, remoteStream: null, muted: false, cameraOff: false, connectedAt: null });
+      set({ phase: 'idle', peerId: null, kind: null, endReason: null, localStream: null, remoteStream: null, muted: false, cameraOff: false, audioRoute: null, availableAudioRoutes: [], connectedAt: null });
     }
   }, 2500);
 }
