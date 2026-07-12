@@ -21,6 +21,12 @@ interface ContactState {
   searchByUsername: (query: string) => Promise<UserRow[]>;
   sendRequest: (receiverId: string) => Promise<void>;
   respond: (requestId: string, accept: boolean) => Promise<void>;
+  /** "Unfriend" — deletes the contact_requests row(s) between the two
+   * users entirely (not a status change), so they go back to being
+   * strangers: areApprovedContacts() then denies both message:send and
+   * session:request server-side, same as anyone never approved, and a
+   * fresh request + approval is required before messaging works again. */
+  removeContact: (userId: string) => Promise<void>;
   block: (userId: string, reason?: string) => Promise<void>;
   report: (userId: string, reason: string) => Promise<void>;
   unblock: (userId: string) => Promise<void>;
@@ -199,6 +205,24 @@ export const useContactStore = create<ContactState>((set, get) => ({
       .update({ status: accept ? 'approved' : 'declined', responded_at: new Date().toISOString() })
       .eq('id', requestId);
     if (requesterId) relayClient.send({ type: 'contact:request_responded', to: requesterId });
+    await get().refresh();
+  },
+
+  removeContact: async (userId) => {
+    const me = useAuthStore.getState().session?.user.id;
+    if (!me) return;
+    // Deletes rather than updates status — an "unfriended" pair should be
+    // able to send each other a completely fresh request later without
+    // hitting contact_requests_unique_pair (which blocks a second insert
+    // in the same direction regardless of the old row's status). Deletes
+    // both directions defensively, though after migration
+    // 0006_contact_requests_pending_pair_unique.sql there should only ever
+    // be at most one row per direction.
+    await supabase
+      .from('contact_requests')
+      .delete()
+      .or(`and(sender_id.eq.${me},receiver_id.eq.${userId}),and(sender_id.eq.${userId},receiver_id.eq.${me})`);
+    set((s) => ({ approved: s.approved.filter((c) => c.id !== userId) }));
     await get().refresh();
   },
 

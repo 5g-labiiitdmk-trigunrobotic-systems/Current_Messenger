@@ -7,6 +7,7 @@ export type MessageKind =
   | 'sticker'
   | 'reaction'
   | 'edit'
+  | 'delete'
   | 'pin'
   | 'unpin'
   | 'forward'

@@ -13,11 +13,12 @@ import { fontFamilies } from '../../src/theme/tokens';
 import { useContactStore } from '../../src/state/contactStore';
 import { usePresenceStore } from '../../src/state/presenceStore';
 import { isPresenceVisible } from '../../src/lib/presencePolicy';
+import { appAlert } from '../../src/state/alertStore';
 import type { UserRow } from '../../src/types/database';
 
 export default function ContactsScreen() {
   const { tokens, a1, a2 } = useTheme();
-  const { approved, incoming, outgoing, refresh, searchByUsername, sendRequest, respond } = useContactStore();
+  const { approved, incoming, outgoing, refresh, searchByUsername, sendRequest, respond, removeContact } = useContactStore();
   const presence = usePresenceStore((s) => s.byUser);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<UserRow[]>([]);
@@ -164,7 +165,25 @@ export default function ContactsScreen() {
           </View>
         ) : (
           approved.map((c, i) => (
-            <Pressable key={c.id} onPress={() => router.push(`/chat/${c.id}`)} style={{ flexDirection: 'row', alignItems: 'center', gap: 13, padding: 11, paddingHorizontal: 16, borderBottomWidth: i === approved.length - 1 ? 0 : 1, borderBottomColor: tokens.glassBorder }}>
+            <Pressable
+              key={c.id}
+              onPress={() => router.push(`/chat/${c.id}`)}
+              onLongPress={() =>
+                appAlert(c.display_name || c.username, undefined, [
+                  {
+                    text: 'Remove contact',
+                    style: 'destructive',
+                    onPress: () =>
+                      appAlert('Remove this contact?', "You'll need to send a new request to message each other again.", [
+                        { text: 'Cancel', style: 'cancel' },
+                        { text: 'Remove', style: 'destructive', onPress: () => removeContact(c.id) },
+                      ]),
+                  },
+                  { text: 'Cancel', style: 'cancel' },
+                ])
+              }
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 13, padding: 11, paddingHorizontal: 16, borderBottomWidth: i === approved.length - 1 ? 0 : 1, borderBottomColor: tokens.glassBorder }}
+            >
               <Avatar hue={c.avatar_hue} photoUrl={c.avatar_url} size={46} online={isPresenceVisible(c) && presence[c.id]?.status === 'online'} label={c.display_name || c.username} />
               <View style={{ flex: 1 }}>
                 <Text style={{ fontSize: 15, fontFamily: fontFamilies.bold, color: tokens.text }}>{c.display_name || c.username}</Text>

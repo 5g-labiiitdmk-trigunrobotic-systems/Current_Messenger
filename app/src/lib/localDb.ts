@@ -192,3 +192,13 @@ export async function clearLocalHistory(userId: string): Promise<void> {
   const db = await getDb(userId);
   await db.execAsync('delete from messages; delete from pinned;');
 }
+
+/** "Clear chat" — wipes one conversation's local history only (not the
+ * whole account's, see clearLocalHistory above). This device only: never
+ * touches the other party's copy, since there's nothing server-side to
+ * clear from in the first place. */
+export async function deleteThreadLocal(userId: string, threadKey: string): Promise<void> {
+  const db = await getDb(userId);
+  await db.runAsync('delete from messages where thread_key = ?', [threadKey]);
+  await db.runAsync('delete from pinned where thread_key = ?', [threadKey]);
+}

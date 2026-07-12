@@ -9,6 +9,19 @@ export type MessageKind =
   | 'sticker'
   | 'reaction'
   | 'edit'
+  // "Delete for everyone" — meta.targetMessageId is the message to remove.
+  // Same targeted-mutation pattern as 'reaction'/'edit'/'poll_vote': rides
+  // the ordinary message:send/message:receive path, an empty payload (no
+  // content to carry), and is therefore just as live-only as those already
+  // are — the relay hard-fails message:send to an offline recipient with
+  // no queueing (see handleMessageSend), so a delete sent while the other
+  // party is offline simply never reaches their device. Deliberately not
+  // given a call-ring-style replay-on-reconnect: a delete has no natural
+  // expiry window (unlike a ~45s call ring), so an ephemeral record would
+  // either need to live indefinitely — undermining the zero-persistence
+  // guarantee — or expire too fast to usually help. See chatStore.ts's
+  // deleteForEveryone for the full reasoning.
+  | 'delete'
   | 'pin'
   | 'unpin'
   | 'forward'

@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { relayClient } from '../lib/relayClient';
 import { encryptMessage, decryptMessage } from '../lib/crypto';
 import { getOrCreateDeviceKeyPair, fetchPublicKey } from '../lib/keystore';
-import { loadAllThreads, loadPinned, saveMessage, renameMessageId, setPinned } from '../lib/localDb';
+import { loadAllThreads, loadPinned, saveMessage, renameMessageId, setPinned, deleteThreadLocal } from '../lib/localDb';
 import type { MessageKind, ServerEvent } from '../types/relay';
 import { useAuthStore } from './authStore';
 
@@ -47,8 +47,16 @@ interface ChatState {
   react: (targetId: string, isGroup: boolean, messageId: string, emoji: string) => void;
   editMessage: (targetId: string, isGroup: boolean, messageId: string, newText: string) => void;
   deleteLocal: (targetId: string, isGroup: boolean, messageId: string) => void;
+  /** Own messages only — deletes from this device immediately, and asks
+   * the other party's device (if connected right now) to delete its copy
+   * too. See the doc comment above the 'delete' MessageKind in
+   * server/src/protocol.ts for why this is live-only, not queued. */
+  deleteForEveryone: (targetId: string, isGroup: boolean, messageId: string) => void;
   togglePin: (targetId: string, isGroup: boolean, messageId: string) => void;
   votePoll: (targetId: string, isGroup: boolean, messageId: string, optionIndex: number) => void;
+  /** "Clear chat" — deletes every message in this one conversation from
+   * local storage (this device only; never touches the other party's
+   * copy, there being nothing server-side to clear from). */
   clearThread: (key: string) => void;
 }
 
@@ -190,6 +198,24 @@ export const useChatStore = create<ChatState>((set, get) => ({
               [key]: (s.threads[key] ?? []).map((m) => {
                 if (m.id !== event.meta!.targetMessageId) return m;
                 updatedMsg = { ...m, text, edited: true };
+                return updatedMsg;
+              }),
+            },
+          }));
+          if (updatedMsg) saveMessage(me, key, updatedMsg).catch(() => {});
+          return;
+        }
+        if (event.kind === 'delete' && event.meta?.targetMessageId) {
+          // "Delete for everyone" — the sender's own copy was already
+          // marked deleted locally at send time (see deleteForEveryone);
+          // this applies the same tombstone on the recipient's side.
+          let updatedMsg: ChatMessage | null = null;
+          set((s) => ({
+            threads: {
+              ...s.threads,
+              [key]: (s.threads[key] ?? []).map((m) => {
+                if (m.id !== event.meta!.targetMessageId) return m;
+                updatedMsg = { ...m, deleted: true, text: undefined };
                 return updatedMsg;
               }),
             },
@@ -457,6 +483,45 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (me && updatedMsg) saveMessage(me, key, updatedMsg).catch(() => {});
   },
 
+  deleteForEveryone: (targetId, isGroup, messageId) => {
+    const me = useAuthStore.getState().session?.user.id;
+    if (!me) return;
+    const key = chatKey(targetId, isGroup);
+    let updatedMsg: ChatMessage | null = null;
+    set((s) => ({
+      threads: {
+        ...s.threads,
+        [key]: (s.threads[key] ?? []).map((m) => {
+          if (m.id !== messageId) return m;
+          updatedMsg = { ...m, deleted: true, text: undefined };
+          return updatedMsg;
+        }),
+      },
+    }));
+    if (updatedMsg) saveMessage(me, key, updatedMsg).catch(() => {});
+    // Live-only, deliberately not queued for an offline recipient — same
+    // as edit/reaction/poll_vote (all of which already only apply to a
+    // currently-connected recipient; see handleMessageSend's hard-fail-if-
+    // offline rule in server/src/index.ts). A "delete" instruction, unlike
+    // a call ring, has no natural expiry: the sender could decide to
+    // delete something hours or days after sending it, so an ephemeral
+    // replay-on-reconnect record (like callStore's ring replay) would
+    // either need to live indefinitely — undermining the zero-persistence
+    // guarantee this whole relay is built around — or expire quickly
+    // enough to rarely actually help. If the recipient is offline right
+    // now, their copy simply isn't reached; the sender's own copy is still
+    // deleted immediately either way.
+    relayClient.send({
+      type: 'message:send',
+      tempId: `delete-${Date.now()}`,
+      to: isGroup ? undefined : targetId,
+      groupId: isGroup ? targetId : undefined,
+      kind: 'delete',
+      payload: { nonce: '', ciphertext: '' },
+      meta: { targetMessageId: messageId },
+    });
+  },
+
   togglePin: (targetId, isGroup, messageId) => {
     const me = useAuthStore.getState().session?.user.id;
     const key = chatKey(targetId, isGroup);
@@ -470,7 +535,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (me) setPinned(me, key, messageId, nowPinned).catch(() => {});
   },
 
-  clearThread: (key) => set((s) => ({ threads: { ...s.threads, [key]: [] } })),
+  clearThread: (key) => {
+    const me = useAuthStore.getState().session?.user.id;
+    set((s) => ({
+      threads: { ...s.threads, [key]: [] },
+      pinned: { ...s.pinned, [key]: [] },
+    }));
+    // Without this, the "cleared" messages were only ever wiped from
+    // in-memory state — reopening the app would reload them right back
+    // from local SQLite via hydrateFromLocal, since nothing had actually
+    // deleted the persisted rows. This was true even before this feature
+    // had a UI entry point (clearThread existed but was never called from
+    // anywhere).
+    if (me) deleteThreadLocal(me, key).catch(() => {});
+  },
 }));
 
 export function getThreadKey(id: string, isGroup: boolean) {

@@ -39,8 +39,8 @@ export default function ChatScreen() {
   const presence = usePresenceStore((s) => s.byUser[id ?? '']);
   const threads = useChatStore((s) => s.threads);
   const typingMap = useChatStore((s) => s.typing);
-  const { sendText, sendRich, forwardMessage, setTyping, markRead, react, editMessage, deleteLocal, togglePin, votePoll, pinned } = useChatStore();
-  const { block, report } = useContactStore();
+  const { sendText, sendRich, forwardMessage, setTyping, markRead, react, editMessage, deleteLocal, deleteForEveryone, togglePin, votePoll, pinned, clearThread } = useChatStore();
+  const { block, report, removeContact } = useContactStore();
   const ring = useCallStore((s) => s.ring);
   const approved = useContactStore((s) => s.approved);
   const sessionState = useChatSessionStore((s) => s.sessions[id ?? ''] ?? 'none');
@@ -207,6 +207,20 @@ export default function ChatScreen() {
         },
       });
     }
+    // Only your own messages — deleting *for everyone* removes it from the
+    // other person's device too (see deleteForEveryone's own doc comment),
+    // which shouldn't be something you can do to a message they sent.
+    if (isMine) {
+      options.push({
+        text: 'Delete for everyone',
+        style: 'destructive',
+        onPress: () =>
+          appAlert('Delete for everyone?', "This removes it from both your and the recipient's devices. This can't be undone.", [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Delete', style: 'destructive', onPress: () => deleteForEveryone(id ?? '', false, messageId) },
+          ]),
+      });
+    }
     options.push({ text: 'Delete for me', style: 'destructive', onPress: () => deleteLocal(id ?? '', false, messageId) });
     options.push({ text: 'Cancel', style: 'cancel' });
     appAlert('Message', undefined, options);
@@ -227,6 +241,33 @@ export default function ChatScreen() {
   // empty. This is the entry point.
   const onContactMenu = () => {
     appAlert(contact.display_name || contact.username, undefined, [
+      {
+        text: 'Clear chat',
+        style: 'destructive',
+        onPress: () => {
+          appAlert('Clear this chat?', "This deletes every message in this conversation from your device only — it doesn't affect their copy or notify them. This can't be undone.", [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Clear', style: 'destructive', onPress: () => clearThread(key) },
+          ]);
+        },
+      },
+      {
+        text: 'Remove contact',
+        style: 'destructive',
+        onPress: () => {
+          appAlert('Remove this contact?', "You'll need to send a new request to message each other again.", [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Remove',
+              style: 'destructive',
+              onPress: () => {
+                removeContact(contact.id);
+                router.back();
+              },
+            },
+          ]);
+        },
+      },
       {
         text: 'Block contact',
         style: 'destructive',
