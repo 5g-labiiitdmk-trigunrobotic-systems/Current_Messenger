@@ -217,6 +217,27 @@ dev client picks up.
   WebRTC audio/video (see `src/state/callStore.ts`), but there's no native
   VoIP-push/CallKit integration, so a call backgrounded for long enough may
   get throttled by the OS. A separate, native-entitlements follow-up.
+- **Full-screen-intent incoming-call notification (auto-launching the
+  incoming-call UI over the lock screen, not just ringing)** — investigated;
+  `expo-notifications` has zero support for Android full-screen intent at
+  any layer (confirmed against its native Android source directly, not
+  just its JS types — no field, no hook). The real fix is `@notifee/react-
+  native` (its `android.fullScreenAction` is exactly this), but it requires
+  the call push to become a *data-only* message instead of the notification-
+  message it is today, so notifee's own handler is the sole thing that ever
+  displays it — Android auto-displays a notification-message the instant it
+  arrives, before any JS gets a chance to run, so a client-side-only add-on
+  can't intercept or replace that. Changing the server payload shape
+  (`server/src/pushPing.ts`) affects every client immediately, including
+  anyone not yet running a build with the matching notifee handler — they'd
+  get a data-only push their client doesn't know how to display, i.e.
+  silent call notifications, a regression. That needs a coordinated
+  server+client rollout (and a real device to verify — full-screen-intent
+  behavior isn't observable in this project's web-based verification
+  workflow at all), not a change bundled into an unrelated patch. Left
+  unimplemented on purpose rather than shipped half-verified.
+  `android.permission.USE_FULL_SCREEN_INTENT` has already been added to
+  `app.json` as the one safe, needed-either-way piece of groundwork.
 - **AR filters, mini-games, voice changer, doodle, co-watching, business
   profiles, bots, widget presence, topics within groups** — UI shells only
   (`app/lab/`), per the agreed scope. See `src/data/labFeatures.ts` for what

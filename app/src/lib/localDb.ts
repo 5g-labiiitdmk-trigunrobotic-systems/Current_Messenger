@@ -183,13 +183,48 @@ async function openAndInitDb(userId: string, dbName: string, isRecoveryAttempt =
   return db;
 }
 
+// Real error, root-caused from an actual on-device report: "Call to
+// function 'NativeDatabase.prepareAsync' has been rejected. Caused by:
+// java.lang.NullPointerException" on the call-log save path specifically.
+// getDb() only ever checked `dbCache`, which is populated AFTER
+// openAndInitDb() resolves — so any callers that overlap in time BEFORE
+// the first one finishes each independently call
+// SQLite.openDatabaseAsync() for the *same* file and race to apply PRAGMA
+// key / run the schema SQL against their own separately-opened native
+// handle. This isn't a rare edge case: chatStore.ts's hydrateFromLocal
+// alone fires two concurrent getDb() calls via
+// Promise.all([loadAllThreads, loadPinned]), and callStore.ts's
+// hydrateCallLogFromLocal fires a third for loadCallLog — all three run
+// at the same moment on every cold start, for every account, the instant
+// a session becomes available (chatStore's and callStore's wire()
+// subscribers both fire in the same tick). Call-log is the newest of the
+// three and the one this surfaced on, but the underlying race applies to
+// all of them; which specific statement ends up hitting a half-initialized
+// or already-superseded native handle is inherently timing/device
+// dependent, which is exactly why this only reproduced on one device
+// instead of universally. Fixed by de-duplicating concurrent opens per
+// user: every caller racing to open the same account's database now
+// awaits the one single in-flight openAndInitDb() promise instead of each
+// starting their own.
+const pendingOpens = new Map<string, Promise<SQLite.SQLiteDatabase>>();
+
 async function getDb(userId: string): Promise<SQLite.SQLiteDatabase> {
   const cached = dbCache.get(userId);
   if (cached) return cached;
 
-  const db = await openAndInitDb(userId, `current-chat-${userId}.db`);
-  dbCache.set(userId, db);
-  return db;
+  const pending = pendingOpens.get(userId);
+  if (pending) return pending;
+
+  const openPromise = openAndInitDb(userId, `current-chat-${userId}.db`)
+    .then((db) => {
+      dbCache.set(userId, db);
+      return db;
+    })
+    .finally(() => {
+      pendingOpens.delete(userId);
+    });
+  pendingOpens.set(userId, openPromise);
+  return openPromise;
 }
 
 function rowToMessage(row: any): ChatMessage {
