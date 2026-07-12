@@ -55,6 +55,26 @@ export const useContactStore = create<ContactState>((set, get) => ({
   wire: () => {
     if (get().wired) return;
     set({ wired: true });
+
+    // wire() itself never used to fetch anything — `approved`/`incoming`/
+    // `outgoing` started at [] and stayed there until something else
+    // called refresh(). The only such caller was contacts.tsx's own mount
+    // effect, so on a cold app open landing on the Chats tab (which reads
+    // `approved` via useConversationRows but never refreshes it itself),
+    // the list just sat empty — Chats "not loading" was really "the
+    // contact list backing it was never fetched yet." It only ever
+    // appeared to fix itself by visiting Contacts, whose mount effect
+    // happens to be the sole place this ever got populated. Matches the
+    // same on-session-available fetch pattern chatStore.ts's
+    // hydrateFromLocal / callStore.ts's hydrateCallLogFromLocal already
+    // use, just for a Supabase fetch instead of local SQLite.
+    const existingUserId = useAuthStore.getState().session?.user.id;
+    if (existingUserId) get().refresh();
+    useAuthStore.subscribe((s, prev) => {
+      const userId = s.session?.user.id;
+      if (userId && userId !== prev.session?.user.id) get().refresh();
+    });
+
     // Kept as a redundant fallback, but this table was never added to
     // Supabase's realtime publication (ALTER PUBLICATION supabase_realtime
     // ADD TABLE ...) — that's a required, explicit per-table opt-in Supabase

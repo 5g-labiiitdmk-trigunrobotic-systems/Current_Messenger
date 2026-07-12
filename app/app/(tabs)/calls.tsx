@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable } from 'react-native';
 import { router } from 'expo-router';
 import Svg, { Path } from 'react-native-svg';
@@ -11,6 +11,8 @@ import { useTheme } from '../../src/theme/useTheme';
 import { fontFamilies } from '../../src/theme/tokens';
 import { useCallStore } from '../../src/state/callStore';
 import { useContactStore } from '../../src/state/contactStore';
+import { supabase } from '../../src/lib/supabase';
+import type { UserRow } from '../../src/types/database';
 
 export default function CallsScreen() {
   const { tokens, a1, a2 } = useTheme();
@@ -18,6 +20,34 @@ export default function CallsScreen() {
   const ring = useCallStore((s) => s.ring);
   const approved = useContactStore((s) => s.approved);
   const byId = Object.fromEntries(approved.map((c) => [c.id, c]));
+
+  // approved-contacts lookup alone can't resolve everyone in the call log:
+  // a call log entry persists locally regardless of whether that person is
+  // still an approved contact (removed, or blocked, since the call) —
+  // `byId` only ever has *currently* approved contacts, so any log entry
+  // for someone no longer in that list fell through to showing the raw
+  // peerId UUID. This resolves those directly against the users table
+  // instead, same as e.g. privacy.tsx already does for a single id.
+  const [resolvedUsers, setResolvedUsers] = useState<Record<string, UserRow>>({});
+  const attemptedIds = useRef(new Set<string>());
+  useEffect(() => {
+    const missing = Array.from(new Set(log.map((c) => c.peerId))).filter((id) => !byId[id] && !resolvedUsers[id] && !attemptedIds.current.has(id));
+    if (missing.length === 0) return;
+    missing.forEach((id) => attemptedIds.current.add(id));
+    supabase
+      .from('users')
+      .select('*')
+      .in('id', missing)
+      .then(({ data }) => {
+        if (!data || data.length === 0) return;
+        setResolvedUsers((prev) => {
+          const next = { ...prev };
+          for (const u of data as UserRow[]) next[u.id] = u;
+          return next;
+        });
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [log, approved]);
 
   return (
     <ScreenScaffold tabBar>
@@ -39,7 +69,7 @@ export default function CallsScreen() {
           </View>
         ) : (
           log.map((c, i) => {
-            const contact = byId[c.peerId];
+            const contact = byId[c.peerId] ?? resolvedUsers[c.peerId];
             const missed = c.direction === 'missed';
             return (
               <View
