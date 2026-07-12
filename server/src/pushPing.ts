@@ -116,6 +116,37 @@ export async function pingIncomingCall(recipientId: string, callerUsername: stri
   });
 }
 
+const lastSessionPingAt = new Map<string, number>();
+const SESSION_PING_COOLDOWN_MS = 5_000;
+
+/**
+ * Fires a push for an incoming chat-session request (see handleSessionRequest
+ * in index.ts) — same "not gated on offline" reasoning as pingIncomingCall
+ * above, and the same gap it was fixed for: the relay only knows "has an
+ * open WebSocket," which is also true for an app sitting backgrounded with
+ * the screen off. session:request only used to be sent over that live
+ * WebSocket, so a recipient whose app was backgrounded-but-connected (not
+ * fully offline — that path already pings via pingOfflineRecipient below)
+ * never had any way to find out someone wanted to chat: no live popup
+ * (nothing rendering while backgrounded) and no push notification (this
+ * branch never fired one). A normal notification sound rather than the
+ * 'calls' channel's full ring — a session request is "someone wants to
+ * message you," not "someone is calling you right now" — but still needs
+ * to be loud enough to notice, since it's subject to the same
+ * SESSION_REQUEST_TIMEOUT_MS window as any other pending request.
+ */
+export async function pingSessionRequest(recipientId: string, requesterUsername: string | null) {
+  const last = lastSessionPingAt.get(recipientId) ?? 0;
+  if (Date.now() - last < SESSION_PING_COOLDOWN_MS) return;
+  lastSessionPingAt.set(recipientId, Date.now());
+  await sendExpoPush(recipientId, {
+    title: 'Chat request',
+    body: requesterUsername ? `@${requesterUsername} wants to chat` : 'Someone wants to chat',
+    sound: 'default',
+    data: { kind: 'session_request', requesterUsername: requesterUsername ?? null },
+  });
+}
+
 const lastContactPingAt = new Map<string, number>();
 const CONTACT_PING_COOLDOWN_MS = 60_000;
 

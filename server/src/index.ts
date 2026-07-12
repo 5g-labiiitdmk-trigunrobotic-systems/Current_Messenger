@@ -4,7 +4,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import type { ClientEvent, ServerEvent } from './protocol.js';
 import { relayState } from './state.js';
 import { verifyUserToken, areApprovedContacts, isBlocked, getUsername, logTransfer } from './supabaseAdmin.js';
-import { pingOfflineRecipient, pingIncomingCall, pingContactRequest } from './pushPing.js';
+import { pingOfflineRecipient, pingIncomingCall, pingContactRequest, pingSessionRequest } from './pushPing.js';
 
 const PORT = Number(process.env.PORT) || 8787;
 const AUTH_TIMEOUT_MS = 10_000;
@@ -492,6 +492,17 @@ async function handleSessionRequest(userId: string, to: string) {
   const requestedAt = relayState.getPendingSession(userId, to)!.requestedAt;
   send(socket, { type: 'session:requested', to });
   send(targetSocket, { type: 'session:request', from: userId });
+  // targetSocket existing only means the WebSocket is still open — that's
+  // equally true for an app sitting backgrounded with the screen off,
+  // where nothing renders the live popup this event is meant to trigger.
+  // Previously only the fully-offline branch above ever pushed; a
+  // request to a backgrounded-but-connected recipient had no live UI
+  // (not foregrounded) and no push (this branch sent nothing) — it just
+  // silently vanished. Same not-gated-on-offline pattern pingIncomingCall
+  // already uses for calls.
+  getUsername(userId)
+    .then((requesterUsername) => pingSessionRequest(to, requesterUsername))
+    .catch(() => {});
 
   setTimeout(() => {
     const pending = relayState.getPendingSession(userId, to);
