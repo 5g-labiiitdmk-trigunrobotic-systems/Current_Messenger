@@ -142,9 +142,19 @@ export default function ChatScreen() {
       {
         text: 'Live location',
         onPress: async () => {
-          const loc = await getCurrentLocationOnce();
-          if (loc) sendRich(id ?? '', false, 'location', loc);
-          else appAlert('Location permission needed', 'Enable location access to share your position.');
+          // getCurrentLocationOnce() can throw (not just resolve null) —
+          // e.g. location services disabled system-wide, provider timeout,
+          // a native module error — and this onPress runs fire-and-forget
+          // from AppAlertHost's button handler (no caller awaits or
+          // catches it), so an uncaught rejection here previously vanished
+          // completely: no prompt, no error, no message, nothing visible.
+          try {
+            const loc = await getCurrentLocationOnce();
+            if (loc) sendRich(id ?? '', false, 'location', loc);
+            else appAlert('Location permission needed', 'Enable location access to share your position.');
+          } catch (e: any) {
+            appAlert('Could not get your location', e?.message ?? 'Make sure location services are turned on and try again.');
+          }
         },
       },
       { text: 'Sticker', onPress: onPickSticker },
