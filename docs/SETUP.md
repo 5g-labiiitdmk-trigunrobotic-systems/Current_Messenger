@@ -99,6 +99,50 @@ SHA256: 20:93:59:00:3C:50:63:E3:FB:C9:3D:6F:D3:DB:A4:25:43:49:79:46:61:FE:12:60:
 password `android` — unrelated to Firebase itself, this is a generic
 Android debug-signing keystore and stays regardless.)
 
+## 2.5 Push notifications — REQUIRED: FCM V1 service account in the Expo project
+
+**This is almost certainly why push notifications don't arrive at all on
+Android, even with OS-level notification permission granted.** This app
+sends push via Expo's push service (`Notifications.getExpoPushTokenAsync()`
++ `https://exp.host/--/api/v2/push/send` — see `src/lib/push.ts` and
+`server/src/pushPing.ts`), not raw FCM directly. Expo's push service is
+just a relay in front of FCM/APNs — for the Android leg specifically, Expo
+needs *your* Firebase project's own FCM credentials to actually deliver to
+FCM on your behalf.
+
+Google shut down the legacy FCM HTTP API in June 2024. Every Expo project
+now needs a **Firebase Cloud Messaging V1 service account key** uploaded to
+the Expo/EAS project (Expo dashboard → your project → Project settings →
+Credentials → Android → **Google Service Account**, or `eas credentials` →
+Android → Push Notifications: Google Service Account Key). Without it,
+every push this app sends to an Android device fails — not with a client-
+side error (permission is still reported as granted, the app never sees
+anything wrong), but with an error status inside Expo's push receipt,
+visible only in the *relay's* logs (`[push] Expo push send failed: ...` /
+`[push] Expo call push send failed: ...` — see `server/src/pushPing.ts`).
+**Check Render's logs for those lines first** if push seems totally silent
+— that error message will say exactly what's misconfigured.
+
+To generate the service account key: Firebase console → the `current-7798d`
+project (see section 2 above) → Project settings → Service accounts →
+Generate new private key. Upload the resulting JSON to Expo via either path
+above. This is a one-time, per-Expo-project setup step — not something any
+code change here can do for you, and not something that belongs in this
+repo (it's a credential).
+
+Also worth ruling out while debugging push: **`getExpoPushTokenAsync` only
+returns a real, receivable token from a custom dev/production build** (EAS
+build with this project's own `google-services.json` baked in — see
+section 4) — Expo Go does not support remote push on Android as of recent
+SDKs. If you're testing via Expo Go, that alone would explain zero
+delivery regardless of the FCM credential above.
+
+`src/lib/push.ts` now logs the full token-registration lifecycle
+(`[push] obtained Expo push token: ...`, `[push] push token stored for
+user ...`, or the specific failure) — check Metro/logcat output on the
+device to confirm registration itself is succeeding before assuming the
+server-side send is the problem.
+
 ## 3. Relay server
 
 1. `cd server && cp .env.example .env` and fill in `SUPABASE_URL` +

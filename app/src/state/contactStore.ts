@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { supabase } from '../lib/supabase';
 import type { UserRow, ContactRequestRow } from '../types/database';
 import { useAuthStore } from './authStore';
+import { relayClient } from '../lib/relayClient';
 
 export interface ContactRequestWithUser extends ContactRequestRow {
   otherUser: UserRow;
@@ -118,7 +119,14 @@ export const useContactStore = create<ContactState>((set, get) => ({
   sendRequest: async (receiverId) => {
     const me = useAuthStore.getState().session?.user.id;
     if (!me) return;
-    await supabase.from('contact_requests').insert({ sender_id: me, receiver_id: receiverId, status: 'pending' });
+    const { error } = await supabase.from('contact_requests').insert({ sender_id: me, receiver_id: receiverId, status: 'pending' });
+    // Push-notification trigger only — this insert is already the real,
+    // durable request (Supabase is the source of truth); the relay never
+    // sees this insert happen on its own, so without this a request sent
+    // while the recipient is offline/backgrounded gets zero notification
+    // until they happen to open the app. Best-effort: skip entirely if the
+    // insert itself failed, and never block on the relay round-trip.
+    if (!error) relayClient.send({ type: 'contact:request_sent', to: receiverId });
     await get().refresh();
   },
 

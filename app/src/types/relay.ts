@@ -35,6 +35,7 @@ export type ClientEvent =
   | { type: 'group:invite'; groupId: string; to: string }
   | { type: 'group:leave'; groupId: string }
   | { type: 'call:signal'; to: string; signal: Record<string, unknown> }
+  | { type: 'contact:request_sent'; to: string }
   | { type: 'session:request'; to: string }
   | { type: 'session:respond'; peerId: string; accept: boolean }
   | { type: 'ping' }

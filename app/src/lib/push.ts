@@ -35,11 +35,28 @@ async function fetchAndStoreToken(userId: string): Promise<void> {
   // gets stored and every future "recipient offline" ping to this user
   // silently no-ops (pushPing.ts finds no push_token and returns early,
   // with nothing surfaced anywhere that a human would ever see).
-  const token = (await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined)).data;
+  //
+  // Logged unconditionally (not just on failure) — "did this device ever
+  // actually get a token and save it" is the single most useful fact when
+  // push isn't arriving at all, and there was previously no way to confirm
+  // it happened short of reading raw Postgres rows.
+  let token: string;
+  try {
+    token = (await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined)).data;
+  } catch (e: any) {
+    // eslint-disable-next-line no-console
+    console.error('[push] getExpoPushTokenAsync threw — no token obtained:', e?.message ?? e);
+    return;
+  }
+  // eslint-disable-next-line no-console
+  console.log('[push] obtained Expo push token:', token);
   const { error } = await supabase.from('users').update({ push_token: token }).eq('id', userId);
   if (error) {
     // eslint-disable-next-line no-console
     console.error('[push] failed to store push token:', error.message);
+  } else {
+    // eslint-disable-next-line no-console
+    console.log('[push] push token stored for user', userId);
   }
 }
 
@@ -73,7 +90,11 @@ export async function registerForPushNotifications(userId: string) {
       const req = await Notifications.requestPermissionsAsync();
       status = req.status;
     }
-    if (status !== 'granted') return;
+    if (status !== 'granted') {
+      // eslint-disable-next-line no-console
+      console.warn('[push] permission not granted — registration skipped, status:', status);
+      return;
+    }
 
     await fetchAndStoreToken(userId);
 

@@ -37,6 +37,13 @@ export type ClientEvent =
   | { type: 'group:invite'; groupId: string; to: string }
   | { type: 'group:leave'; groupId: string }
   | { type: 'call:signal'; to: string; signal: Record<string, unknown> }
+  // contact_requests rows are written directly from the client to Supabase
+  // (see contactStore.ts) — the relay never sees that insert happen, so it
+  // has no other way to know a contact request needs a push notification.
+  // This is purely a "go check your push_token and maybe notify them"
+  // trigger — Supabase's contact_requests table remains the actual source
+  // of truth, this carries no request data of its own.
+  | { type: 'contact:request_sent'; to: string }
   | { type: 'session:request'; to: string }
   | { type: 'session:respond'; peerId: string; accept: boolean }
   | { type: 'ping' }

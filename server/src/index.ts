@@ -4,7 +4,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import type { ClientEvent, ServerEvent } from './protocol.js';
 import { relayState } from './state.js';
 import { verifyUserToken, areApprovedContacts, isBlocked, getUsername, logTransfer } from './supabaseAdmin.js';
-import { pingOfflineRecipient, pingIncomingCall } from './pushPing.js';
+import { pingOfflineRecipient, pingIncomingCall, pingContactRequest } from './pushPing.js';
 
 const PORT = Number(process.env.PORT) || 8787;
 const AUTH_TIMEOUT_MS = 10_000;
@@ -191,6 +191,17 @@ wss.on('connection', (socket) => {
             .then((callerUsername) => pingIncomingCall(event.to, callerUsername, callKind))
             .catch(() => {});
         }
+        break;
+      }
+      case 'contact:request_sent': {
+        // Purely a push-notification trigger — the actual contact_requests
+        // row was already written directly to Supabase by the client (see
+        // contactStore.ts's sendRequest). Deliberately no approval check
+        // here: a contact request is how two users *become* approved
+        // contacts, so requiring that would make this permanently no-op.
+        getUsername(userId)
+          .then((senderUsername) => pingContactRequest(event.to, senderUsername))
+          .catch(() => {});
         break;
       }
       case 'session:request': {
@@ -408,6 +419,16 @@ async function handleSessionRequest(userId: string, to: string) {
     // Can't ask someone who isn't here — consistent with the rest of this
     // relay's hard-fail-if-offline rule, no pending state is created.
     send(socket, { type: 'session:request_failed', to, reason: 'recipient_offline' });
+    // Every chat screen auto-fires a session:request the moment it opens
+    // (see chat/[id].tsx), and the composer stays disabled until it's
+    // accepted — meaning a message to someone who's offline hits THIS
+    // hard-fail, not message:send's, in the common case. Without pinging
+    // here too, pingOfflineRecipient's own trigger (message:send's
+    // recipient_offline branch) is effectively unreachable for a normal
+    // "text someone who isn't currently around" attempt.
+    getUsername(userId)
+      .then((requesterUsername) => pingOfflineRecipient(to, requesterUsername))
+      .catch(() => {});
     return;
   }
 
