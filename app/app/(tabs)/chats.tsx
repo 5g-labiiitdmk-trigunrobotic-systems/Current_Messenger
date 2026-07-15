@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable } from 'react-native';
+import { View, Text, Pressable, Image } from 'react-native';
 import { router } from 'expo-router';
 import Svg, { Path, Circle } from 'react-native-svg';
 import { ScreenScaffold } from '../../src/components/ScreenScaffold';
@@ -29,6 +29,10 @@ export default function ChatsScreen() {
 
   return (
     <ScreenScaffold tabBar>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+        <Image source={require('../../assets/current-logo.png')} style={{ width: 18, height: 18, borderRadius: 5 }} />
+        <Text style={{ fontSize: 12, fontFamily: fontFamilies.heavy, color: tokens.text3, textTransform: 'uppercase', letterSpacing: 0.8 }}>Current</Text>
+      </View>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <ScreenTitle>Chats</ScreenTitle>
         <View style={{ flexDirection: 'row', gap: 10 }}>

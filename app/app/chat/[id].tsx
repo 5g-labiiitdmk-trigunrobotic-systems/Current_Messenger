@@ -86,13 +86,31 @@ export default function ChatScreen() {
   const listRef = useRef<FlatList>(null);
   const typingTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  // Whether the initial open-to-bottom scroll has happened yet for this
+  // chat — see onContentSizeChange below for why this exists.
+  const hasScrolledOnceRef = useRef(false);
 
   const messages = searchQuery.trim() ? allMessages.filter((m) => m.text?.toLowerCase().includes(searchQuery.trim().toLowerCase())) : allMessages;
+
+  // A brand-new chat screen mounts with `threads[key]` still empty (local
+  // SQLite hydration hasn't resolved yet — see chatStore.ts's
+  // hydrateFromLocal), then jumps from 0 to potentially hundreds of
+  // messages in a single update once it does. scrollToEnd() called
+  // synchronously in response to that (the old code below, keyed only on
+  // allMessages.length) races ahead of FlatList's native layout pass for
+  // that newly-rendered content — at the moment it runs, the list hasn't
+  // actually measured the new content's real height yet, so it scrolls to
+  // whatever (much smaller, stale) height was last measured. That's why
+  // this opened on the oldest message instead of the latest: the "scroll
+  // to end" call was firing against pre-hydration content size, not
+  // failing to fire at all.
+  useEffect(() => {
+    hasScrolledOnceRef.current = false;
+  }, [id]);
 
   useEffect(() => {
     const last = allMessages[allMessages.length - 1];
     if (last && last.from !== me && last.status !== 'read') markRead(id ?? '', false, last.id);
-    if (!searchQuery) listRef.current?.scrollToEnd({ animated: true });
   }, [allMessages.length]);
 
   const onChangeDraft = (t: string) => {
@@ -328,45 +346,48 @@ export default function ChatScreen() {
           padding it, which is the correct mode for Android (padding mode
           double-offsets when combined with the OS's own resize behavior). */}
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <Glass radius={0} bordered={false} style={{ paddingTop: insets.top + 8, paddingBottom: 12, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 11 }}>
-          <Pressable onPress={() => router.back()} style={{ width: 38, height: 38, alignItems: 'center', justifyContent: 'center' }}>
-            <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={tokens.text} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
-              <Path d="M15 18l-6-6 6-6" />
-            </Svg>
-          </Pressable>
-          <Avatar hue={contact.avatar_hue} photoUrl={contact.avatar_url} size={42} online={isOnline} label={contact.display_name || contact.username} />
-          {/* minWidth: 0 lets this flex child shrink below its content's
-              natural width — without it, numberOfLines/ellipsizeMode on the
-              name below has no effect and a long unbroken username (e.g. no
-              spaces) wraps character-by-character instead of truncating. */}
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text numberOfLines={1} ellipsizeMode="tail" style={{ fontSize: 16, fontFamily: fontFamilies.heavy, color: tokens.text }}>
-              {contact.display_name || contact.username}
-            </Text>
-            <Text numberOfLines={1} style={{ fontSize: 12, fontFamily: fontFamilies.semibold, color: isOnline ? '#34d27b' : tokens.text2 }}>{statusLabel}</Text>
+        <Glass radius={0} bordered={false} style={{ paddingTop: insets.top + 6, paddingBottom: 12, paddingHorizontal: 14 }}>
+          <Text style={{ fontSize: 10, fontFamily: fontFamilies.heavy, color: tokens.text3, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 4 }}>Current</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 11 }}>
+            <Pressable onPress={() => router.back()} style={{ width: 38, height: 38, alignItems: 'center', justifyContent: 'center' }}>
+              <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={tokens.text} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+                <Path d="M15 18l-6-6 6-6" />
+              </Svg>
+            </Pressable>
+            <Avatar hue={contact.avatar_hue} photoUrl={contact.avatar_url} size={42} online={isOnline} label={contact.display_name || contact.username} />
+            {/* minWidth: 0 lets this flex child shrink below its content's
+                natural width — without it, numberOfLines/ellipsizeMode on the
+                name below has no effect and a long unbroken username (e.g. no
+                spaces) wraps character-by-character instead of truncating. */}
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text numberOfLines={1} ellipsizeMode="tail" style={{ fontSize: 16, fontFamily: fontFamilies.heavy, color: tokens.text }}>
+                {contact.display_name || contact.username}
+              </Text>
+              <Text numberOfLines={1} style={{ fontSize: 12, fontFamily: fontFamilies.semibold, color: isOnline ? '#34d27b' : tokens.text2 }}>{statusLabel}</Text>
+            </View>
+            <Pressable onPress={() => ring(contact.id, 'voice')} style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center' }}>
+              <Svg width={19} height={19} viewBox="0 0 24 24" fill="none" stroke={tokens.text} strokeWidth={1.9}>
+                <Path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3.1-8.7A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2Z" />
+              </Svg>
+            </Pressable>
+            <Pressable onPress={() => ring(contact.id, 'video')} style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center' }}>
+              <Svg width={19} height={19} viewBox="0 0 24 24" fill="none" stroke={tokens.text} strokeWidth={1.9}>
+                <Path d="M23 7l-7 5 7 5V7Z" />
+                <Path d="M1 5h15v14H1z" />
+              </Svg>
+            </Pressable>
+            <Pressable onPress={() => setSearchOpen((o) => !o)} style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center' }}>
+              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={searchOpen ? a1 : tokens.text} strokeWidth={2}>
+                <Path d="M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14Z" />
+                <Path d="M21 21l-4.3-4.3" />
+              </Svg>
+            </Pressable>
+            <Pressable onPress={onContactMenu} style={{ width: 32, height: 36, alignItems: 'center', justifyContent: 'center' }}>
+              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={tokens.text} strokeWidth={2.4} strokeLinecap="round">
+                <Path d="M12 12h.01M6 12h.01M18 12h.01" />
+              </Svg>
+            </Pressable>
           </View>
-          <Pressable onPress={() => ring(contact.id, 'voice')} style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center' }}>
-            <Svg width={19} height={19} viewBox="0 0 24 24" fill="none" stroke={tokens.text} strokeWidth={1.9}>
-              <Path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3.1-8.7A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2Z" />
-            </Svg>
-          </Pressable>
-          <Pressable onPress={() => ring(contact.id, 'video')} style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center' }}>
-            <Svg width={19} height={19} viewBox="0 0 24 24" fill="none" stroke={tokens.text} strokeWidth={1.9}>
-              <Path d="M23 7l-7 5 7 5V7Z" />
-              <Path d="M1 5h15v14H1z" />
-            </Svg>
-          </Pressable>
-          <Pressable onPress={() => setSearchOpen((o) => !o)} style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center' }}>
-            <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={searchOpen ? a1 : tokens.text} strokeWidth={2}>
-              <Path d="M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14Z" />
-              <Path d="M21 21l-4.3-4.3" />
-            </Svg>
-          </Pressable>
-          <Pressable onPress={onContactMenu} style={{ width: 32, height: 36, alignItems: 'center', justifyContent: 'center' }}>
-            <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={tokens.text} strokeWidth={2.4} strokeLinecap="round">
-              <Path d="M12 12h.01M6 12h.01M18 12h.01" />
-            </Svg>
-          </Pressable>
         </Glass>
 
         {hasIncomingRequest ? (
@@ -430,6 +451,18 @@ export default function ChatScreen() {
           data={messages}
           keyExtractor={(m) => m.id}
           contentContainerStyle={{ padding: 16, gap: 11 }}
+          // Fires after FlatList has actually measured the new content
+          // height — unlike the length-keyed effect this replaced, this
+          // can't race ahead of layout. The first call for a freshly
+          // opened chat snaps straight to the bottom (no visible scroll-
+          // through of the whole history); later calls (a new message
+          // arriving, an image finishing loading and resizing a bubble)
+          // stay animated, matching the previous behavior.
+          onContentSizeChange={() => {
+            if (searchQuery) return;
+            listRef.current?.scrollToEnd({ animated: hasScrolledOnceRef.current });
+            hasScrolledOnceRef.current = true;
+          }}
           ListHeaderComponent={
             <View style={{ alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 6 }}>
               <Glass radius={14} style={{ paddingVertical: 7, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 7 }}>

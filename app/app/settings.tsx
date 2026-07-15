@@ -72,6 +72,8 @@ export default function SettingsScreen() {
       </View>
 
       <SectionLabel>Account</SectionLabel>
+      <DisplayNameEditor />
+      <View style={{ height: 12 }} />
       <UsernameEditor />
 
       <SectionLabel>Appearance</SectionLabel>
@@ -148,6 +150,47 @@ export default function SettingsScreen() {
         </View>
       </Pressable>
     </ScreenScaffold>
+  );
+}
+
+/**
+ * Distinct from UsernameEditor below on purpose: username is the unique
+ * @handle contacts search/add by (validated, uniqueness-checked — see
+ * changeUsername in authStore.ts); display_name is a free-form name shown
+ * in Chats/chat headers/Contacts instead — no uniqueness constraint, can
+ * be blank/spaces/emoji, same distinction Telegram/WhatsApp make between
+ * a handle and a display name. The column and updateProfile() support for
+ * it already existed (UserRow.display_name, already read everywhere via
+ * the `contact?.display_name || contact?.username` fallback pattern) —
+ * this was the only missing piece, an actual UI to set your own.
+ */
+function DisplayNameEditor() {
+  const { a1 } = useTheme();
+  const profile = useAuthStore((s) => s.profile);
+  const updateProfile = useAuthStore((s) => s.updateProfile);
+  const [draft, setDraft] = useState('');
+  const [saving, setSaving] = useState(false);
+  const current = profile?.display_name ?? '';
+  const dirty = draft.trim() !== '' && draft.trim() !== current;
+
+  const onSave = async () => {
+    setSaving(true);
+    await updateProfile({ display_name: draft.trim() });
+    setSaving(false);
+    const saved = draft.trim();
+    setDraft('');
+    appAlert('Display name updated', `You'll now show up as "${saved}" in chats and contacts — your @username is unchanged.`);
+  };
+
+  return (
+    <Glass radius={22} style={{ padding: 16, gap: 12 }}>
+      <GlassField label={`Display name — currently ${current || 'not set'}`} placeholder={current || 'Your name'} value={draft} onChangeText={setDraft} />
+      <Pressable onPress={dirty && !saving ? onSave : undefined}>
+        <View style={{ height: 46, borderRadius: 16, backgroundColor: a1, opacity: dirty ? 1 : 0.45, alignItems: 'center', justifyContent: 'center' }}>
+          {saving ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontFamily: fontFamilies.bold, fontSize: 14 }}>Save display name</Text>}
+        </View>
+      </Pressable>
+    </Glass>
   );
 }
 

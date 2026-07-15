@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { BokehBackground } from '../../src/components/BokehBackground';
 import { Avatar } from '../../src/components/Avatar';
@@ -76,6 +77,7 @@ export default function CallScreen() {
   const setAudioRoute = useCallStore((s) => s.setAudioRoute);
   const clearEnded = useCallStore((s) => s.clearEnded);
   const contact = useContactStore((s) => s.approved.find((c) => c.id === peerId));
+  const insets = useSafeAreaInsets();
   const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
@@ -144,6 +146,23 @@ export default function CallScreen() {
       ) : (
         <BokehBackground />
       )}
+
+      {/* Minimize — leaves this screen without hanging up, so the call
+          keeps running while the user views a chat or anywhere else.
+          There was previously no way to do this at all (no back/minimize
+          control existed here, and the Stack.Screen for this route sets
+          gestureEnabled: false); the persistent ActiveCallBanner
+          (src/components/ActiveCallBanner.tsx, mounted globally in
+          _layout.tsx) is how the user gets back — without this button,
+          that banner would have nothing to be a "return to" for. */}
+      <Pressable
+        onPress={() => router.back()}
+        style={{ position: 'absolute', top: insets.top + 10, left: 14, width: 40, height: 40, alignItems: 'center', justifyContent: 'center', zIndex: 10 }}
+      >
+        <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+          <Path d="M18 9l-6 6-6-6" />
+        </Svg>
+      </Pressable>
 
       <View style={{ flex: 1, paddingTop: 90, paddingBottom: 50, paddingHorizontal: 24, alignItems: 'center' }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>

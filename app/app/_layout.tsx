@@ -20,6 +20,7 @@ import { useCallStore } from '../src/state/callStore';
 import { useChatSessionStore } from '../src/state/chatSessionStore';
 import { AppLockGate } from '../src/components/AppLockGate';
 import { AppAlertHost } from '../src/components/AppAlertHost';
+import { ActiveCallBanner } from '../src/components/ActiveCallBanner';
 import { appAlert } from '../src/state/alertStore';
 import { initNotificationRouting } from '../src/lib/push';
 
@@ -130,6 +131,7 @@ export default function RootLayout() {
               <Stack.Screen name="auth-redirect" options={{ animation: 'fade' }} />
             </Stack>
           </AppLockGate>
+          <ActiveCallBanner />
           <AppAlertHost />
         </View>
       </SafeAreaProvider>
