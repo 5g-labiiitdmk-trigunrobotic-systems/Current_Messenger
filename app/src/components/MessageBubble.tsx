@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, Image, Pressable, Modal } from 'react-native';
-import MapView, { Marker } from 'react-native-maps';
+import { View, Text, Image, Pressable, Modal, Platform } from 'react-native';
+import MapView, { Marker, UrlTile } from 'react-native-maps';
 import Svg, { Path } from 'react-native-svg';
 import Animated, { FadeInUp } from 'react-native-reanimated';
 import { Glass } from './Glass';
@@ -155,6 +155,19 @@ function BubbleContent({ m, isMe, a1, a2, tokens, meId, onVote }: any) {
   );
 }
 
+// tile.openstreetmap.org is OSM's own free "main" tile server — no API key,
+// no billing account, but it's explicitly meant for light/evaluation use
+// (see https://operations.osmfoundation.org/policies/tiles/): it expects a
+// real User-Agent, reasonable request volume, and no bulk/heavy production
+// traffic without prior arrangement. Fine for this app's current scale;
+// a high-traffic rollout should move to a paid OSM-tile provider (MapTiler,
+// Thunderforest, Stadia, etc.) or a self-hosted tile server instead of
+// hotlinking this one, to avoid risking an IP-based block.
+const OSM_TILE_URL_TEMPLATE = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+// Required by the same tile usage policy above — any use of OSM's tiles
+// must carry this credit near the map.
+const OSM_ATTRIBUTION = '© OpenStreetMap contributors';
+
 /**
  * One-shot location share (see getCurrentLocationOnce in src/lib/media.ts —
  * there is no live/continuous tracking, this is a single point in time
@@ -163,27 +176,47 @@ function BubbleContent({ m, isMe, a1, a2, tokens, meId, onVote }: any) {
  * chat list's own scroll gesture; tapping it opens a real interactive map
  * in a full-screen Modal, mirroring AppAlertHost's Modal usage elsewhere
  * in this app.
+ *
+ * Android renders OpenStreetMap tiles via UrlTile instead of Google Maps,
+ * so no Google Cloud billing account / Maps API key is required —
+ * mapType="none" is an Android-only MapView option that turns off Google's
+ * own tile fetching entirely (no network calls to Google, no key needed),
+ * leaving UrlTile's OSM tiles as the only thing actually drawn. iOS keeps
+ * using Apple MapKit as before (already free, and react-native-maps'
+ * config plugin only touches Google Maps on iOS when iosGoogleMapsApiKey is
+ * set, which this app never sets) — UrlTile/mapType="none" are skipped
+ * there since Apple's own tiles + attribution already cover it.
  */
 function LocationBubble({ meta, isMe, a1, tokens }: { meta: any; isMe: boolean; a1: string; tokens: any }) {
   const [expanded, setExpanded] = useState(false);
   const lat = Number(meta.lat);
   const lng = Number(meta.lng);
   const region = { latitude: lat, longitude: lng, latitudeDelta: 0.01, longitudeDelta: 0.01 };
+  const useOsmTiles = Platform.OS === 'android';
 
   return (
     <>
       <Pressable onPress={() => setExpanded(true)} style={{ borderRadius: 20, overflow: 'hidden', width: 220 }}>
-        <MapView
-          style={{ width: 220, height: 140 }}
-          initialRegion={region}
-          pointerEvents="none"
-          scrollEnabled={false}
-          zoomEnabled={false}
-          rotateEnabled={false}
-          pitchEnabled={false}
-        >
-          <Marker coordinate={{ latitude: lat, longitude: lng }} />
-        </MapView>
+        <View style={{ width: 220, height: 140 }}>
+          <MapView
+            style={{ width: '100%', height: '100%' }}
+            initialRegion={region}
+            pointerEvents="none"
+            scrollEnabled={false}
+            zoomEnabled={false}
+            rotateEnabled={false}
+            pitchEnabled={false}
+            mapType={useOsmTiles ? 'none' : 'standard'}
+          >
+            {useOsmTiles && <UrlTile urlTemplate={OSM_TILE_URL_TEMPLATE} maximumZ={19} flipY={false} />}
+            <Marker coordinate={{ latitude: lat, longitude: lng }} />
+          </MapView>
+          {useOsmTiles && (
+            <View style={{ position: 'absolute', right: 3, bottom: 3, backgroundColor: 'rgba(255,255,255,0.78)', paddingHorizontal: 3, borderRadius: 3 }}>
+              <Text style={{ fontSize: 7, color: '#333' }}>{OSM_ATTRIBUTION}</Text>
+            </View>
+          )}
+        </View>
         <View
           style={[
             { paddingHorizontal: 12, paddingVertical: 10 },
@@ -198,9 +231,15 @@ function LocationBubble({ meta, isMe, a1, tokens }: { meta: any; isMe: boolean; 
       </Pressable>
       <Modal visible={expanded} animationType="fade" onRequestClose={() => setExpanded(false)} statusBarTranslucent>
         <View style={{ flex: 1, backgroundColor: '#000' }}>
-          <MapView style={{ flex: 1 }} initialRegion={region}>
+          <MapView style={{ flex: 1 }} initialRegion={region} mapType={useOsmTiles ? 'none' : 'standard'}>
+            {useOsmTiles && <UrlTile urlTemplate={OSM_TILE_URL_TEMPLATE} maximumZ={19} flipY={false} />}
             <Marker coordinate={{ latitude: lat, longitude: lng }} />
           </MapView>
+          {useOsmTiles && (
+            <View style={{ position: 'absolute', left: 14, bottom: 14, backgroundColor: 'rgba(255,255,255,0.85)', paddingHorizontal: 7, paddingVertical: 4, borderRadius: 5 }}>
+              <Text style={{ fontSize: 11, color: '#222', fontFamily: fontFamilies.medium }}>{OSM_ATTRIBUTION}</Text>
+            </View>
+          )}
           <Pressable
             onPress={() => setExpanded(false)}
             style={{ position: 'absolute', top: 56, right: 20, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' }}

@@ -113,12 +113,7 @@
           }
         }
       ],
-      [
-        "react-native-maps",
-        {
-          "androidGoogleMapsApiKey": null
-        }
-      ],
+      "react-native-maps",
       "./plugins/withLockScreenCallActivity"
     ],
     "experiments": {
