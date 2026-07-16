@@ -1,5 +1,6 @@
-import React from 'react';
-import { View, Text, Image, Pressable } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, Image, Pressable, Modal } from 'react-native';
+import MapView, { Marker } from 'react-native-maps';
 import Svg, { Path } from 'react-native-svg';
 import Animated, { FadeInUp } from 'react-native-reanimated';
 import { Glass } from './Glass';
@@ -135,14 +136,7 @@ function BubbleContent({ m, isMe, a1, a2, tokens, meId, onVote }: any) {
     );
   }
   if (m.kind === 'location' && m.meta) {
-    return (
-      <View style={[{ borderRadius: 20, padding: 14, minWidth: 180 }, isMe ? { backgroundColor: a1 } : { backgroundColor: tokens.glassBg2, borderWidth: 1, borderColor: tokens.glassBorder }]}>
-        <Text style={{ fontFamily: fontFamilies.bold, color: isMe ? '#fff' : tokens.text, fontSize: 13.5 }}>📍 Live location</Text>
-        <Text style={{ fontFamily: fontFamilies.medium, color: isMe ? 'rgba(255,255,255,0.85)' : tokens.text2, fontSize: 12, marginTop: 3 }}>
-          {Number(m.meta.lat).toFixed(4)}, {Number(m.meta.lng).toFixed(4)}
-        </Text>
-      </View>
-    );
+    return <LocationBubble meta={m.meta} isMe={isMe} a1={a1} tokens={tokens} />;
   }
   return (
     <View
@@ -158,6 +152,64 @@ function BubbleContent({ m, isMe, a1, a2, tokens, meId, onVote }: any) {
       )}
       <MentionText text={m.text ?? ''} baseColor={isMe ? '#fff' : tokens.text} mentionColor={isMe ? '#fff' : a1} isMe={isMe} />
     </View>
+  );
+}
+
+/**
+ * One-shot location share (see getCurrentLocationOnce in src/lib/media.ts —
+ * there is no live/continuous tracking, this is a single point in time
+ * captured once and sent like any other rich message). Preview map is
+ * non-interactive (scroll/zoom/rotate disabled) so it doesn't fight the
+ * chat list's own scroll gesture; tapping it opens a real interactive map
+ * in a full-screen Modal, mirroring AppAlertHost's Modal usage elsewhere
+ * in this app.
+ */
+function LocationBubble({ meta, isMe, a1, tokens }: { meta: any; isMe: boolean; a1: string; tokens: any }) {
+  const [expanded, setExpanded] = useState(false);
+  const lat = Number(meta.lat);
+  const lng = Number(meta.lng);
+  const region = { latitude: lat, longitude: lng, latitudeDelta: 0.01, longitudeDelta: 0.01 };
+
+  return (
+    <>
+      <Pressable onPress={() => setExpanded(true)} style={{ borderRadius: 20, overflow: 'hidden', width: 220 }}>
+        <MapView
+          style={{ width: 220, height: 140 }}
+          initialRegion={region}
+          pointerEvents="none"
+          scrollEnabled={false}
+          zoomEnabled={false}
+          rotateEnabled={false}
+          pitchEnabled={false}
+        >
+          <Marker coordinate={{ latitude: lat, longitude: lng }} />
+        </MapView>
+        <View
+          style={[
+            { paddingHorizontal: 12, paddingVertical: 10 },
+            isMe ? { backgroundColor: a1 } : { backgroundColor: tokens.glassBg2, borderWidth: 1, borderColor: tokens.glassBorder, borderTopWidth: 0 },
+          ]}
+        >
+          <Text style={{ fontFamily: fontFamilies.bold, color: isMe ? '#fff' : tokens.text, fontSize: 13.5 }}>📍 Location</Text>
+          <Text style={{ fontFamily: fontFamilies.medium, color: isMe ? 'rgba(255,255,255,0.85)' : tokens.text2, fontSize: 12, marginTop: 2 }}>
+            {lat.toFixed(4)}, {lng.toFixed(4)}
+          </Text>
+        </View>
+      </Pressable>
+      <Modal visible={expanded} animationType="fade" onRequestClose={() => setExpanded(false)} statusBarTranslucent>
+        <View style={{ flex: 1, backgroundColor: '#000' }}>
+          <MapView style={{ flex: 1 }} initialRegion={region}>
+            <Marker coordinate={{ latitude: lat, longitude: lng }} />
+          </MapView>
+          <Pressable
+            onPress={() => setExpanded(false)}
+            style={{ position: 'absolute', top: 56, right: 20, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' }}
+          >
+            <Text style={{ color: '#fff', fontSize: 18, fontFamily: fontFamilies.bold }}>✕</Text>
+          </Pressable>
+        </View>
+      </Modal>
+    </>
   );
 }
 

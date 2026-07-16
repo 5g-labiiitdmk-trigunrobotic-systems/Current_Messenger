@@ -158,7 +158,7 @@ export default function ChatScreen() {
         },
       },
       {
-        text: 'Live location',
+        text: 'Location',
         onPress: async () => {
           // getCurrentLocationOnce() can throw (not just resolve null) —
           // e.g. location services disabled system-wide, provider timeout,
