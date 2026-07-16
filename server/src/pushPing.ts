@@ -99,11 +99,37 @@ const CALL_PING_COOLDOWN_MS = 5_000;
  * the caller is still ringing, the call itself is simply missed, same as any
  * other offline call today — this only widens the window by getting them a
  * native OS notification instead of nothing.
+ *
+ * Deliberately keeps `title`/`body` rather than switching to a pure
+ * data-only push, even though the full-screen-intent upgrade (see the
+ * app's src/lib/callNotifications.ts) technically only needs `data`.
+ * Reasoning: this whole feature requires a brand-new native module
+ * (@notifee/react-native + expo-task-manager) — ANY client that hasn't
+ * done a fresh native build literally cannot support full-screen calls
+ * regardless of what shape this payload is, so a hard cutover to
+ * data-only wouldn't gain anything for an un-rebuilt client, and would
+ * actively regress it: expo-notifications only auto-displays a
+ * notification when title/body are present (confirmed directly in its
+ * Android source, ExpoHandlingDelegate.kt's shouldPresent()) — a
+ * data-only push to an old client would show *nothing* at all, a
+ * straight regression from what already works today. Keeping title/body
+ * costs nothing for a client that HAS rebuilt: its background task (see
+ * registerCallBackgroundTask) still fires on every push regardless (its
+ * own native FCM receiver runs unconditionally, independent of whether
+ * the message also carries display content), dismisses this
+ * auto-displayed compatibility notification via the shared `tag`, and
+ * replaces it with the real full-screen version.
  */
 export async function pingIncomingCall(recipientId: string, callerUsername: string | null, callKind: 'voice' | 'video') {
   const last = lastCallPingAt.get(recipientId) ?? 0;
   if (Date.now() - last < CALL_PING_COOLDOWN_MS) return;
   lastCallPingAt.set(recipientId, Date.now());
+  // Stable per-recipient (not random per-send) so a client that receives
+  // this and later needs to dismiss the auto-displayed notification (to
+  // replace it with the full-screen one) can address it by a predictable
+  // id rather than needing to already know Expo/FCM's own generated
+  // message id.
+  const tag = `call-${recipientId}`;
   await sendExpoPush(recipientId, {
     title: callKind === 'video' ? 'Incoming video call' : 'Incoming voice call',
     body: callerUsername ? `@${callerUsername} is calling you` : 'Someone is calling you',
@@ -111,8 +137,10 @@ export async function pingIncomingCall(recipientId: string, callerUsername: stri
     channelId: 'calls',
     // Lets the client's notification handler tell a call apart from an
     // ordinary message ping so it can route straight to the incoming-call
-    // screen instead of just opening to the last screen.
-    data: { kind: 'call', callerUsername: callerUsername ?? null },
+    // screen instead of just opening to the last screen — and, for an
+    // upgraded client, is also everything callNotifications.ts's
+    // background task needs to build the full-screen replacement.
+    data: { kind: 'call', callerUsername: callerUsername ?? null, callKind, tag },
   });
 }
 

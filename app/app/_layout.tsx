@@ -23,6 +23,7 @@ import { AppAlertHost } from '../src/components/AppAlertHost';
 import { ActiveCallBanner } from '../src/components/ActiveCallBanner';
 import { appAlert } from '../src/state/alertStore';
 import { initNotificationRouting } from '../src/lib/push';
+import { setupCallNotificationChannel, registerCallBackgroundTask, subscribeToCallNotificationEvents } from '../src/lib/callNotifications';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -64,6 +65,9 @@ export default function RootLayout() {
     useCallStore.getState().wire();
     useChatSessionStore.getState().wire();
     initNotificationRouting();
+    setupCallNotificationChannel().catch(() => {});
+    registerCallBackgroundTask();
+    subscribeToCallNotificationEvents();
 
     // zustand's subscribe() only fires on future transitions, not on state
     // that already changed before this effect (re-)ran — e.g. this layout

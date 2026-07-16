@@ -112,7 +112,14 @@
             "backgroundColor": "#08080a"
           }
         }
-      ]
+      ],
+      [
+        "react-native-maps",
+        {
+          "androidGoogleMapsApiKey": null
+        }
+      ],
+      "./plugins/withLockScreenCallActivity"
     ],
     "experiments": {
       "typedRoutes": true
