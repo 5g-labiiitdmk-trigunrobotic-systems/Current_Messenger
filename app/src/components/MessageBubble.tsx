@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { View, Text, Image, Pressable, Modal, Platform } from 'react-native';
-import MapView, { Marker, UrlTile } from 'react-native-maps';
 import Svg, { Path } from 'react-native-svg';
 import Animated, { FadeInUp } from 'react-native-reanimated';
 import { Glass } from './Glass';
@@ -168,6 +167,20 @@ const OSM_TILE_URL_TEMPLATE = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 // must carry this credit near the map.
 const OSM_ATTRIBUTION = '© OpenStreetMap contributors';
 
+// react-native-maps only ships a web shim for MapView itself — Marker and
+// UrlTile have no .web variant, and importing them statically evaluates
+// react-native-maps' native codegenNativeComponent calls immediately, which
+// throws under react-native-web and crashes the whole app at boot (Metro
+// bundles every route's modules together, so this isn't limited to screens
+// that actually render a location message). Requiring lazily and only on
+// native platforms — the app's real target — avoids that module ever being
+// evaluated on web; MAPS is null there and LocationBubble falls back to a
+// plain coordinate display instead of a map.
+const MAPS = Platform.OS !== 'web' ? require('react-native-maps') : null;
+const MapView: any = MAPS?.default;
+const Marker: any = MAPS?.Marker;
+const UrlTile: any = MAPS?.UrlTile;
+
 /**
  * One-shot location share (see getCurrentLocationOnce in src/lib/media.ts —
  * there is no live/continuous tracking, this is a single point in time
@@ -193,6 +206,20 @@ function LocationBubble({ meta, isMe, a1, tokens }: { meta: any; isMe: boolean; 
   const lng = Number(meta.lng);
   const region = { latitude: lat, longitude: lng, latitudeDelta: 0.01, longitudeDelta: 0.01 };
   const useOsmTiles = Platform.OS === 'android';
+
+  // No MapView on web (see the MAPS lazy-require above) — fall back to the
+  // plain coordinate bubble this used to be before the map view existed,
+  // rather than a broken/blank map.
+  if (!MapView) {
+    return (
+      <View style={[{ borderRadius: 20, padding: 14, minWidth: 180 }, isMe ? { backgroundColor: a1 } : { backgroundColor: tokens.glassBg2, borderWidth: 1, borderColor: tokens.glassBorder }]}>
+        <Text style={{ fontFamily: fontFamilies.bold, color: isMe ? '#fff' : tokens.text, fontSize: 13.5 }}>📍 Location</Text>
+        <Text style={{ fontFamily: fontFamilies.medium, color: isMe ? 'rgba(255,255,255,0.85)' : tokens.text2, fontSize: 12, marginTop: 3 }}>
+          {lat.toFixed(4)}, {lng.toFixed(4)}
+        </Text>
+      </View>
+    );
+  }
 
   return (
     <>
