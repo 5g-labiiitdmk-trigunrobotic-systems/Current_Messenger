@@ -96,4 +96,24 @@ export function stopIncomingRingtone() {
   InCallManager.stopRingtone();
 }
 
+/**
+ * The caller's side of the same gap playIncomingRingtone fixed for the
+ * receiver: while ring() is waiting for the other party to accept
+ * (CallPhase 'ringing-out'), nothing was playing at all — complete silence
+ * for the caller, unlike a real phone call's ringback/purring tone. This is
+ * react-native-incall-manager's separate startRingback API, not
+ * startRingtone reused — '_DTMF_' (the library's own default) plays a
+ * generated ringback waveform, distinct from '_DEFAULT_'s actual device
+ * ringtone media file used for the receiver; a caller waiting for pickup
+ * should hear the classic "purring" ringback tone, not the callee's
+ * ringtone sound.
+ */
+export function playOutgoingRingback() {
+  InCallManager.startRingback('_DTMF_');
+}
+
+export function stopOutgoingRingback() {
+  InCallManager.stopRingback();
+}
+
 export const CALL_AUDIO_SUPPORTED = true;

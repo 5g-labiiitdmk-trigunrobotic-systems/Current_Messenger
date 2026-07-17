@@ -13,6 +13,8 @@ import {
   subscribeToAudioRouteChanges,
   playIncomingRingtone,
   stopIncomingRingtone,
+  playOutgoingRingback,
+  stopOutgoingRingback,
   type AudioRoute,
 } from '../lib/callAudio';
 
@@ -129,6 +131,7 @@ function sendSignal(to: string, signal: CallSignal) {
 function teardownConnection() {
   clearTimers();
   stopIncomingRingtone(); // no-op if it wasn't playing — always safe to call on any call-ending path
+  stopOutgoingRingback(); // same — catches decline/busy/timeout/hangup/network/failed while ringing-out
   stopCallAudioSession();
   audioRouteUnsub?.();
   audioRouteUnsub = null;
@@ -265,6 +268,7 @@ export const useCallStore = create<CallState>((set, get) => ({
         case 'accept': {
           if (get().phase !== 'ringing-out' || get().peerId !== from) return;
           clearTimers();
+          stopOutgoingRingback();
           set({ phase: 'connecting' });
           startConnectingTimeout(get, set);
           try {
@@ -357,6 +361,13 @@ export const useCallStore = create<CallState>((set, get) => ({
     const meOut = useAuthStore.getState().session?.user.id;
     if (meOut) saveCallLogEntry(meOut, outEntry).catch(() => {});
     sendSignal(to, { kind: 'ring', callKind: kind });
+    // The caller's counterpart to playIncomingRingtone on the receiver's
+    // 'ring' handler below — otherwise there's total silence here while
+    // waiting for the other party to pick up. Stopped by whichever of
+    // accept/decline/busy/timeout/hangup ends this ringing-out phase (see
+    // the 'accept' case's explicit stop, and teardownConnection's catch-all
+    // for every other ending path).
+    playOutgoingRingback();
     ringTimeoutTimer = setTimeout(() => {
       if (get().phase !== 'ringing-out') return;
       const to2 = get().peerId;
