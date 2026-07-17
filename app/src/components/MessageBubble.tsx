@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Image, Pressable, Modal, Platform } from 'react-native';
+import { View, Text, Image, Pressable, Modal, Platform, Linking, useWindowDimensions } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import Animated, { FadeInUp } from 'react-native-reanimated';
 import { Glass } from './Glass';
@@ -167,83 +167,254 @@ const OSM_TILE_URL_TEMPLATE = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 // must carry this credit near the map.
 const OSM_ATTRIBUTION = '© OpenStreetMap contributors';
 
-// react-native-maps only ships a web shim for MapView itself — Marker and
-// UrlTile have no .web variant, and importing them statically evaluates
-// react-native-maps' native codegenNativeComponent calls immediately, which
-// throws under react-native-web and crashes the whole app at boot (Metro
-// bundles every route's modules together, so this isn't limited to screens
-// that actually render a location message). Requiring lazily and only on
-// native platforms — the app's real target — avoids that module ever being
-// evaluated on web; MAPS is null there and LocationBubble falls back to a
-// plain coordinate display instead of a map.
-const MAPS = Platform.OS !== 'web' ? require('react-native-maps') : null;
+// CORRECTED after a real-device crash (IllegalStateException: API key not
+// found, thrown from com.rnmaps.maps.MapView.onCreate via Google Play
+// Services' CreatorImpl.newMapViewDelegate): react-native-maps' Android
+// native view is built entirely on top of com.google.android.gms.maps —
+// there is no alternate Android backend in this library. `mapType="none"`
+// only controls what tiles get drawn AFTER the underlying GoogleMap object
+// finishes initializing; it does NOT skip that initialization, which
+// unconditionally requires a com.google.android.geo.API_KEY manifest
+// entry regardless of mapType/tile source. The previous round's "OSM tiles
+// avoid needing a Google key" reasoning was wrong. Since this app has no
+// Google Maps API key configured (that was the whole point of switching to
+// OSM), rendering react-native-maps' <MapView> on Android is a guaranteed
+// crash — so it is never rendered there anymore. Android now renders a
+// plain <Image>-based static tile mosaic (buildOsmTileLayout below) instead
+// — genuinely independent of Google's native map engine, since it never
+// constructs a native map view at all, just fetches OSM raster tiles over
+// HTTP like any other image. This trades away pinch/zoom/pan (a static
+// snapshot only) for a bought-and-paid-for guarantee that it cannot repeat
+// this crash; "Open in Maps" in the expanded view hands off to the device's
+// own maps app for real interactive navigation. iOS is untouched — its
+// react-native-maps backend is Apple MapKit (confirmed via the plugin
+// source: it only links Google Maps when iosGoogleMapsApiKey is set, which
+// this app never sets), which needs no API key and was never at risk.
+//
+// A real native OSM-tile map view (e.g. MapLibre, which has no Google
+// dependency at all and would restore full interactivity on Android) is a
+// reasonable future upgrade, but is deliberately NOT what's shipped here:
+// it would mean introducing another brand-new native module whose on-device
+// behavior this sandbox cannot fully verify either — exactly the class of
+// mistake that caused this crash. The static-image approach below is
+// verifiable end-to-end without a native build (it's pure JS + network
+// image fetches), so it ships now; MapLibre is worth evaluating later with
+// real-device testing before it replaces this.
+const MAPS = Platform.OS === 'ios' ? require('react-native-maps') : null;
 const MapView: any = MAPS?.default;
 const Marker: any = MAPS?.Marker;
-const UrlTile: any = MAPS?.UrlTile;
+
+const OSM_TILE_SIZE = 256;
+
+// Standard Web Mercator projection: lat/lng -> fractional tile coordinates
+// at a given zoom. See https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames
+function projectToTile(lat: number, lng: number, zoom: number) {
+  const latRad = (lat * Math.PI) / 180;
+  const n = Math.pow(2, zoom);
+  const x = ((lng + 180) / 360) * n;
+  const y = ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n;
+  return { x, y };
+}
+
+/**
+ * Computes which OSM raster tiles are needed to cover a width x height
+ * viewport centered on (lat, lng), and each tile's pixel offset within that
+ * viewport. Centering this way means the target point always lands at
+ * exactly (width/2, height/2) in the returned container — the pin overlay
+ * never needs its own position math.
+ */
+function buildOsmTileLayout(lat: number, lng: number, zoom: number, width: number, height: number) {
+  const { x, y } = projectToTile(lat, lng, zoom);
+  const centerPxX = x * OSM_TILE_SIZE;
+  const centerPxY = y * OSM_TILE_SIZE;
+  const originPxX = centerPxX - width / 2;
+  const originPxY = centerPxY - height / 2;
+  const tileX0 = Math.floor(originPxX / OSM_TILE_SIZE);
+  const tileY0 = Math.floor(originPxY / OSM_TILE_SIZE);
+  const tilesWide = Math.ceil((originPxX + width) / OSM_TILE_SIZE) - tileX0 + 1;
+  const tilesHigh = Math.ceil((originPxY + height) / OSM_TILE_SIZE) - tileY0 + 1;
+  const maxTileIndex = Math.pow(2, zoom) - 1;
+
+  const tiles: { key: string; left: number; top: number; url: string }[] = [];
+  for (let ty = 0; ty < tilesHigh; ty++) {
+    for (let tx = 0; tx < tilesWide; tx++) {
+      const tileX = tileX0 + tx;
+      const tileY = tileY0 + ty;
+      if (tileX < 0 || tileY < 0 || tileX > maxTileIndex || tileY > maxTileIndex) continue;
+      tiles.push({
+        key: `${tileX}-${tileY}`,
+        left: tileX * OSM_TILE_SIZE - originPxX,
+        top: tileY * OSM_TILE_SIZE - originPxY,
+        url: OSM_TILE_URL_TEMPLATE.replace('{z}', String(zoom)).replace('{x}', String(tileX)).replace('{y}', String(tileY)),
+      });
+    }
+  }
+  return tiles;
+}
+
+function PinIcon({ size = 30, color = '#ff4d4f' }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Path d="M12 2C7.6 2 4 5.6 4 10c0 6 8 12 8 12s8-6 8-12c0-4.4-3.6-8-8-8Z" fill={color} />
+      <Path d="M12 7a3 3 0 110 6 3 3 0 010-6Z" fill="#fff" />
+    </Svg>
+  );
+}
+
+/**
+ * Non-interactive static map for Android — see the MAPS/MapView comment
+ * above for why Android never renders react-native-maps' native view.
+ */
+function OsmStaticMap({ lat, lng, width, height, zoom }: { lat: number; lng: number; width: number; height: number; zoom: number }) {
+  const tiles = buildOsmTileLayout(lat, lng, zoom, width, height);
+  return (
+    <View style={{ width, height, overflow: 'hidden', backgroundColor: '#dfe3e8' }}>
+      {tiles.map((t) => (
+        <Image key={t.key} source={{ uri: t.url }} style={{ position: 'absolute', left: t.left, top: t.top, width: OSM_TILE_SIZE, height: OSM_TILE_SIZE }} />
+      ))}
+      <View style={{ position: 'absolute', left: width / 2 - 15, top: height / 2 - 30 }}>
+        <PinIcon />
+      </View>
+      <View style={{ position: 'absolute', right: 4, bottom: 4, backgroundColor: 'rgba(255,255,255,0.8)', paddingHorizontal: 4, paddingVertical: 1, borderRadius: 3 }}>
+        <Text style={{ fontSize: 8, color: '#333' }}>{OSM_ATTRIBUTION}</Text>
+      </View>
+    </View>
+  );
+}
+
+function openInMaps(lat: number, lng: number) {
+  const url = Platform.OS === 'ios' ? `http://maps.apple.com/?ll=${lat},${lng}&q=Shared+location` : `geo:${lat},${lng}?q=${lat},${lng}(Shared+location)`;
+  Linking.canOpenURL(url).then((can) => {
+    if (can) Linking.openURL(url);
+    else Linking.openURL(`https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=17/${lat}/${lng}`);
+  });
+}
+
+function PlainLocationBubble({ lat, lng, isMe, a1, tokens, label }: { lat: number; lng: number; isMe: boolean; a1: string; tokens: any; label: string }) {
+  return (
+    <View style={[{ borderRadius: 20, padding: 14, minWidth: 180 }, isMe ? { backgroundColor: a1 } : { backgroundColor: tokens.glassBg2, borderWidth: 1, borderColor: tokens.glassBorder }]}>
+      <Text style={{ fontFamily: fontFamilies.bold, color: isMe ? '#fff' : tokens.text, fontSize: 13.5 }}>📍 {label}</Text>
+      <Text style={{ fontFamily: fontFamilies.medium, color: isMe ? 'rgba(255,255,255,0.85)' : tokens.text2, fontSize: 12, marginTop: 3 }}>
+        {Number.isFinite(lat) && Number.isFinite(lng) ? `${lat.toFixed(4)}, ${lng.toFixed(4)}` : 'Coordinates unavailable'}
+      </Text>
+    </View>
+  );
+}
+
+/**
+ * Catches JS-level rendering errors from the location bubble (e.g.
+ * malformed meta, a bad tile-math edge case) and falls back to plain text
+ * instead of taking the whole message list down with it.
+ *
+ * This is NOT what fixed the real-device crash reported for this feature —
+ * that crash was a native Java exception thrown from inside
+ * react-native-maps' Android view construction (IllegalStateException from
+ * Google Play Services' CreatorImpl, see the comment above MAPS), which
+ * happens outside JS entirely and is not something a React error boundary
+ * can intercept. What actually fixed it is that Android no longer renders
+ * that native view at all. This boundary exists as ordinary defense in
+ * depth for the JS-level map code, not as the crash fix itself.
+ */
+class LocationErrorBoundary extends React.Component<{ children: React.ReactNode; fallback: React.ReactNode }, { hasError: boolean }> {
+  constructor(props: { children: React.ReactNode; fallback: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(error: unknown) {
+    // eslint-disable-next-line no-console
+    console.error('[LocationBubble] render error, falling back:', error);
+  }
+  render() {
+    return this.state.hasError ? this.props.fallback : this.props.children;
+  }
+}
 
 /**
  * One-shot location share (see getCurrentLocationOnce in src/lib/media.ts —
  * there is no live/continuous tracking, this is a single point in time
- * captured once and sent like any other rich message). Preview map is
- * non-interactive (scroll/zoom/rotate disabled) so it doesn't fight the
- * chat list's own scroll gesture; tapping it opens a real interactive map
- * in a full-screen Modal, mirroring AppAlertHost's Modal usage elsewhere
- * in this app.
+ * captured once and sent like any other rich message).
  *
- * Android renders OpenStreetMap tiles via UrlTile instead of Google Maps,
- * so no Google Cloud billing account / Maps API key is required —
- * mapType="none" is an Android-only MapView option that turns off Google's
- * own tile fetching entirely (no network calls to Google, no key needed),
- * leaving UrlTile's OSM tiles as the only thing actually drawn. iOS keeps
- * using Apple MapKit as before (already free, and react-native-maps'
- * config plugin only touches Google Maps on iOS when iosGoogleMapsApiKey is
- * set, which this app never sets) — UrlTile/mapType="none" are skipped
- * there since Apple's own tiles + attribution already cover it.
+ * iOS: real interactive react-native-maps MapView (Apple MapKit backend,
+ * no API key needed, unaffected by the Android crash below).
+ * Android: a non-interactive static OSM tile mosaic (see OsmStaticMap) in
+ * both the bubble preview and the expanded view, plus an "Open in Maps"
+ * button in the expanded view for real pan/zoom/navigation via the
+ * device's own maps app.
+ * Web: plain coordinate text (react-native-maps has no web backend at all,
+ * see the MAPS comment above the OSM_TILE_URL_TEMPLATE for why the module
+ * import itself is guarded).
  */
 function LocationBubble({ meta, isMe, a1, tokens }: { meta: any; isMe: boolean; a1: string; tokens: any }) {
   const [expanded, setExpanded] = useState(false);
   const lat = Number(meta.lat);
   const lng = Number(meta.lng);
-  const region = { latitude: lat, longitude: lng, latitudeDelta: 0.01, longitudeDelta: 0.01 };
-  const useOsmTiles = Platform.OS === 'android';
+  const { width: screenW, height: screenH } = useWindowDimensions();
 
-  // No MapView on web (see the MAPS lazy-require above) — fall back to the
-  // plain coordinate bubble this used to be before the map view existed,
-  // rather than a broken/blank map.
-  if (!MapView) {
+  const fallback = <PlainLocationBubble lat={lat} lng={lng} isMe={isMe} a1={a1} tokens={tokens} label="Location" />;
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return <PlainLocationBubble lat={lat} lng={lng} isMe={isMe} a1={a1} tokens={tokens} label="Location unavailable" />;
+  }
+
+  if (Platform.OS === 'web') return fallback;
+
+  if (Platform.OS === 'android') {
     return (
-      <View style={[{ borderRadius: 20, padding: 14, minWidth: 180 }, isMe ? { backgroundColor: a1 } : { backgroundColor: tokens.glassBg2, borderWidth: 1, borderColor: tokens.glassBorder }]}>
-        <Text style={{ fontFamily: fontFamilies.bold, color: isMe ? '#fff' : tokens.text, fontSize: 13.5 }}>📍 Location</Text>
-        <Text style={{ fontFamily: fontFamilies.medium, color: isMe ? 'rgba(255,255,255,0.85)' : tokens.text2, fontSize: 12, marginTop: 3 }}>
-          {lat.toFixed(4)}, {lng.toFixed(4)}
-        </Text>
-      </View>
+      <LocationErrorBoundary fallback={fallback}>
+        <Pressable onPress={() => setExpanded(true)} style={{ borderRadius: 20, overflow: 'hidden', width: 220 }}>
+          <OsmStaticMap lat={lat} lng={lng} width={220} height={140} zoom={16} />
+          <View
+            style={[
+              { paddingHorizontal: 12, paddingVertical: 10 },
+              isMe ? { backgroundColor: a1 } : { backgroundColor: tokens.glassBg2, borderWidth: 1, borderColor: tokens.glassBorder, borderTopWidth: 0 },
+            ]}
+          >
+            <Text style={{ fontFamily: fontFamilies.bold, color: isMe ? '#fff' : tokens.text, fontSize: 13.5 }}>📍 Location</Text>
+            <Text style={{ fontFamily: fontFamilies.medium, color: isMe ? 'rgba(255,255,255,0.85)' : tokens.text2, fontSize: 12, marginTop: 2 }}>
+              {lat.toFixed(4)}, {lng.toFixed(4)}
+            </Text>
+          </View>
+        </Pressable>
+        <Modal visible={expanded} animationType="fade" onRequestClose={() => setExpanded(false)} statusBarTranslucent>
+          <View style={{ flex: 1, backgroundColor: '#000' }}>
+            <OsmStaticMap lat={lat} lng={lng} width={screenW} height={screenH} zoom={16} />
+            <Pressable
+              onPress={() => openInMaps(lat, lng)}
+              style={{ position: 'absolute', left: 20, right: 20, bottom: 46, borderRadius: 16, paddingVertical: 14, alignItems: 'center', backgroundColor: a1 }}
+            >
+              <Text style={{ color: '#fff', fontSize: 15, fontFamily: fontFamilies.bold }}>Open in Maps</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setExpanded(false)}
+              style={{ position: 'absolute', top: 56, right: 20, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' }}
+            >
+              <Text style={{ color: '#fff', fontSize: 18, fontFamily: fontFamilies.bold }}>✕</Text>
+            </Pressable>
+          </View>
+        </Modal>
+      </LocationErrorBoundary>
     );
   }
 
+  // iOS
+  const region = { latitude: lat, longitude: lng, latitudeDelta: 0.01, longitudeDelta: 0.01 };
   return (
-    <>
+    <LocationErrorBoundary fallback={fallback}>
       <Pressable onPress={() => setExpanded(true)} style={{ borderRadius: 20, overflow: 'hidden', width: 220 }}>
-        <View style={{ width: 220, height: 140 }}>
-          <MapView
-            style={{ width: '100%', height: '100%' }}
-            initialRegion={region}
-            pointerEvents="none"
-            scrollEnabled={false}
-            zoomEnabled={false}
-            rotateEnabled={false}
-            pitchEnabled={false}
-            mapType={useOsmTiles ? 'none' : 'standard'}
-          >
-            {useOsmTiles && <UrlTile urlTemplate={OSM_TILE_URL_TEMPLATE} maximumZ={19} flipY={false} />}
-            <Marker coordinate={{ latitude: lat, longitude: lng }} />
-          </MapView>
-          {useOsmTiles && (
-            <View style={{ position: 'absolute', right: 3, bottom: 3, backgroundColor: 'rgba(255,255,255,0.78)', paddingHorizontal: 3, borderRadius: 3 }}>
-              <Text style={{ fontSize: 7, color: '#333' }}>{OSM_ATTRIBUTION}</Text>
-            </View>
-          )}
-        </View>
+        <MapView
+          style={{ width: 220, height: 140 }}
+          initialRegion={region}
+          pointerEvents="none"
+          scrollEnabled={false}
+          zoomEnabled={false}
+          rotateEnabled={false}
+          pitchEnabled={false}
+        >
+          <Marker coordinate={{ latitude: lat, longitude: lng }} />
+        </MapView>
         <View
           style={[
             { paddingHorizontal: 12, paddingVertical: 10 },
@@ -258,15 +429,9 @@ function LocationBubble({ meta, isMe, a1, tokens }: { meta: any; isMe: boolean; 
       </Pressable>
       <Modal visible={expanded} animationType="fade" onRequestClose={() => setExpanded(false)} statusBarTranslucent>
         <View style={{ flex: 1, backgroundColor: '#000' }}>
-          <MapView style={{ flex: 1 }} initialRegion={region} mapType={useOsmTiles ? 'none' : 'standard'}>
-            {useOsmTiles && <UrlTile urlTemplate={OSM_TILE_URL_TEMPLATE} maximumZ={19} flipY={false} />}
+          <MapView style={{ flex: 1 }} initialRegion={region}>
             <Marker coordinate={{ latitude: lat, longitude: lng }} />
           </MapView>
-          {useOsmTiles && (
-            <View style={{ position: 'absolute', left: 14, bottom: 14, backgroundColor: 'rgba(255,255,255,0.85)', paddingHorizontal: 7, paddingVertical: 4, borderRadius: 5 }}>
-              <Text style={{ fontSize: 11, color: '#222', fontFamily: fontFamilies.medium }}>{OSM_ATTRIBUTION}</Text>
-            </View>
-          )}
           <Pressable
             onPress={() => setExpanded(false)}
             style={{ position: 'absolute', top: 56, right: 20, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' }}
@@ -275,7 +440,7 @@ function LocationBubble({ meta, isMe, a1, tokens }: { meta: any; isMe: boolean; 
           </Pressable>
         </View>
       </Modal>
-    </>
+    </LocationErrorBoundary>
   );
 }
 
