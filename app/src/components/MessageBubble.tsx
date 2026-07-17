@@ -154,18 +154,39 @@ function BubbleContent({ m, isMe, a1, a2, tokens, meId, onVote }: any) {
   );
 }
 
-// tile.openstreetmap.org is OSM's own free "main" tile server — no API key,
-// no billing account, but it's explicitly meant for light/evaluation use
-// (see https://operations.osmfoundation.org/policies/tiles/): it expects a
-// real User-Agent, reasonable request volume, and no bulk/heavy production
-// traffic without prior arrangement. Fine for this app's current scale;
-// a high-traffic rollout should move to a paid OSM-tile provider (MapTiler,
-// Thunderforest, Stadia, etc.) or a self-hosted tile server instead of
-// hotlinking this one, to avoid risking an IP-based block.
-const OSM_TILE_URL_TEMPLATE = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
-// Required by the same tile usage policy above — any use of OSM's tiles
-// must carry this credit near the map.
-const OSM_ATTRIBUTION = '© OpenStreetMap contributors';
+// CORRECTED again, this time after a real production block: tile.openstreetmap.org
+// (OSM's own free "main" tile server) started returning "Access blocked: App
+// is not following the tile usage policy of OpenStreetMap's volunteer-run
+// servers" for this app's traffic — exactly the risk the comment that used
+// to be here already flagged ("a high-traffic rollout should move to a paid
+// OSM-tile provider... to avoid risking an IP-based block") but treated as a
+// future concern rather than something to act on immediately. It happened
+// faster than expected, so hotlinking tile.openstreetmap.org directly is
+// retired for good, not just rate-limited harder.
+//
+// Now using MapTiler (https://www.maptiler.com), a tile provider built
+// specifically for production app traffic — free tier is 100,000 tile
+// loads/month, no card required, no risk of the volunteer-infrastructure
+// abuse-policy block that just happened. Requires an API key, but unlike
+// TURN_URLS/TURN_USERNAME/TURN_CREDENTIAL (server/.env, proxied through the
+// relay via GET /ice-servers — see server/src/index.ts), this key is NOT
+// treated as a server-relayed secret: MapTiler's keys are explicitly
+// designed for direct client embedding (optionally domain/bundle-ID
+// restricted from their dashboard), the same risk category as this app's
+// existing EXPO_PUBLIC_SUPABASE_ANON_KEY, not a shared-secret relay
+// credential like TURN's. Baking it in via EXPO_PUBLIC_MAPTILER_API_KEY
+// (app/.env, see .env.example) avoids adding a network round-trip to the
+// relay just to read a config value on every location-bubble render, which
+// the server-relay pattern would've required. See docs/SETUP.md section 3.6
+// for the exact account/key setup.
+const MAPTILER_API_KEY = process.env.EXPO_PUBLIC_MAPTILER_API_KEY ?? '';
+// MapTiler's "openstreetmap" style renders standard OSM cartography (same
+// look as the tile.openstreetmap.org tiles this replaces) but served from
+// MapTiler's own production CDN, not OSM's volunteer servers.
+const TILE_URL_TEMPLATE = 'https://api.maptiler.com/maps/openstreetmap/{z}/{x}/{y}.png?key=' + MAPTILER_API_KEY;
+// Required by MapTiler's terms (crediting both MapTiler and the underlying
+// OSM data) — see https://www.maptiler.com/copyright/.
+const TILE_ATTRIBUTION = '© MapTiler © OpenStreetMap contributors';
 
 // CORRECTED after a real-device crash (IllegalStateException: API key not
 // found, thrown from com.rnmaps.maps.MapView.onCreate via Google Play
@@ -180,10 +201,11 @@ const OSM_ATTRIBUTION = '© OpenStreetMap contributors';
 // Google Maps API key configured (that was the whole point of switching to
 // OSM), rendering react-native-maps' <MapView> on Android is a guaranteed
 // crash — so it is never rendered there anymore. Android now renders a
-// plain <Image>-based static tile mosaic (buildOsmTileLayout below) instead
+// plain <Image>-based static tile mosaic (buildTileLayout below) instead
 // — genuinely independent of Google's native map engine, since it never
-// constructs a native map view at all, just fetches OSM raster tiles over
-// HTTP like any other image. This trades away pinch/zoom/pan (a static
+// constructs a native map view at all, just fetches raster tiles over HTTP
+// like any other image (from MapTiler as of the round after this one — see
+// the TILE_URL_TEMPLATE comment below). This trades away pinch/zoom/pan (a static
 // snapshot only) for a bought-and-paid-for guarantee that it cannot repeat
 // this crash; "Open in Maps" in the expanded view hands off to the device's
 // own maps app for real interactive navigation. iOS is untouched — its
@@ -204,7 +226,7 @@ const MAPS = Platform.OS === 'ios' ? require('react-native-maps') : null;
 const MapView: any = MAPS?.default;
 const Marker: any = MAPS?.Marker;
 
-const OSM_TILE_SIZE = 256;
+const TILE_SIZE = 256;
 
 // Standard Web Mercator projection: lat/lng -> fractional tile coordinates
 // at a given zoom. See https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames
@@ -217,22 +239,22 @@ function projectToTile(lat: number, lng: number, zoom: number) {
 }
 
 /**
- * Computes which OSM raster tiles are needed to cover a width x height
+ * Computes which raster tiles are needed to cover a width x height
  * viewport centered on (lat, lng), and each tile's pixel offset within that
  * viewport. Centering this way means the target point always lands at
  * exactly (width/2, height/2) in the returned container — the pin overlay
  * never needs its own position math.
  */
-function buildOsmTileLayout(lat: number, lng: number, zoom: number, width: number, height: number) {
+function buildTileLayout(lat: number, lng: number, zoom: number, width: number, height: number) {
   const { x, y } = projectToTile(lat, lng, zoom);
-  const centerPxX = x * OSM_TILE_SIZE;
-  const centerPxY = y * OSM_TILE_SIZE;
+  const centerPxX = x * TILE_SIZE;
+  const centerPxY = y * TILE_SIZE;
   const originPxX = centerPxX - width / 2;
   const originPxY = centerPxY - height / 2;
-  const tileX0 = Math.floor(originPxX / OSM_TILE_SIZE);
-  const tileY0 = Math.floor(originPxY / OSM_TILE_SIZE);
-  const tilesWide = Math.ceil((originPxX + width) / OSM_TILE_SIZE) - tileX0 + 1;
-  const tilesHigh = Math.ceil((originPxY + height) / OSM_TILE_SIZE) - tileY0 + 1;
+  const tileX0 = Math.floor(originPxX / TILE_SIZE);
+  const tileY0 = Math.floor(originPxY / TILE_SIZE);
+  const tilesWide = Math.ceil((originPxX + width) / TILE_SIZE) - tileX0 + 1;
+  const tilesHigh = Math.ceil((originPxY + height) / TILE_SIZE) - tileY0 + 1;
   const maxTileIndex = Math.pow(2, zoom) - 1;
 
   const tiles: { key: string; left: number; top: number; url: string }[] = [];
@@ -243,9 +265,9 @@ function buildOsmTileLayout(lat: number, lng: number, zoom: number, width: numbe
       if (tileX < 0 || tileY < 0 || tileX > maxTileIndex || tileY > maxTileIndex) continue;
       tiles.push({
         key: `${tileX}-${tileY}`,
-        left: tileX * OSM_TILE_SIZE - originPxX,
-        top: tileY * OSM_TILE_SIZE - originPxY,
-        url: OSM_TILE_URL_TEMPLATE.replace('{z}', String(zoom)).replace('{x}', String(tileX)).replace('{y}', String(tileY)),
+        left: tileX * TILE_SIZE - originPxX,
+        top: tileY * TILE_SIZE - originPxY,
+        url: TILE_URL_TEMPLATE.replace('{z}', String(zoom)).replace('{x}', String(tileX)).replace('{y}', String(tileY)),
       });
     }
   }
@@ -265,18 +287,18 @@ function PinIcon({ size = 30, color = '#ff4d4f' }: { size?: number; color?: stri
  * Non-interactive static map for Android — see the MAPS/MapView comment
  * above for why Android never renders react-native-maps' native view.
  */
-function OsmStaticMap({ lat, lng, width, height, zoom }: { lat: number; lng: number; width: number; height: number; zoom: number }) {
-  const tiles = buildOsmTileLayout(lat, lng, zoom, width, height);
+function StaticTileMap({ lat, lng, width, height, zoom }: { lat: number; lng: number; width: number; height: number; zoom: number }) {
+  const tiles = buildTileLayout(lat, lng, zoom, width, height);
   return (
     <View style={{ width, height, overflow: 'hidden', backgroundColor: '#dfe3e8' }}>
       {tiles.map((t) => (
-        <Image key={t.key} source={{ uri: t.url }} style={{ position: 'absolute', left: t.left, top: t.top, width: OSM_TILE_SIZE, height: OSM_TILE_SIZE }} />
+        <Image key={t.key} source={{ uri: t.url }} style={{ position: 'absolute', left: t.left, top: t.top, width: TILE_SIZE, height: TILE_SIZE }} />
       ))}
       <View style={{ position: 'absolute', left: width / 2 - 15, top: height / 2 - 30 }}>
         <PinIcon />
       </View>
       <View style={{ position: 'absolute', right: 4, bottom: 4, backgroundColor: 'rgba(255,255,255,0.8)', paddingHorizontal: 4, paddingVertical: 1, borderRadius: 3 }}>
-        <Text style={{ fontSize: 8, color: '#333' }}>{OSM_ATTRIBUTION}</Text>
+        <Text style={{ fontSize: 8, color: '#333' }}>{TILE_ATTRIBUTION}</Text>
       </View>
     </View>
   );
@@ -339,12 +361,12 @@ class LocationErrorBoundary extends React.Component<{ children: React.ReactNode;
  *
  * iOS: real interactive react-native-maps MapView (Apple MapKit backend,
  * no API key needed, unaffected by the Android crash below).
- * Android: a non-interactive static OSM tile mosaic (see OsmStaticMap) in
+ * Android: a non-interactive static tile mosaic (see StaticTileMap) in
  * both the bubble preview and the expanded view, plus an "Open in Maps"
  * button in the expanded view for real pan/zoom/navigation via the
  * device's own maps app.
  * Web: plain coordinate text (react-native-maps has no web backend at all,
- * see the MAPS comment above the OSM_TILE_URL_TEMPLATE for why the module
+ * see the MAPS comment above TILE_URL_TEMPLATE for why the module
  * import itself is guarded).
  */
 function LocationBubble({ meta, isMe, a1, tokens }: { meta: any; isMe: boolean; a1: string; tokens: any }) {
@@ -361,11 +383,18 @@ function LocationBubble({ meta, isMe, a1, tokens }: { meta: any; isMe: boolean; 
 
   if (Platform.OS === 'web') return fallback;
 
+  // No MapTiler key configured (see .env.example / docs/SETUP.md section
+  // 3.6) — fall back to plain text rather than either crashing on a broken
+  // tile URL or, worse, silently reverting to hotlinking
+  // tile.openstreetmap.org directly, which is exactly the traffic pattern
+  // that got this app blocked in the first place.
+  if (Platform.OS === 'android' && !MAPTILER_API_KEY) return fallback;
+
   if (Platform.OS === 'android') {
     return (
       <LocationErrorBoundary fallback={fallback}>
         <Pressable onPress={() => setExpanded(true)} style={{ borderRadius: 20, overflow: 'hidden', width: 220 }}>
-          <OsmStaticMap lat={lat} lng={lng} width={220} height={140} zoom={16} />
+          <StaticTileMap lat={lat} lng={lng} width={220} height={140} zoom={16} />
           <View
             style={[
               { paddingHorizontal: 12, paddingVertical: 10 },
@@ -380,7 +409,7 @@ function LocationBubble({ meta, isMe, a1, tokens }: { meta: any; isMe: boolean; 
         </Pressable>
         <Modal visible={expanded} animationType="fade" onRequestClose={() => setExpanded(false)} statusBarTranslucent>
           <View style={{ flex: 1, backgroundColor: '#000' }}>
-            <OsmStaticMap lat={lat} lng={lng} width={screenW} height={screenH} zoom={16} />
+            <StaticTileMap lat={lat} lng={lng} width={screenW} height={screenH} zoom={16} />
             <Pressable
               onPress={() => openInMaps(lat, lng)}
               style={{ position: 'absolute', left: 20, right: 20, bottom: 46, borderRadius: 16, paddingVertical: 14, alignItems: 'center', backgroundColor: a1 }}

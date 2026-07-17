@@ -190,6 +190,35 @@ Metered's paid plan (~$99/mo, 150GB included), Cloudflare TURN standalone
 on this same Render relay instance, since Render's free tier only exposes
 HTTPS/WSS, not the raw UDP relay ports TURN needs.
 
+## 3.6 Map tiles for shared locations (Android)
+
+Shared-location messages render an actual map (not raw coordinates) — a
+static tile mosaic on Android, a real interactive `react-native-maps` view
+on iOS (Apple MapKit, no key needed, nothing to set up). Android's tiles
+used to hotlink `tile.openstreetmap.org` directly, OSM's own free
+volunteer-run tile server — that server has since started blocking this
+app's traffic for not following its production-usage policy (it's meant
+for light/evaluation use, not app traffic at any real scale), so that path
+is retired for good.
+
+Sign up for **[MapTiler](https://www.maptiler.com)** instead — free tier is
+100,000 tile loads/month, no card required, and it's explicitly built for
+this kind of app usage (unlike OSM's own server). From their dashboard,
+grab your API key and set it in `app/.env`:
+
+```
+EXPO_PUBLIC_MAPTILER_API_KEY=<from MapTiler dashboard>
+```
+
+Unlike the TURN credentials above, this key is safe to bake directly into
+the app bundle via the `EXPO_PUBLIC_` prefix (same category as
+`EXPO_PUBLIC_SUPABASE_ANON_KEY`) — MapTiler's keys are designed for direct
+client embedding and can optionally be domain/bundle-ID restricted from
+their dashboard, unlike TURN's shared-secret relay credentials, which must
+never leave the server. Leave it unset and shared-location messages on
+Android fall back to a plain coordinate bubble instead of a map — nothing
+crashes, and it never falls back to hotlinking OSM's server again.
+
 ## 4. Running the app
 
 ```
