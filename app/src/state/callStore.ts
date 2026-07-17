@@ -77,6 +77,14 @@ interface CallState {
 
 const RING_TIMEOUT_MS = 45_000;
 const ICE_DISCONNECT_GRACE_MS = 10_000;
+// Backstop for a call that never reaches a terminal ICE state at all — a
+// real, observed WebRTC failure mode (e.g. a TURN allocation that times out
+// without ever firing iceConnectionState 'failed') where connectionstatechange
+// simply never fires 'connected' or 'failed' and the call sits on
+// 'connecting' forever with no user-visible signal that anything went wrong.
+// Independent of whatever the underlying network/TURN cause is — this just
+// guarantees the call eventually ends with a clear reason instead of hanging.
+const CONNECTING_TIMEOUT_MS = 30_000;
 
 // Module-scope, not store state — pure connection plumbing that has no
 // business being serialized/observed by React. Reset on every call end.
@@ -86,6 +94,7 @@ let pendingRemoteCandidates: unknown[] = [];
 let haveRemoteDescription = false;
 let ringTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
 let iceDisconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let connectingTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
 let endedResetTimer: ReturnType<typeof setTimeout> | null = null;
 let appStateSub: { remove: () => void } | null = null;
 let audioRouteUnsub: (() => void) | null = null;
@@ -93,10 +102,24 @@ let audioRouteUnsub: (() => void) | null = null;
 function clearTimers() {
   if (ringTimeoutTimer) clearTimeout(ringTimeoutTimer);
   if (iceDisconnectTimer) clearTimeout(iceDisconnectTimer);
+  if (connectingTimeoutTimer) clearTimeout(connectingTimeoutTimer);
   if (endedResetTimer) clearTimeout(endedResetTimer);
   ringTimeoutTimer = null;
   iceDisconnectTimer = null;
+  connectingTimeoutTimer = null;
   endedResetTimer = null;
+}
+
+function startConnectingTimeout(get: () => CallState, set: (partial: Partial<CallState>) => void) {
+  if (connectingTimeoutTimer) clearTimeout(connectingTimeoutTimer);
+  connectingTimeoutTimer = setTimeout(() => {
+    connectingTimeoutTimer = null;
+    if (get().phase === 'connecting') {
+      // eslint-disable-next-line no-console
+      console.warn(`[callStore] connecting timed out after ${CONNECTING_TIMEOUT_MS}ms — iceConnectionState was: ${pc?.iceConnectionState}, connectionState: ${pc?.connectionState}. Ending call rather than hanging forever.`);
+      endCall(get, set, 'network');
+    }
+  }, CONNECTING_TIMEOUT_MS);
 }
 
 function sendSignal(to: string, signal: CallSignal) {
@@ -243,6 +266,7 @@ export const useCallStore = create<CallState>((set, get) => ({
           if (get().phase !== 'ringing-out' || get().peerId !== from) return;
           clearTimers();
           set({ phase: 'connecting' });
+          startConnectingTimeout(get, set);
           try {
             await startLocalMedia(get, set);
             const offer = await pc!.createOffer({});
@@ -347,6 +371,20 @@ export const useCallStore = create<CallState>((set, get) => ({
     clearTimers();
     stopIncomingRingtone();
     set({ phase: 'connecting', incoming: null });
+    startConnectingTimeout(get, set);
+    // The caller refreshes iceServers right before ring() places a call —
+    // the callee (this path) previously never did, relying entirely on
+    // whatever wire() fetched once at app boot. If that initial fetch
+    // failed (relay briefly unreachable at launch) or TURN credentials
+    // were rotated server-side since, the callee would silently stay on
+    // STUN-only for the rest of the app session — exactly the kind of gap
+    // that shows as "works for the caller, not the callee" or intermittent
+    // cross-network failures. Fire-and-forget like ring() does: startLocalMedia
+    // below awaits getUserMedia first, which gives this real time to resolve
+    // before new RTCPeerConnection actually reads the module-scope iceServers.
+    fetchIceServers().then((servers) => {
+      iceServers = servers;
+    });
     sendSignal(s.peerId, { kind: 'accept' });
     try {
       await startLocalMedia(get, set);
@@ -433,7 +471,25 @@ async function startLocalMedia(get: () => CallState, set: (partial: Partial<Call
 
   pcEvents.addEventListener('icecandidate', (e: any) => {
     const peerId = get().peerId;
-    if (e.candidate && peerId) sendSignal(peerId, { kind: 'ice-candidate', candidate: e.candidate.toJSON ? e.candidate.toJSON() : e.candidate });
+    if (e.candidate && peerId) {
+      // Diagnostic only — logs the candidate's typ (host/srflx/relay), the
+      // single most useful signal for "stuck on connecting": if a 'relay'
+      // typ candidate never appears here, the TURN allocation never
+      // succeeded (bad/expired/quota-exhausted credentials, or TURN simply
+      // isn't configured — see server/src/index.ts's logIceServerConfig).
+      // A cross-network call that only ever gathers host/srflx candidates
+      // is expected to fail once both sides are behind strict/symmetric
+      // NATs, since only a relay candidate can bridge that.
+      const typ = /typ (\w+)/.exec(String(e.candidate.candidate))?.[1] ?? 'unknown';
+      // eslint-disable-next-line no-console
+      console.log(`[callStore] local ICE candidate gathered: typ=${typ}`);
+      sendSignal(peerId, { kind: 'ice-candidate', candidate: e.candidate.toJSON ? e.candidate.toJSON() : e.candidate });
+    }
+  });
+
+  pcEvents.addEventListener('icegatheringstatechange', () => {
+    // eslint-disable-next-line no-console
+    console.log(`[callStore] iceGatheringState -> ${pc?.iceGatheringState}`);
   });
 
   pcEvents.addEventListener('track', (e: any) => {
@@ -443,7 +499,11 @@ async function startLocalMedia(get: () => CallState, set: (partial: Partial<Call
 
   pcEvents.addEventListener('connectionstatechange', () => {
     const state = pc?.connectionState;
+    // eslint-disable-next-line no-console
+    console.log(`[callStore] connectionState -> ${state}`);
     if (state === 'connected' && get().phase === 'connecting') {
+      if (connectingTimeoutTimer) clearTimeout(connectingTimeoutTimer);
+      connectingTimeoutTimer = null;
       set({ phase: 'active', connectedAt: Date.now() });
     } else if (state === 'failed') {
       endCall(get, set, 'network');
@@ -452,6 +512,8 @@ async function startLocalMedia(get: () => CallState, set: (partial: Partial<Call
 
   pcEvents.addEventListener('iceconnectionstatechange', () => {
     const state = pc?.iceConnectionState;
+    // eslint-disable-next-line no-console
+    console.log(`[callStore] iceConnectionState -> ${state}`);
     if (state === 'disconnected') {
       // WebRTC often self-heals a transient 'disconnected' — give it a
       // grace window before treating the drop as fatal, rather than

@@ -16,6 +16,15 @@ const AUTH_TIMEOUT_MS = 10_000;
 // it's fine for this to be a plain unauthenticated GET (the credentials
 // themselves are what's gated, e.g. Metered's time-limited API keys — see
 // docs/SETUP.md). If no TURN_* env vars are set, only STUN is returned.
+//
+// Logs once at boot (not per-request — this is static for the process
+// lifetime) so "cross-network calls stuck on connecting" can be triaged
+// from Render's logs without guessing: confirms whether TURN is configured
+// at all, which host(s), and flags the specific misconfiguration of
+// TURN_URLS being set without both TURN_USERNAME and TURN_CREDENTIAL
+// (which would silently serve an unauthenticated TURN entry that every
+// real TURN server rejects — same end symptom as no TURN at all, but far
+// less obvious from the client side).
 function getIceServers(): RTCIceServerConfig[] {
   const servers: RTCIceServerConfig[] = [{ urls: 'stun:stun.l.google.com:19302' }];
   const turnUrls = process.env.TURN_URLS;
@@ -27,6 +36,20 @@ function getIceServers(): RTCIceServerConfig[] {
     });
   }
   return servers;
+}
+
+function logIceServerConfig() {
+  const turnUrls = process.env.TURN_URLS;
+  if (!turnUrls) {
+    console.log('[ice-servers] no TURN_URLS set — serving STUN only. Cross-network/strict-NAT calls will fail to connect without a TURN relay (see docs/SETUP.md section 3.5).');
+    return;
+  }
+  const hasUsername = !!process.env.TURN_USERNAME;
+  const hasCredential = !!process.env.TURN_CREDENTIAL;
+  console.log(`[ice-servers] TURN configured: ${turnUrls} (username set: ${hasUsername}, credential set: ${hasCredential})`);
+  if (!hasUsername || !hasCredential) {
+    console.warn('[ice-servers] TURN_URLS is set but TURN_USERNAME/TURN_CREDENTIAL is missing — the served TURN entry will be unauthenticated and every real TURN server will reject it. This looks like "connecting forever" from the client, not an obvious error.');
+  }
 }
 
 interface RTCIceServerConfig {
@@ -192,6 +215,16 @@ wss.on('connection', (socket) => {
         // not reach users who never approved the sender.
         if (!(await areApprovedContacts(userId, event.to))) break;
         const s = relayState.getSocket(event.to);
+        // Diagnostic only — kind + routing, never the SDP/candidate payload
+        // itself. Added specifically so "call stuck on connecting" can be
+        // diagnosed from Render's logs alone: a healthy call shows
+        // ring -> accept -> offer -> answer -> a run of ice-candidate
+        // relays on both directions. If ice-candidate entries stop
+        // appearing (or never contain a 'relay' typ candidate — visible
+        // client-side, see callStore.ts's own icecandidate logging) while
+        // the call sits on 'connecting', that points at TURN allocation
+        // failing rather than a signaling bug.
+        console.log(`[call:signal] ${event.signal.kind} ${userId} -> ${event.to}${s ? '' : ' (recipient offline/not connected)'}`);
         if (s) send(s, { type: 'call:signal', from: userId, signal: event.signal });
         if (event.signal.kind === 'ring') {
           // Fired unconditionally (not gated on relayState.isOnline), since
@@ -539,4 +572,5 @@ async function forwardToRecipients(userId: string, to: string | undefined, group
 server.listen(PORT, () => {
   // eslint-disable-next-line no-console
   console.log(`[relay] listening on :${PORT} — zero message persistence, in-memory only`);
+  logIceServerConfig();
 });
