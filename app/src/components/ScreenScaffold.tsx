@@ -56,9 +56,16 @@ export function ScreenScaffold({ children, scroll = true, padded = true, tabBar 
           which meant every screen with a text input (login, signup,
           settings, new-group, contacts search, ...) individually had the
           same "input hidden behind the open keyboard" bug the chat screens
-          had before their own fix. 'height' on Android, not 'padding' —
-          'padding' mode double-offsets there when combined with the OS's
-          own resize behavior; see the identical fix in chat/[id].tsx. */}
+          had before their own fix. 'height' on Android, not 'padding'.
+          CORRECTED: this used to additionally claim 'height' mode avoids
+          double-offsetting against the OS's own resize — it doesn't; both
+          modes compute their own compensation regardless of what the OS
+          does. What actually avoids the double-count is app.json's
+          android.softwareKeyboardLayoutMode: "pan" (windowSoftInputMode=
+          "adjustPan"), which stops Android from resizing the window on its
+          own, leaving KeyboardAvoidingView's live per-device keyboard-
+          height measurement as the only thing driving this. See the fuller
+          explanation in chat/[id].tsx. */}
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <Animated.View entering={FadeIn.duration(350)} style={{ flex: 1 }}>
           <Container

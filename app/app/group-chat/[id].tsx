@@ -74,6 +74,11 @@ export default function GroupChatScreen() {
   return (
     <View style={{ flex: 1 }}>
       <BokehBackground />
+      {/* See the matching comment in app/chat/[id].tsx — this only works
+          correctly on Android because app.json sets
+          android.softwareKeyboardLayoutMode: "pan", which stops the OS
+          from also resizing the window (that combination was double-
+          counting the keyboard height, the device-specific extra-gap bug). */}
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <Pressable onPress={() => router.push(`/group-info/${id}`)}>
           <Glass radius={0} bordered={false} style={{ paddingTop: insets.top + 8, paddingBottom: 12, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 11 }}>
