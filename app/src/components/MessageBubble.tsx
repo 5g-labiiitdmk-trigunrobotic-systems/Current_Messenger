@@ -21,9 +21,15 @@ interface MessageBubbleProps {
   senderName?: string;
   onLongPress?: () => void;
   onVote?: (optionIndex: number) => void;
+  // The replied-to message's sender label + content preview — looked up by
+  // the parent (which has the full thread) from message.replyToId, since
+  // this component only ever sees the one message. Undefined/null means
+  // either there's no reply, or the referenced message couldn't be found
+  // (e.g. deleted locally) — falls back to a generic label in that case.
+  replyPreview?: { senderLabel: string; text: string } | null;
 }
 
-export function MessageBubble({ message: m, isMe, meId, senderName, onLongPress, onVote }: MessageBubbleProps) {
+export function MessageBubble({ message: m, isMe, meId, senderName, onLongPress, onVote, replyPreview }: MessageBubbleProps) {
   const { tokens, a1, a2 } = useTheme();
   if (m.deleted) {
     return (
@@ -43,7 +49,7 @@ export function MessageBubble({ message: m, isMe, meId, senderName, onLongPress,
     <>
       {senderName && <Text style={{ fontSize: 11.5, fontFamily: fontFamilies.bold, color: a1, marginLeft: 4, marginBottom: 3 }}>{senderName}</Text>}
       <Pressable onLongPress={onLongPress} delayLongPress={280}>
-        <BubbleContent m={m} isMe={isMe} a1={a1} a2={a2} tokens={tokens} meId={meId} onVote={onVote} />
+        <BubbleContent m={m} isMe={isMe} a1={a1} a2={a2} tokens={tokens} meId={meId} onVote={onVote} replyPreview={replyPreview} />
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 4, justifyContent: isMe ? 'flex-end' : 'flex-start' }}>
           {m.edited && <Text style={{ fontSize: 10, color: tokens.text3, fontFamily: fontFamilies.medium }}>edited</Text>}
           <Text style={{ fontSize: 10.5, color: tokens.text3, fontFamily: fontFamilies.semibold }}>{timeLabel(m.sentAt)}</Text>
@@ -69,7 +75,7 @@ export function MessageBubble({ message: m, isMe, meId, senderName, onLongPress,
   );
 }
 
-function BubbleContent({ m, isMe, a1, a2, tokens, meId, onVote }: any) {
+function BubbleContent({ m, isMe, a1, a2, tokens, meId, onVote, replyPreview }: any) {
   if (m.kind === 'sticker' && m.meta?.emoji) {
     return (
       <View style={{ paddingHorizontal: 4, paddingVertical: 2 }}>
@@ -146,7 +152,16 @@ function BubbleContent({ m, isMe, a1, a2, tokens, meId, onVote }: any) {
     >
       {m.replyToId && (
         <View style={{ borderLeftWidth: 2, borderLeftColor: isMe ? 'rgba(255,255,255,0.6)' : a1, paddingLeft: 8, marginBottom: 6 }}>
-          <Text style={{ fontSize: 11.5, color: isMe ? 'rgba(255,255,255,0.75)' : tokens.text2, fontFamily: fontFamilies.medium }}>Replying to a message</Text>
+          {replyPreview ? (
+            <>
+              <Text style={{ fontSize: 11, fontFamily: fontFamilies.bold, color: isMe ? 'rgba(255,255,255,0.9)' : a1 }}>{replyPreview.senderLabel}</Text>
+              <Text numberOfLines={1} ellipsizeMode="tail" style={{ fontSize: 11.5, color: isMe ? 'rgba(255,255,255,0.75)' : tokens.text2, fontFamily: fontFamilies.medium }}>
+                {replyPreview.text}
+              </Text>
+            </>
+          ) : (
+            <Text style={{ fontSize: 11.5, color: isMe ? 'rgba(255,255,255,0.75)' : tokens.text2, fontFamily: fontFamilies.medium }}>Replying to a message</Text>
+          )}
         </View>
       )}
       <MentionText text={m.text ?? ''} baseColor={isMe ? '#fff' : tokens.text} mentionColor={isMe ? '#fff' : a1} isMe={isMe} />

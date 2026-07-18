@@ -11,6 +11,7 @@ import { BokehBackground } from '../../src/components/BokehBackground';
 import { useTheme } from '../../src/theme/useTheme';
 import { fontFamilies } from '../../src/theme/tokens';
 import { useChatStore, getThreadKey } from '../../src/state/chatStore';
+import { previewFor } from '../../src/data/conversations';
 import { useContactStore } from '../../src/state/contactStore';
 import { usePresenceStore } from '../../src/state/presenceStore';
 import { useCallStore } from '../../src/state/callStore';
@@ -91,6 +92,15 @@ export default function ChatScreen() {
   const hasScrolledOnceRef = useRef(false);
 
   const messages = searchQuery.trim() ? allMessages.filter((m) => m.text?.toLowerCase().includes(searchQuery.trim().toLowerCase())) : allMessages;
+
+  // The composer's reply banner and each sent bubble's quoted-reply strip
+  // (see MessageBubble.tsx) both need the actual replied-to message, not
+  // just its id — replyTo/m.replyToId only ever stored the id, which is why
+  // both places previously fell back to a generic "Replying to a message"
+  // label with no indication of which message. Looked up from allMessages
+  // (not the possibly search-filtered `messages`) so this still resolves
+  // correctly while a search is active.
+  const replyToMessage = replyTo ? allMessages.find((m) => m.id === replyTo) : null;
 
   // A brand-new chat screen mounts with `threads[key]` still empty (local
   // SQLite hydration hasn't resolved yet — see chatStore.ts's
@@ -340,11 +350,27 @@ export default function ChatScreen() {
   return (
     <View style={{ flex: 1 }}>
       <BokehBackground />
-      {/* behavior={undefined} on Android meant this component did nothing
-          at all there — the message input sat behind the keyboard with no
-          avoidance whatsoever. 'height' shrinks the container instead of
-          padding it, which is the correct mode for Android (padding mode
-          double-offsets when combined with the OS's own resize behavior). */}
+      {/* CORRECTED: the previous reasoning here ("'height' mode avoids
+          double-offsetting against the OS's own resize") was wrong — both
+          'height' and 'padding' modes compute their own keyboard-height
+          compensation independent of what the OS does. Android's default
+          windowSoftInputMode is "adjustResize" (Expo's own default,
+          confirmed via a real prebuild manifest inspection — not something
+          this app ever set explicitly), which ALSO resizes the window when
+          the keyboard opens. Stacking KeyboardAvoidingView's compensation
+          on top of that double-counts the keyboard height — and since the
+          exact height a given OEM/keyboard app reports varies, the size of
+          the resulting gap varied by device, which is exactly the bug this
+          fixes. app.json now sets android.softwareKeyboardLayoutMode:
+          "pan" (windowSoftInputMode="adjustPan" — verified via prebuild),
+          which stops the OS from resizing the window at all, so
+          KeyboardAvoidingView's own live-measured keyboard height (from
+          the native keyboardDidShow event, genuinely per-device, not a
+          fixed constant) becomes the only thing moving this layout.
+          behavior={undefined} was tried before (see git history) and left
+          the input with zero avoidance — that was without any JS-side
+          compensation at all, a different combination from this fix, which
+          keeps 'height' mode active. */}
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <Glass radius={0} bordered={false} style={{ paddingTop: insets.top + 6, paddingBottom: 12, paddingHorizontal: 14 }}>
           <Text style={{ fontSize: 10, fontFamily: fontFamilies.heavy, color: tokens.text3, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 4 }}>Current</Text>
@@ -474,15 +500,19 @@ export default function ChatScreen() {
               </Glass>
             </View>
           }
-          renderItem={({ item }) => (
-            <MessageBubble
-              message={item}
-              isMe={item.from === me}
-              meId={me}
-              onLongPress={() => onLongPressMessage(item.id, item.from === me, item.text)}
-              onVote={(optionIndex) => votePoll(id ?? '', false, item.id, optionIndex)}
-            />
-          )}
+          renderItem={({ item }) => {
+            const repliedTo = item.replyToId ? allMessages.find((m) => m.id === item.replyToId) : null;
+            return (
+              <MessageBubble
+                message={item}
+                isMe={item.from === me}
+                meId={me}
+                onLongPress={() => onLongPressMessage(item.id, item.from === me, item.text)}
+                onVote={(optionIndex) => votePoll(id ?? '', false, item.id, optionIndex)}
+                replyPreview={repliedTo ? { senderLabel: repliedTo.from === me ? 'You' : contact.display_name || contact.username, text: previewFor(repliedTo) } : null}
+              />
+            );
+          }}
           ListFooterComponent={
             isTyping ? (
               <View style={{ alignSelf: 'flex-start', marginTop: 4 }}>
@@ -519,7 +549,18 @@ export default function ChatScreen() {
 
         {(replyTo || editingId) && (
           <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 6, gap: 8 }}>
-            <Text style={{ fontSize: 12, color: tokens.text2, fontFamily: fontFamilies.medium, flex: 1 }}>{editingId ? 'Editing message' : 'Replying to a message'}</Text>
+            {replyTo && replyToMessage ? (
+              <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', gap: 8, borderLeftWidth: 3, borderLeftColor: a1, paddingLeft: 8 }}>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={{ fontSize: 11.5, fontFamily: fontFamilies.bold, color: a1 }}>{replyToMessage.from === me ? 'You' : contact.display_name || contact.username}</Text>
+                  <Text numberOfLines={1} ellipsizeMode="tail" style={{ fontSize: 12, color: tokens.text2, fontFamily: fontFamilies.medium }}>
+                    {previewFor(replyToMessage)}
+                  </Text>
+                </View>
+              </View>
+            ) : (
+              <Text style={{ fontSize: 12, color: tokens.text2, fontFamily: fontFamilies.medium, flex: 1 }}>{editingId ? 'Editing message' : 'Replying to a message'}</Text>
+            )}
             <Pressable
               onPress={() => {
                 setReplyTo(null);

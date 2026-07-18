@@ -82,11 +82,15 @@ export function useConversationRows(): ConversationRow[] {
   }, [approved, groups, threads, me, presence]);
 }
 
-function previewFor(m: { kind: string; text?: string }) {
+// Exported for reuse by the reply-quote preview (composer banner + sent
+// message bubbles in chat/[id].tsx and MessageBubble.tsx) — same "what is
+// this message, in one line" job as the chat-list preview here.
+export function previewFor(m: { kind: string; text?: string; meta?: Record<string, unknown> }) {
   if (m.kind === 'voice') return '🎤 Voice message';
   if (m.kind === 'media') return '📷 Photo';
   if (m.kind === 'location') return '📍 Location shared';
   if (m.kind === 'sticker') return 'Sent a sticker';
+  if (m.kind === 'poll') return `📊 Poll${m.meta?.question ? `: ${m.meta.question}` : ''}`;
   return m.text ?? '…';
 }
 
