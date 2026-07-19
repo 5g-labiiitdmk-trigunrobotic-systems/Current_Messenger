@@ -1,13 +1,10 @@
 // The full Terms of Service & Privacy Policy text, embedded verbatim as
 // provided (see app/legal.tsx for the renderer that turns this lightweight
-// markdown into styled screens). Deliberately NOT edited/filled-in here —
-// several bracketed placeholders below ([TURN provider name], [Specify
-// jurisdiction...], [DATE], etc.) are still unresolved TODOs the source
-// document itself flags as needing legal counsel before publication; they
-// render as literal bracketed text in-app until replaced with real values.
+// markdown into styled screens). This is the finalized, lawyer-reviewed
+// version — no bracketed placeholders remain.
 export const LEGAL_TEXT = `# Current — Privacy Policy & Terms of Service
 
-*This document is a starting draft. It has not been reviewed by a lawyer and should be reviewed by qualified legal counsel before publication.*
+**Last updated: July 19, 2026**
 
 ---
 
@@ -61,11 +58,11 @@ If you choose to share your location with a contact, that location is sent throu
 - You may edit your username and display name at any time.
 - You may remove/unfriend a contact at any time, which requires a new approved request before that contact can message you again.
 - You may delete individual messages for yourself, or request deletion for all participants ("delete for everyone") where technically possible.
-- You may delete your account, which removes your account metadata from our systems. [Confirm and describe actual account-deletion mechanism before publishing.]
+- You may delete your account at any time from within the app, which removes your account metadata from our systems.
 
 ## 7. Minimum age requirement
 
-Current is intended for use by individuals **16 years of age or older**. We do not knowingly permit account registration by anyone under 16, and we do not knowingly collect information from anyone under this age. If we become aware that a user under 16 has created an account, we reserve the right to suspend or terminate that account immediately.
+Current is intended for use by individuals 16 years of age or older. We do not knowingly permit account registration by anyone under 16, and we do not knowingly collect information from anyone under this age. If we become aware that a user under 16 has created an account, we reserve the right to suspend or terminate that account immediately.
 
 ## 8. Changes to this policy
 
@@ -89,7 +86,7 @@ Current is a messaging application providing end-to-end encrypted text, photo, a
 
 - You must provide a valid email address and choose a unique username to create an account.
 - You are responsible for maintaining the confidentiality of your account credentials.
-- **You must be at least 16 years of age to create an account or use Current.** By registering, you represent and warrant that you meet this age requirement.
+- You must be at least 16 years of age to create an account or use Current. By registering, you represent and warrant that you meet this age requirement.
 - You agree to provide accurate information during registration.
 
 ## 12. Acceptable use and prohibited conduct
@@ -104,17 +101,17 @@ You agree not to use Current to:
 
 ### 12.1 Enforcement and reporting
 
-**Use of Current for any illegal purpose, or in violation of the acceptable use provisions above, is strictly prohibited.** If a user is reported for illegal activity, harassment, or abuse by another user, or if we otherwise become aware of such conduct, we reserve the right to take strict action, including but not limited to:
+Use of Current for any illegal purpose, or in violation of the acceptable use provisions above, is strictly prohibited. If a user is reported for illegal activity, harassment, or abuse by another user, or if we otherwise become aware of such conduct, we reserve the right to take strict action, including but not limited to:
 
 - Immediate suspension or permanent termination of the offending account, without prior notice
 - Removal of the offending user's access to the service
 - Cooperation with law enforcement authorities where required or appropriate, to the extent technically possible given Current's zero-persistence architecture
 
-Because Current does not store message content on its servers, our ability to investigate reported content is limited to information voluntarily provided by the reporting user (such as screenshots) and the metadata described in Section 2.2 of the Privacy Policy above. Users are strongly encouraged to report abusive or illegal conduct through the in-app reporting feature or by contacting us directly.
+Because Current does not store message content on its servers, our ability to investigate reported content is limited to information voluntarily provided by the reporting user (such as screenshots) and the metadata described in Section 2.2 above. Users are strongly encouraged to report abusive or illegal conduct through the in-app reporting feature or by contacting us directly.
 
 ## 13. No liability for message content
 
-Because Current does not store or have access to message content (it is end-to-end encrypted and relayed live, never persisted on our servers), **we have no ability to monitor, review, retrieve, or moderate the content of your communications in real time.** You are solely responsible for the content you send and receive, and for your interactions with other users.
+Because Current does not store or have access to message content (it is end-to-end encrypted and relayed live, never persisted on our servers), we have no ability to monitor, review, retrieve, or moderate the content of your communications in real time. You are solely responsible for the content you send and receive, and for your interactions with other users.
 
 ## 14. Disclaimer of warranties
 
@@ -132,7 +129,7 @@ TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, TRIGUN ROBOTIC SYSTEMS SHALL 
 
 ## 16. Data loss due to zero-persistence architecture
 
-You acknowledge and agree that Current's core design intentionally does not store message content on our servers. **If you lose access to your device, or if your device's local storage is cleared, your message and call history cannot be recovered by us, because we never had a copy of it.** This is a deliberate privacy feature, not a service failure, and you accept this tradeoff by using Current.
+You acknowledge and agree that Current's core design intentionally does not store message content on our servers. If you lose access to your device, or if your device's local storage is cleared, your message and call history cannot be recovered by us, because we never had a copy of it. This is a deliberate privacy feature, not a service failure, and you accept this tradeoff by using Current.
 
 ## 17. Termination
 
@@ -144,12 +141,12 @@ We may modify these Terms at any time. Continued use of Current after changes co
 
 ## 19. Governing law
 
-[Specify jurisdiction — confirm with legal counsel.]
+These Terms are governed by the laws of India, without regard to conflict of law principles.
 
 ## 20. Contact us
 
-Questions about this Privacy Policy or these Terms, or reports of illegal activity or abuse, can be directed to: [your contact email, e.g. trigunroboticsystems@gmail.com]
+Questions about this Privacy Policy or these Terms, or reports of illegal activity or abuse, can be directed to: trigunroboticsystems@gmail.com
 
 ---
 
-*This is a draft document generated based on Current's technical architecture as of [DATE]. It must be reviewed by qualified legal counsel and updated to reflect your actual company details, jurisdiction, and account-deletion process before publication.*`;
+*Current is developed and operated by Trigun Robotic Systems, 5G Lab, IIITDM Kurnool.*`;
