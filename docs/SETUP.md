@@ -89,19 +89,17 @@ broke push notifications as a side effect of an unrelated cleanup — fixed
 by restoring both the file and the `android.googleServicesFile` field in
 `app.json`.
 
-**Currently stale, blocks Android builds.** `android.package` in
-`app.json` was changed from `com.current.app` to
-`com.trigunrobotics.current` (the old name was already claimed by
-another app on the Play Store), but `app/google-services.json` still has
-`package_name: "com.current.app"` baked in from the old Firebase
-Android app registration. The Google Services Gradle plugin checks that
-match at build time — until this file is replaced with one generated
-from a Firebase Android app registered under
-`com.trigunrobotics.current`, any Android build (`expo prebuild`, EAS
-dev/preview/production) will fail with "No matching client found for
-package name". Drop the new file in at the same path,
-`app/google-services.json`, replacing this one — no other config change
-needed, `android.googleServicesFile` already points there.
+**Resolved.** `android.package` in `app.json` was changed from
+`com.current.app` to `com.trigunrobotics.current` (the old name was
+already claimed by another app on the Play Store). `app/google-services.json`
+now has a Firebase Android app registered under
+`com.trigunrobotics.current` (it's a second `client[]` entry alongside
+the original `com.current.app` one — Firebase allows multiple Android
+apps per project in one file, and the Google Services Gradle plugin
+picks whichever entry's `package_name` matches `android.package` at
+build time, so having both is harmless). No other config change was
+needed — `android.googleServicesFile` already pointed at this same
+path.
 
 If phone verification comes back later (e.g. once Blaze is
 acceptable), the old Firebase project (`current-7798d` on
@@ -262,10 +260,9 @@ dev client picks up.
   `bundleIdentifier` is a separate namespace (App Store, not Play Store)
   and was intentionally left as `com.current.app` — nothing showed that
   one was taken, and the two platforms don't share a namespace, so there
-  was no reason to change it too. `google-services.json` still has the
-  old package name baked in and needs to be replaced with a fresh one
-  from the Firebase console, registered under the new package — see the
-  FCM section above for where that file lives.
+  was no reason to change it too. `google-services.json` now has a
+  Firebase Android app registered under `com.trigunrobotics.current` —
+  see the FCM section above for details.
 - **Background calling (CallKit/ConnectionService)** — calling is real
   WebRTC audio/video (see `src/state/callStore.ts`), but there's no native
   VoIP-push/CallKit integration, so a call backgrounded for long enough may
