@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, TextInput, Pressable, FlatList, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, TextInput, Pressable, FlatList, KeyboardAvoidingView, Keyboard, Platform } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
@@ -122,6 +122,31 @@ export default function ChatScreen() {
     const last = allMessages[allMessages.length - 1];
     if (last && last.from !== me && last.status !== 'read') markRead(id ?? '', false, last.id);
   }, [allMessages.length]);
+
+  // The actual root cause of the keyboard-open gap bug (found this round
+  // after behavior='height' alone turned out NOT to fix it either, despite
+  // being the config previously believed to self-correct): FlatList's
+  // onContentSizeChange above only fires when its CONTENT height changes
+  // (a message added/removed) — it never fires just because the list's own
+  // VIEWPORT got shorter, which is what happens every time the keyboard
+  // opens (via KeyboardAvoidingView's height-shrink, native adjustPan, or
+  // both). A FlatList that's scrolled to its old bottom stays at that same
+  // offset when its viewport shrinks, which is no longer the true bottom —
+  // the true bottom is now further down (viewport got shorter, so the same
+  // content overflows more), leaving a growing gap of nothing but
+  // background between the last rendered message and the composer. This
+  // matches exactly what was reported: messages appearing to have "gone
+  // somewhere" rather than actually being missing — they're still there,
+  // just scrolled above the visible viewport. Re-syncing to the real
+  // bottom explicitly, the moment the OS confirms the keyboard is visible,
+  // fixes this regardless of whatever order the container-resize and
+  // native-pan animations happen to settle in.
+  useEffect(() => {
+    const sub = Keyboard.addListener('keyboardDidShow', () => {
+      listRef.current?.scrollToEnd({ animated: true });
+    });
+    return () => sub.remove();
+  }, []);
 
   const onChangeDraft = (t: string) => {
     setDraft(t);

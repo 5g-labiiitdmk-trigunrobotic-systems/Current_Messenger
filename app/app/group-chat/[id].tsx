@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, TextInput, Pressable, FlatList, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, TextInput, Pressable, FlatList, KeyboardAvoidingView, Keyboard, Platform } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -38,6 +38,21 @@ export default function GroupChatScreen() {
     if (last && last.from !== me && last.status !== 'read') markRead(id ?? '', true, last.id);
     listRef.current?.scrollToEnd({ animated: true });
   }, [messages.length]);
+
+  // See the matching comment in app/chat/[id].tsx: the keyboard opening
+  // shrinks this FlatList's own viewport (via KeyboardAvoidingView and/or
+  // the native adjustPan window pan), but nothing about that shrink moves
+  // the list's scroll offset — only an actual change in message count does
+  // (the effect above). So a list scrolled to its old bottom is left short
+  // of the new, shorter viewport's true bottom, showing a blank gap where
+  // the last message used to visibly reach the composer. Re-syncing
+  // explicitly on keyboardDidShow fixes it regardless of animation timing.
+  useEffect(() => {
+    const sub = Keyboard.addListener('keyboardDidShow', () => {
+      listRef.current?.scrollToEnd({ animated: true });
+    });
+    return () => sub.remove();
+  }, []);
 
   const nameFor = (uid: string) => {
     if (uid === me) return 'You';
