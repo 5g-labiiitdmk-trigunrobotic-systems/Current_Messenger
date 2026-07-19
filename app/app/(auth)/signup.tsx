@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text } from 'react-native';
+import { View, Text, Pressable } from 'react-native';
 import { router } from 'expo-router';
+import Svg, { Path } from 'react-native-svg';
 import { ScreenScaffold } from '../../src/components/ScreenScaffold';
 import { AuthHeader } from '../../src/components/AuthHeader';
 import { GlassField } from '../../src/components/GlassField';
@@ -18,7 +19,7 @@ const CHECK_DEBOUNCE_MS = 450;
 type AvailabilityState = 'idle' | 'checking' | 'available' | 'taken' | 'invalid';
 
 export default function SignupScreen() {
-  const { tokens } = useTheme();
+  const { tokens, a1 } = useTheme();
   const set = useSignupStore((s) => s.set);
   const [username, setUsername] = useState('');
   const [availability, setAvailability] = useState<AvailabilityState>('idle');
@@ -26,6 +27,7 @@ export default function SignupScreen() {
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [loading, setLoading] = useState(false);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
 
   // Live debounced availability check as the user types — reuses the exact
   // same format/uniqueness rules as the post-signup username-change feature
@@ -71,6 +73,10 @@ export default function SignupScreen() {
       appAlert("Passwords don't match", 'Double check both password fields.');
       return;
     }
+    if (!agreedToTerms) {
+      appAlert('Agreement required', 'Confirm you are 16 or older and agree to the Terms of Service and Privacy Policy to continue.');
+      return;
+    }
 
     setLoading(true);
     if (await isUsernameTaken(uname)) {
@@ -112,7 +118,7 @@ export default function SignupScreen() {
     invalid: { text: usernameFormatError(username) ?? '', color: '#ff5a6e' },
   };
   const feedback = availabilityLabel[availability];
-  const canSubmit = !loading && availability === 'available' && password.length >= 8 && password === confirm && email.includes('@');
+  const canSubmit = !loading && availability === 'available' && password.length >= 8 && password === confirm && email.includes('@') && agreedToTerms;
 
   return (
     <ScreenScaffold>
@@ -136,7 +142,35 @@ export default function SignupScreen() {
         <GlassField label="Confirm password" placeholder="Re-enter password" secureTextEntry value={confirm} onChangeText={setConfirm} />
       </View>
 
-      <PrimaryButton title="Continue — verify email" onPress={onSubmit} loading={loading} disabled={!canSubmit} style={{ marginTop: 10 }} />
+      <Pressable onPress={() => setAgreedToTerms((v) => !v)} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginTop: 20 }}>
+        <View
+          style={{
+            width: 22,
+            height: 22,
+            borderRadius: 6,
+            marginTop: 1,
+            borderWidth: 1.5,
+            borderColor: agreedToTerms ? a1 : tokens.glassBorder,
+            backgroundColor: agreedToTerms ? a1 : 'transparent',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          {agreedToTerms && (
+            <Svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+              <Path d="M20 6L9 17l-5-5" />
+            </Svg>
+          )}
+        </View>
+        <Text style={{ flex: 1, fontSize: 12.5, lineHeight: 18, color: tokens.text2, fontFamily: fontFamilies.medium }}>
+          I confirm I am 16 years of age or older, and I agree to the{' '}
+          <Text style={{ color: a1, fontFamily: fontFamilies.bold }} onPress={() => router.push('/legal')}>
+            Terms of Service and Privacy Policy
+          </Text>
+        </Text>
+      </Pressable>
+
+      <PrimaryButton title="Continue — verify email" onPress={onSubmit} loading={loading} disabled={!canSubmit} style={{ marginTop: 16 }} />
 
       <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 24, gap: 4 }}>
         <Text style={{ fontSize: 13.5, color: tokens.text2, fontFamily: fontFamilies.regular }}>Already have an account?</Text>

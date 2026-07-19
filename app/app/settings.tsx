@@ -144,6 +144,17 @@ export default function SettingsScreen() {
         ))}
       </Glass>
 
+      <SectionLabel>Legal</SectionLabel>
+      <Pressable onPress={() => router.push('/legal')}>
+        <Glass radius={22} style={{ paddingHorizontal: 18 }}>
+          <Row icon="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Z" label="Terms of Service & Privacy Policy" last>
+            <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={tokens.text3} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+              <Path d="M9 18l6-6-6-6" />
+            </Svg>
+          </Row>
+        </Glass>
+      </Pressable>
+
       <Pressable onPress={onLogOut} style={{ marginTop: 22 }}>
         <View style={{ height: 52, borderRadius: 18, backgroundColor: 'rgba(255,90,110,0.12)', borderWidth: 1, borderColor: 'rgba(255,90,110,0.3)', alignItems: 'center', justifyContent: 'center' }}>
           <Text style={{ color: '#ff5a6e', fontFamily: fontFamilies.bold, fontSize: 14.5 }}>Log out</Text>

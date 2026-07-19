@@ -129,6 +129,7 @@ export default function RootLayout() {
               <Stack.Screen name="privacy" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="help" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="legal" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="qr" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="lab/index" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="lab/[key]" options={{ animation: 'slide_from_right' }} />
