@@ -151,6 +151,23 @@ section 4) — Expo Go does not support remote push on Android as of recent
 SDKs. If you're testing via Expo Go, that alone would explain zero
 delivery regardless of the FCM credential above.
 
+**Changing `android.package` breaks push again, separately from the
+`google-services.json` swap.** The FCM V1 service account key itself is
+scoped to the *Firebase project* (`current-7798d`), not to any one
+Android app inside it, so the same key file is technically still valid
+after adding a new package — but EAS's own credential storage is keyed
+by (project, `applicationId`), the same scoping that applies to the
+signing keystore (see the package-rename commit's message). A package
+name EAS has never built before has an empty push-credential slot,
+even though the underlying Firebase key would work fine if attached.
+Re-upload the *same* service account JSON (re-download it from Firebase
+console → `current-7798d` → Project settings → Service accounts if it
+isn't saved anywhere, generating a new one is fine too, project-scoped
+keys aren't singleton) via `eas credentials` → Android → select the
+*new* package's application entry → Push Notifications → Google
+Service Account Key. This is an EAS-account action, not a code or repo
+change.
+
 `src/lib/push.ts` now logs the full token-registration lifecycle
 (`[push] obtained Expo push token: ...`, `[push] push token stored for
 user ...`, or the specific failure) — check Metro/logcat output on the
