@@ -74,12 +74,15 @@ export default function GroupChatScreen() {
   return (
     <View style={{ flex: 1 }}>
       <BokehBackground />
-      {/* See the matching comment in app/chat/[id].tsx — this only works
-          correctly on Android because app.json sets
-          android.softwareKeyboardLayoutMode: "pan", which stops the OS
-          from also resizing the window (that combination was double-
-          counting the keyboard height, the device-specific extra-gap bug). */}
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      {/* See the matching comment in app/chat/[id].tsx — Android relies on
+          app.json's android.softwareKeyboardLayoutMode: "pan" alone now
+          (behavior={undefined} here), not KeyboardAvoidingView's own JS
+          compensation, which was firing late (Android only gets the
+          post-hoc keyboardDidShow, unlike iOS's pre-animation
+          keyboardWillShow) and visibly re-animating on top of a window
+          the OS had already finished panning — a brief broken-looking
+          flash before it self-corrected. */}
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <Pressable onPress={() => router.push(`/group-info/${id}`)}>
           <Glass radius={0} bordered={false} style={{ paddingTop: insets.top + 8, paddingBottom: 12, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 11 }}>
             <Pressable onPress={() => router.back()} style={{ width: 38, height: 38, alignItems: 'center', justifyContent: 'center' }}>

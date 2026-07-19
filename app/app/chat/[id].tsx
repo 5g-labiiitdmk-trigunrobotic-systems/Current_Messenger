@@ -350,28 +350,38 @@ export default function ChatScreen() {
   return (
     <View style={{ flex: 1 }}>
       <BokehBackground />
-      {/* CORRECTED: the previous reasoning here ("'height' mode avoids
-          double-offsetting against the OS's own resize") was wrong — both
-          'height' and 'padding' modes compute their own keyboard-height
-          compensation independent of what the OS does. Android's default
-          windowSoftInputMode is "adjustResize" (Expo's own default,
-          confirmed via a real prebuild manifest inspection — not something
-          this app ever set explicitly), which ALSO resizes the window when
-          the keyboard opens. Stacking KeyboardAvoidingView's compensation
-          on top of that double-counts the keyboard height — and since the
-          exact height a given OEM/keyboard app reports varies, the size of
-          the resulting gap varied by device, which is exactly the bug this
-          fixes. app.json now sets android.softwareKeyboardLayoutMode:
-          "pan" (windowSoftInputMode="adjustPan" — verified via prebuild),
-          which stops the OS from resizing the window at all, so
-          KeyboardAvoidingView's own live-measured keyboard height (from
-          the native keyboardDidShow event, genuinely per-device, not a
-          fixed constant) becomes the only thing moving this layout.
-          behavior={undefined} was tried before (see git history) and left
-          the input with zero avoidance — that was without any JS-side
-          compensation at all, a different combination from this fix, which
-          keeps 'height' mode active. */}
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      {/* CORRECTED AGAIN: switching to android.softwareKeyboardLayoutMode:
+          "pan" (windowSoftInputMode="adjustPan") fixed the persistent
+          device-specific gap, but introduced a new, different problem —
+          a brief visible glitch (overlapping content near the top,
+          then a gap) every time the keyboard opens, before it
+          self-corrects. Root cause, confirmed by reading
+          react-native's actual KeyboardAvoidingView source (not
+          assumed): on Android it only listens for keyboardDidShow/
+          keyboardDidHide — the POST-HOC events. Android has no reliable
+          pre-animation callback the way iOS's keyboardWillShow does, so
+          by the time that JS event fires, the OS's own adjustPan
+          animation has already started (often already finished)
+          natively, independent of the JS thread. KeyboardAvoidingView
+          then applies its OWN separate, LATE, animated height change on
+          top of a window the OS already finished moving — two
+          uncoordinated animations converging on the same final layout
+          from different starting points and times is exactly what a
+          "flash of a broken intermediate state that self-corrects"
+          looks like.
+          Fix: on Android, stop running KeyboardAvoidingView's JS-driven
+          compensation on this screen at all — behavior={undefined}
+          renders it as an inert plain View (confirmed by reading its
+          render() method: the default case never applies any
+          height/bottom/padding style, regardless of internal state), so
+          adjustPan alone — a first-class OS mechanism with no JS
+          round-trip delay — handles positioning. This is NOT the same
+          "behavior={undefined} left the input with zero avoidance"
+          finding from further back in git history: that was observed
+          under the OLD default, windowSoftInputMode="adjustResize",
+          which behaves completely differently from adjustPan and was
+          never re-tested after this app switched to "pan". */}
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <Glass radius={0} bordered={false} style={{ paddingTop: insets.top + 6, paddingBottom: 12, paddingHorizontal: 14 }}>
           <Text style={{ fontSize: 10, fontFamily: fontFamilies.heavy, color: tokens.text3, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 4 }}>Current</Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 11 }}>
