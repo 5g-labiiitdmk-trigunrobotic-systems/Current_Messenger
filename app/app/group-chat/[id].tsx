@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, TextInput, Pressable, FlatList, KeyboardAvoidingView, Keyboard, Platform } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { View, Text, TextInput, Pressable, FlatList, KeyboardAvoidingView, Platform } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -30,29 +30,21 @@ export default function GroupChatScreen() {
   const listRef = useRef<FlatList>(null);
   const typingTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // FlatList below is rendered `inverted` — see the detailed comment in
+  // app/chat/[id].tsx for the full four-round history of the keyboard-open
+  // gap bug this solves structurally instead of via scroll-timing patches,
+  // and for why renderItem/ListFooterComponent below need no manual
+  // counter-transform (verified live: RN's `inverted` already renders
+  // content right-side up on its own).
+  const invertedMessages = useMemo(() => [...messages].reverse(), [messages]);
+
   useEffect(() => {
     // Was entirely missing here — unlike chat/[id].tsx's DM screen, this
     // screen never called markRead() at all, so a group's unread count
     // never cleared no matter how long it was open.
     const last = messages[messages.length - 1];
     if (last && last.from !== me && last.status !== 'read') markRead(id ?? '', true, last.id);
-    listRef.current?.scrollToEnd({ animated: true });
   }, [messages.length]);
-
-  // See the matching comment in app/chat/[id].tsx: the keyboard opening
-  // shrinks this FlatList's own viewport (via KeyboardAvoidingView and/or
-  // the native adjustPan window pan), but nothing about that shrink moves
-  // the list's scroll offset — only an actual change in message count does
-  // (the effect above). So a list scrolled to its old bottom is left short
-  // of the new, shorter viewport's true bottom, showing a blank gap where
-  // the last message used to visibly reach the composer. Re-syncing
-  // explicitly on keyboardDidShow fixes it regardless of animation timing.
-  useEffect(() => {
-    const sub = Keyboard.addListener('keyboardDidShow', () => {
-      listRef.current?.scrollToEnd({ animated: true });
-    });
-    return () => sub.remove();
-  }, []);
 
   const nameFor = (uid: string) => {
     if (uid === me) return 'You';
@@ -89,19 +81,14 @@ export default function GroupChatScreen() {
   return (
     <View style={{ flex: 1 }}>
       <BokehBackground />
-      {/* REVERTED — see the matching comment in app/chat/[id].tsx.
-          behavior={undefined} was proven wrong by real-device testing: it
-          left a large, permanent gap between the last message and the
-          composer, because android.softwareKeyboardLayoutMode: "pan" only
-          pans the window (doesn't resize/reflow content), so nothing
-          shrank this screen's FlatList to keep it glued to the composer
-          once KeyboardAvoidingView's own 'height' compensation was
-          removed. Back to behavior='height' on Android — the last
-          configuration confirmed working (self-corrects, never gets
-          stuck) on real devices. The brief self-correcting flash this was
-          meant to fix is back too; see the chat/[id].tsx comment for why
-          that's being left alone this round rather than risking a third
-          unverified guess. */}
+      {/* See the matching comment in app/chat/[id].tsx for the full
+          history. Short version: the FlatList below is now `inverted`,
+          which structurally eliminates the keyboard-open list-gap bug
+          (the list's resting position is always the true bottom, so
+          there's no scroll-to-bottom timing to get wrong regardless of
+          how/when the keyboard resizes the viewport). behavior='height'
+          here is now only responsible for moving the composer above the
+          keyboard, a separate concern. */}
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <Pressable onPress={() => router.push(`/group-info/${id}`)}>
           <Glass radius={0} bordered={false} style={{ paddingTop: insets.top + 8, paddingBottom: 12, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 11 }}>
@@ -129,10 +116,18 @@ export default function GroupChatScreen() {
 
         <FlatList
           ref={listRef}
-          data={messages}
+          inverted
+          data={invertedMessages}
           keyExtractor={(m) => m.id}
           contentContainerStyle={{ padding: 16, gap: 11 }}
-          ListHeaderComponent={
+          // Was ListHeaderComponent (visual top) before inverting — with
+          // `inverted`, RN renders header/footer cells at opposite visual
+          // ends from normal, so this has to become ListFooterComponent to
+          // stay visually at the top of the conversation. NOT wrapped in
+          // any counter-transform — see the invertedMessages comment above
+          // and the matching one in app/chat/[id].tsx: RN's `inverted`
+          // already renders content right-side up on its own.
+          ListFooterComponent={
             <View style={{ alignSelf: 'center', marginBottom: 6 }}>
               <Glass radius={14} style={{ paddingVertical: 7, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 7 }}>
                 <Svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={a1} strokeWidth={2.2}>
@@ -144,11 +139,15 @@ export default function GroupChatScreen() {
             </View>
           }
           renderItem={({ item, index }) => {
-            const prev = messages[index - 1];
-            const showName = item.from !== me && (!prev || prev.from !== item.from);
-            return (
-              <MessageBubble message={item} isMe={item.from === me} senderName={showName ? nameFor(item.from) : undefined} onLongPress={() => react(id ?? '', true, item.id, '👍')} />
-            );
+            // `invertedMessages` is newest-first (index 0 = newest), so the
+            // chronologically-PRECEDING message (used to decide whether to
+            // show the sender's name above this bubble) is at index + 1,
+            // not index - 1 as it would be in the original chronological
+            // order. Same grouping rule as before, just walking the
+            // reversed array in the opposite direction.
+            const chronoPrev = invertedMessages[index + 1];
+            const showName = item.from !== me && (!chronoPrev || chronoPrev.from !== item.from);
+            return <MessageBubble message={item} isMe={item.from === me} senderName={showName ? nameFor(item.from) : undefined} onLongPress={() => react(id ?? '', true, item.id, '👍')} />;
           }}
         />
 

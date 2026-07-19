@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, TextInput, Pressable, FlatList, KeyboardAvoidingView, Keyboard, Platform } from 'react-native';
+import { View, Text, TextInput, Pressable, FlatList, KeyboardAvoidingView, Platform } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
@@ -87,11 +87,19 @@ export default function ChatScreen() {
   const listRef = useRef<FlatList>(null);
   const typingTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
-  // Whether the initial open-to-bottom scroll has happened yet for this
-  // chat — see onContentSizeChange below for why this exists.
-  const hasScrolledOnceRef = useRef(false);
 
   const messages = searchQuery.trim() ? allMessages.filter((m) => m.text?.toLowerCase().includes(searchQuery.trim().toLowerCase())) : allMessages;
+
+  // FlatList is rendered `inverted` (see below) — newest message first —
+  // specifically so the list's own resting scroll position structurally IS
+  // the visual bottom, with no "scroll to bottom" call needed or to get the
+  // timing of wrong. See the render() comment for the full history of why.
+  // renderItem/header/footer do NOT need any counter-transform — verified
+  // live via Playwright that RN's `inverted` prop already renders content
+  // right-side up on its own (it flips both the ScrollView and each cell,
+  // which cancel out); adding a manual counter-transform actively broke
+  // this (net odd number of flips = upside-down content).
+  const invertedMessages = useMemo(() => [...messages].reverse(), [messages]);
 
   // The composer's reply banner and each sent bubble's quoted-reply strip
   // (see MessageBubble.tsx) both need the actual replied-to message, not
@@ -102,51 +110,20 @@ export default function ChatScreen() {
   // correctly while a search is active.
   const replyToMessage = replyTo ? allMessages.find((m) => m.id === replyTo) : null;
 
-  // A brand-new chat screen mounts with `threads[key]` still empty (local
-  // SQLite hydration hasn't resolved yet — see chatStore.ts's
-  // hydrateFromLocal), then jumps from 0 to potentially hundreds of
-  // messages in a single update once it does. scrollToEnd() called
-  // synchronously in response to that (the old code below, keyed only on
-  // allMessages.length) races ahead of FlatList's native layout pass for
-  // that newly-rendered content — at the moment it runs, the list hasn't
-  // actually measured the new content's real height yet, so it scrolls to
-  // whatever (much smaller, stale) height was last measured. That's why
-  // this opened on the oldest message instead of the latest: the "scroll
-  // to end" call was firing against pre-hydration content size, not
-  // failing to fire at all.
-  useEffect(() => {
-    hasScrolledOnceRef.current = false;
-  }, [id]);
+  // A brand-new chat screen used to mount with `threads[key]` still empty
+  // (local SQLite hydration hasn't resolved yet — see chatStore.ts's
+  // hydrateFromLocal), then jump from 0 to potentially hundreds of
+  // messages in one update, which raced a manual scrollToEnd() against
+  // FlatList's layout pass and opened on the oldest message instead of the
+  // newest. The inverted list below doesn't have this problem at all —
+  // its resting position (offset 0) already IS the newest message,
+  // whether the list has 0 messages or hydrates to hundreds in one frame,
+  // so there's no scroll call to race against layout in the first place.
 
   useEffect(() => {
     const last = allMessages[allMessages.length - 1];
     if (last && last.from !== me && last.status !== 'read') markRead(id ?? '', false, last.id);
   }, [allMessages.length]);
-
-  // The actual root cause of the keyboard-open gap bug (found this round
-  // after behavior='height' alone turned out NOT to fix it either, despite
-  // being the config previously believed to self-correct): FlatList's
-  // onContentSizeChange above only fires when its CONTENT height changes
-  // (a message added/removed) — it never fires just because the list's own
-  // VIEWPORT got shorter, which is what happens every time the keyboard
-  // opens (via KeyboardAvoidingView's height-shrink, native adjustPan, or
-  // both). A FlatList that's scrolled to its old bottom stays at that same
-  // offset when its viewport shrinks, which is no longer the true bottom —
-  // the true bottom is now further down (viewport got shorter, so the same
-  // content overflows more), leaving a growing gap of nothing but
-  // background between the last rendered message and the composer. This
-  // matches exactly what was reported: messages appearing to have "gone
-  // somewhere" rather than actually being missing — they're still there,
-  // just scrolled above the visible viewport. Re-syncing to the real
-  // bottom explicitly, the moment the OS confirms the keyboard is visible,
-  // fixes this regardless of whatever order the container-resize and
-  // native-pan animations happen to settle in.
-  useEffect(() => {
-    const sub = Keyboard.addListener('keyboardDidShow', () => {
-      listRef.current?.scrollToEnd({ animated: true });
-    });
-    return () => sub.remove();
-  }, []);
 
   const onChangeDraft = (t: string) => {
     setDraft(t);
@@ -375,44 +352,35 @@ export default function ChatScreen() {
   return (
     <View style={{ flex: 1 }}>
       <BokehBackground />
-      {/* REVERTED — behavior={undefined} (previous round) was proven wrong
-          by real-device testing: it didn't just leave a cosmetic flash, it
-          left a large, PERMANENT gap between the last message and the
-          input on every device, because it was based on an incomplete
-          model of what android.softwareKeyboardLayoutMode: "pan"
-          (windowSoftInputMode="adjustPan") actually does. adjustPan pans
-          the window as a rigid unit to keep the focused input visible —
-          it does NOT resize the window and does NOT reflow/shrink any
-          content. The FlatList's flex:1 area above the composer never
-          gets shorter, so nothing keeps the last message glued to the
-          input; the newly-revealed strip at the bottom of the panned
-          window just shows background, not content. KeyboardAvoidingView's
-          own 'height' compensation was never redundant with adjustPan —
-          it does a different, still-necessary job (shrinking this
-          screen's own flex layout), even though adjustPan is also doing
-          its own separate job (panning the window). Removing it removed
-          the only thing that actually resized this screen's content.
-          Back to behavior='height' on Android, which is the last
-          configuration confirmed working on real devices (self-corrects
-          after a brief visible flash, per the earlier bug report, but
-          never leaves a stuck/broken layout). The transient flash
-          (overlap near the top, then a gap, before it self-corrects) is
-          NOT fixed by this revert — going back to 'height' brings it
-          back too. Root cause of that flash (still believed accurate,
-          unaffected by this round's finding): Android's
-          KeyboardAvoidingView only gets the post-hoc keyboardDidShow
-          event, so its animated height change starts after adjustPan's
-          native pan has already begun/finished, and the two animations
-          race to the same end state from different starting times.
-          Deliberately NOT attempting a fix for that this round —
-          keyboardVerticalOffset tuning wouldn't address a timing race
-          (it only changes the final resting position, which is already
-          correct), and switching to adjustResize is a bigger structural
-          change that failed once already this round when reasoned about
-          instead of device-tested. Stacking another unverified guess on
-          top of a fix that just failed real-device testing isn't
-          justified — this needs real device logs/video of the actual
-          flash timing before touching it again. */}
+      {/* Keyboard-open gap/flash bug, four rounds of history:
+          1. behavior='height' under adjustPan self-corrected but had a
+             visible flash (KeyboardAvoidingView only gets Android's
+             post-hoc keyboardDidShow, so its animated resize starts after
+             adjustPan's native pan — two animations racing to the same
+             end state from different start times).
+          2. behavior={undefined} (removing the JS compensation entirely,
+             theorizing adjustPan alone would handle it) failed real-device
+             testing badly: adjustPan pans the window as a rigid unit, it
+             never resizes/reflows content, so nothing shrank the FlatList
+             to keep the last message glued to the composer — permanent
+             gap, not a flash.
+          3. Reverting to behavior='height' plus an explicit
+             Keyboard.addListener('keyboardDidShow', scrollToEnd) call
+             improved but did not fully fix it — a real, if smaller and
+             self-correcting, transient gap remained on real devices.
+          4. THIS round: rather than another timing patch, the FlatList
+             below is now `inverted` (newest message at data index 0).
+             This is a structural fix, not a timing one — an inverted
+             list's resting scroll position (offset 0) IS the visual
+             bottom by construction, regardless of how the viewport's
+             height changes underneath it or in what order the keyboard's
+             native pan and KeyboardAvoidingView's own resize happen to
+             settle. There is no "scroll to bottom" operation left to time
+             correctly, because the list was never scrolled away from the
+             bottom in the first place. behavior='height' is kept here
+             purely for composer positioning (moving the input row above
+             the keyboard) — a separate concern from the list-content gap
+             this history is about. */}
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <Glass radius={0} bordered={false} style={{ paddingTop: insets.top + 6, paddingBottom: 12, paddingHorizontal: 14 }}>
           <Text style={{ fontSize: 10, fontFamily: fontFamilies.heavy, color: tokens.text3, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 4 }}>Current</Text>
@@ -516,22 +484,32 @@ export default function ChatScreen() {
 
         <FlatList
           ref={listRef}
-          data={messages}
+          inverted
+          data={invertedMessages}
           keyExtractor={(m) => m.id}
           contentContainerStyle={{ padding: 16, gap: 11 }}
-          // Fires after FlatList has actually measured the new content
-          // height — unlike the length-keyed effect this replaced, this
-          // can't race ahead of layout. The first call for a freshly
-          // opened chat snaps straight to the bottom (no visible scroll-
-          // through of the whole history); later calls (a new message
-          // arriving, an image finishing loading and resizing a bubble)
-          // stay animated, matching the previous behavior.
-          onContentSizeChange={() => {
-            if (searchQuery) return;
-            listRef.current?.scrollToEnd({ animated: hasScrolledOnceRef.current });
-            hasScrolledOnceRef.current = true;
-          }}
+          // Inverted lists flip both content order AND which end
+          // ListHeaderComponent/ListFooterComponent render at — what was
+          // literally rendered first ends up displayed last on screen. So
+          // the encryption banner (wants to stay at the visual top — the
+          // start of the conversation) is now ListFooterComponent; the
+          // typing indicator (wants to stay at the visual bottom — nearest
+          // the composer) is now ListHeaderComponent. NOT wrapped in any
+          // counter-transform — see note above invertedMessages: RN's
+          // `inverted` flips both the ScrollView itself and each cell,
+          // which already cancel each other out, confirmed by live
+          // Playwright screenshots (an added third counter-transform here
+          // renders content upside down instead of fixing anything).
           ListHeaderComponent={
+            isTyping ? (
+              <View style={{ alignSelf: 'flex-start', marginBottom: 4 }}>
+                <Glass radius={20} style={{ paddingVertical: 14, paddingHorizontal: 17 }}>
+                  <TypingDots color={tokens.text2} />
+                </Glass>
+              </View>
+            ) : null
+          }
+          ListFooterComponent={
             <View style={{ alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 6 }}>
               <Glass radius={14} style={{ paddingVertical: 7, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 7 }}>
                 <Svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={a1} strokeWidth={2.2}>
@@ -555,15 +533,6 @@ export default function ChatScreen() {
               />
             );
           }}
-          ListFooterComponent={
-            isTyping ? (
-              <View style={{ alignSelf: 'flex-start', marginTop: 4 }}>
-                <Glass radius={20} style={{ paddingVertical: 14, paddingHorizontal: 17 }}>
-                  <TypingDots color={tokens.text2} />
-                </Glass>
-              </View>
-            ) : null
-          }
         />
 
         {pollOpen && (
