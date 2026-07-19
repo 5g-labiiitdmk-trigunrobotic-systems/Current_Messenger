@@ -81,14 +81,6 @@ export default function GroupChatScreen() {
   return (
     <View style={{ flex: 1 }}>
       <BokehBackground />
-      {/* See the matching comment in app/chat/[id].tsx for the full
-          history. Short version: the FlatList below is now `inverted`,
-          which structurally eliminates the keyboard-open list-gap bug
-          (the list's resting position is always the true bottom, so
-          there's no scroll-to-bottom timing to get wrong regardless of
-          how/when the keyboard resizes the viewport). behavior='height'
-          here is now only responsible for moving the composer above the
-          keyboard, a separate concern. */}
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <Pressable onPress={() => router.push(`/group-info/${id}`)}>
           <Glass radius={0} bordered={false} style={{ paddingTop: insets.top + 8, paddingBottom: 12, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 11 }}>

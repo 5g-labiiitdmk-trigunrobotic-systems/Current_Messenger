@@ -352,35 +352,11 @@ export default function ChatScreen() {
   return (
     <View style={{ flex: 1 }}>
       <BokehBackground />
-      {/* Keyboard-open gap/flash bug, four rounds of history:
-          1. behavior='height' under adjustPan self-corrected but had a
-             visible flash (KeyboardAvoidingView only gets Android's
-             post-hoc keyboardDidShow, so its animated resize starts after
-             adjustPan's native pan — two animations racing to the same
-             end state from different start times).
-          2. behavior={undefined} (removing the JS compensation entirely,
-             theorizing adjustPan alone would handle it) failed real-device
-             testing badly: adjustPan pans the window as a rigid unit, it
-             never resizes/reflows content, so nothing shrank the FlatList
-             to keep the last message glued to the composer — permanent
-             gap, not a flash.
-          3. Reverting to behavior='height' plus an explicit
-             Keyboard.addListener('keyboardDidShow', scrollToEnd) call
-             improved but did not fully fix it — a real, if smaller and
-             self-correcting, transient gap remained on real devices.
-          4. THIS round: rather than another timing patch, the FlatList
-             below is now `inverted` (newest message at data index 0).
-             This is a structural fix, not a timing one — an inverted
-             list's resting scroll position (offset 0) IS the visual
-             bottom by construction, regardless of how the viewport's
-             height changes underneath it or in what order the keyboard's
-             native pan and KeyboardAvoidingView's own resize happen to
-             settle. There is no "scroll to bottom" operation left to time
-             correctly, because the list was never scrolled away from the
-             bottom in the first place. behavior='height' is kept here
-             purely for composer positioning (moving the input row above
-             the keyboard) — a separate concern from the list-content gap
-             this history is about. */}
+      {/* behavior={undefined} on Android meant this component did nothing
+          at all there — the message input sat behind the keyboard with no
+          avoidance whatsoever. 'height' shrinks the container instead of
+          padding it, which is the correct mode for Android (padding mode
+          double-offsets when combined with the OS's own resize behavior). */}
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <Glass radius={0} bordered={false} style={{ paddingTop: insets.top + 6, paddingBottom: 12, paddingHorizontal: 14 }}>
           <Text style={{ fontSize: 10, fontFamily: fontFamilies.heavy, color: tokens.text3, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 4 }}>Current</Text>
