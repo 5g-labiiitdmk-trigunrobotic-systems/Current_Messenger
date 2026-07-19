@@ -22,7 +22,7 @@
       }
     },
     "android": {
-      "package": "com.current.app",
+      "package": "com.trigunrobotics.current",
       "backgroundColor": "#141416",
       "googleServicesFile": "./google-services.json",
       "softwareKeyboardLayoutMode": "pan",
