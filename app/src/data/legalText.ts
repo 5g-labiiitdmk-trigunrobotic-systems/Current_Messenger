@@ -48,13 +48,7 @@ To operate the service, we retain limited metadata, separate from message conten
 
 ## 4. Third-party service providers
 
-| Provider | Purpose | What they may process |
-|---|---|---|
-| Supabase | Authentication, account metadata storage | Email, username, hashed password, metadata described in 2.2 |
-| Resend | Transactional email delivery (e.g. signup verification) | Email address |
-| Render | Hosting for our real-time relay server | Transient connection data (not message content) |
-| Firebase Cloud Messaging / Expo | Push notification delivery | Push notification tokens |
-| [TURN provider name] | Call relay for voice/video calling when a direct connection isn't possible | IP address (standard for any TURN/VoIP service), not call content |
+To operate Current, we rely on trusted third-party infrastructure providers for functions such as account authentication, email delivery, server hosting, push notifications, and call relay services. These providers process limited technical data necessary to perform their specific function (such as your email address for account verification, or connection metadata for call relay) — they do not have access to your message content, which is never transmitted to or stored by any party other than the intended recipient(s).
 
 We do not sell your data to any third party, and we do not use your data for advertising.
 
