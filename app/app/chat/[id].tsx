@@ -350,38 +350,45 @@ export default function ChatScreen() {
   return (
     <View style={{ flex: 1 }}>
       <BokehBackground />
-      {/* CORRECTED AGAIN: switching to android.softwareKeyboardLayoutMode:
-          "pan" (windowSoftInputMode="adjustPan") fixed the persistent
-          device-specific gap, but introduced a new, different problem —
-          a brief visible glitch (overlapping content near the top,
-          then a gap) every time the keyboard opens, before it
-          self-corrects. Root cause, confirmed by reading
-          react-native's actual KeyboardAvoidingView source (not
-          assumed): on Android it only listens for keyboardDidShow/
-          keyboardDidHide — the POST-HOC events. Android has no reliable
-          pre-animation callback the way iOS's keyboardWillShow does, so
-          by the time that JS event fires, the OS's own adjustPan
-          animation has already started (often already finished)
-          natively, independent of the JS thread. KeyboardAvoidingView
-          then applies its OWN separate, LATE, animated height change on
-          top of a window the OS already finished moving — two
-          uncoordinated animations converging on the same final layout
-          from different starting points and times is exactly what a
-          "flash of a broken intermediate state that self-corrects"
-          looks like.
-          Fix: on Android, stop running KeyboardAvoidingView's JS-driven
-          compensation on this screen at all — behavior={undefined}
-          renders it as an inert plain View (confirmed by reading its
-          render() method: the default case never applies any
-          height/bottom/padding style, regardless of internal state), so
-          adjustPan alone — a first-class OS mechanism with no JS
-          round-trip delay — handles positioning. This is NOT the same
-          "behavior={undefined} left the input with zero avoidance"
-          finding from further back in git history: that was observed
-          under the OLD default, windowSoftInputMode="adjustResize",
-          which behaves completely differently from adjustPan and was
-          never re-tested after this app switched to "pan". */}
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      {/* REVERTED — behavior={undefined} (previous round) was proven wrong
+          by real-device testing: it didn't just leave a cosmetic flash, it
+          left a large, PERMANENT gap between the last message and the
+          input on every device, because it was based on an incomplete
+          model of what android.softwareKeyboardLayoutMode: "pan"
+          (windowSoftInputMode="adjustPan") actually does. adjustPan pans
+          the window as a rigid unit to keep the focused input visible —
+          it does NOT resize the window and does NOT reflow/shrink any
+          content. The FlatList's flex:1 area above the composer never
+          gets shorter, so nothing keeps the last message glued to the
+          input; the newly-revealed strip at the bottom of the panned
+          window just shows background, not content. KeyboardAvoidingView's
+          own 'height' compensation was never redundant with adjustPan —
+          it does a different, still-necessary job (shrinking this
+          screen's own flex layout), even though adjustPan is also doing
+          its own separate job (panning the window). Removing it removed
+          the only thing that actually resized this screen's content.
+          Back to behavior='height' on Android, which is the last
+          configuration confirmed working on real devices (self-corrects
+          after a brief visible flash, per the earlier bug report, but
+          never leaves a stuck/broken layout). The transient flash
+          (overlap near the top, then a gap, before it self-corrects) is
+          NOT fixed by this revert — going back to 'height' brings it
+          back too. Root cause of that flash (still believed accurate,
+          unaffected by this round's finding): Android's
+          KeyboardAvoidingView only gets the post-hoc keyboardDidShow
+          event, so its animated height change starts after adjustPan's
+          native pan has already begun/finished, and the two animations
+          race to the same end state from different starting times.
+          Deliberately NOT attempting a fix for that this round —
+          keyboardVerticalOffset tuning wouldn't address a timing race
+          (it only changes the final resting position, which is already
+          correct), and switching to adjustResize is a bigger structural
+          change that failed once already this round when reasoned about
+          instead of device-tested. Stacking another unverified guess on
+          top of a fix that just failed real-device testing isn't
+          justified — this needs real device logs/video of the actual
+          flash timing before touching it again. */}
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <Glass radius={0} bordered={false} style={{ paddingTop: insets.top + 6, paddingBottom: 12, paddingHorizontal: 14 }}>
           <Text style={{ fontSize: 10, fontFamily: fontFamilies.heavy, color: tokens.text3, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 4 }}>Current</Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 11 }}>

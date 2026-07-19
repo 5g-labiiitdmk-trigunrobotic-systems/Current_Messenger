@@ -74,15 +74,20 @@ export default function GroupChatScreen() {
   return (
     <View style={{ flex: 1 }}>
       <BokehBackground />
-      {/* See the matching comment in app/chat/[id].tsx — Android relies on
-          app.json's android.softwareKeyboardLayoutMode: "pan" alone now
-          (behavior={undefined} here), not KeyboardAvoidingView's own JS
-          compensation, which was firing late (Android only gets the
-          post-hoc keyboardDidShow, unlike iOS's pre-animation
-          keyboardWillShow) and visibly re-animating on top of a window
-          the OS had already finished panning — a brief broken-looking
-          flash before it self-corrected. */}
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      {/* REVERTED — see the matching comment in app/chat/[id].tsx.
+          behavior={undefined} was proven wrong by real-device testing: it
+          left a large, permanent gap between the last message and the
+          composer, because android.softwareKeyboardLayoutMode: "pan" only
+          pans the window (doesn't resize/reflow content), so nothing
+          shrank this screen's FlatList to keep it glued to the composer
+          once KeyboardAvoidingView's own 'height' compensation was
+          removed. Back to behavior='height' on Android — the last
+          configuration confirmed working (self-corrects, never gets
+          stuck) on real devices. The brief self-correcting flash this was
+          meant to fix is back too; see the chat/[id].tsx comment for why
+          that's being left alone this round rather than risking a third
+          unverified guess. */}
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <Pressable onPress={() => router.push(`/group-info/${id}`)}>
           <Glass radius={0} bordered={false} style={{ paddingTop: insets.top + 8, paddingBottom: 12, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 11 }}>
             <Pressable onPress={() => router.back()} style={{ width: 38, height: 38, alignItems: 'center', justifyContent: 'center' }}>
