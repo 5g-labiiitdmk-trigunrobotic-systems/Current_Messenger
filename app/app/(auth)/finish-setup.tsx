@@ -71,7 +71,23 @@ export default function FinishSetupScreen() {
       })();
       return;
     }
-    router.replace('/(tabs)/chats');
+    // Brand-new account, about to land in the chat list — this is exactly
+    // where a race with E2E key publishing has real consequences: if the
+    // user (or someone messaging them) sends a message before their
+    // publishPublicKey() write (kicked off in the background by
+    // authStore's auth-state-change listener, not something this
+    // navigation previously waited on) finishes, the message arrives
+    // undecryptable and stays that way — decryption only ever happens
+    // once, at receive time. Awaiting it here closes that window for the
+    // account actually being created; see fetchPublicKeyWithRetry in
+    // chatStore.ts for the complementary fix on the receiving side, for
+    // races this can't cover (e.g. network latency on the OTHER party's
+    // device). ensureDeviceKeyPublished() no-ops fast if already done —
+    // it usually finishes well before the app even gets here.
+    (async () => {
+      await useAuthStore.getState().ensureDeviceKeyPublished();
+      router.replace('/(tabs)/chats');
+    })();
   }, [session, profile]);
 
   return (

@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { relayClient } from '../lib/relayClient';
 import { encryptMessage, decryptMessage } from '../lib/crypto';
-import { getOrCreateDeviceKeyPair, fetchPublicKey } from '../lib/keystore';
+import { getOrCreateDeviceKeyPair, fetchPublicKey, fetchPublicKeyWithRetry } from '../lib/keystore';
 import { loadAllThreads, loadPinned, saveMessage, renameMessageId, setPinned, deleteThreadLocal } from '../lib/localDb';
 import type { MessageKind, ServerEvent, EncryptedPayload } from '../types/relay';
 import { useAuthStore } from './authStore';
@@ -188,8 +188,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
 
       if (event.type === 'message:receive') {
-        const kp = await getOrCreateDeviceKeyPair();
-        const senderKey = await fetchPublicKey(event.from);
+        const kp = await getOrCreateDeviceKeyPair(me);
+        // Retries: a brand-new sender's publishPublicKey() write can still
+        // be in flight (it's a background call, decoupled from message
+        // delivery — see keystore.ts) at the exact moment their very first
+        // message arrives here. A one-shot fetchPublicKey() null result
+        // used to be treated as permanent, writing "[unable to decrypt]"
+        // to local storage with nothing ever retrying it — see
+        // fetchPublicKeyWithRetry's doc comment.
+        const senderKey = await fetchPublicKeyWithRetry(event.from);
         let text: string | undefined;
         let richMeta: Record<string, unknown> | undefined;
         const decrypted = senderKey ? decryptMessage(event.payload, senderKey, kp.secretKey) : null;
@@ -319,7 +326,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (!me || !text.trim()) return;
     const key = chatKey(targetId, isGroup);
     const tempId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const kp = await getOrCreateDeviceKeyPair();
+    const kp = await getOrCreateDeviceKeyPair(me);
 
     const optimistic: ChatMessage = {
       id: tempId,
@@ -390,7 +397,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (!me) return;
     const key = chatKey(targetId, isGroup);
     const tempId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const kp = await getOrCreateDeviceKeyPair();
+    const kp = await getOrCreateDeviceKeyPair(me);
 
     const optimistic: ChatMessage = {
       id: tempId,
@@ -556,7 +563,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }));
     if (me && updatedMsg) saveMessage(me, key, updatedMsg).catch(() => {});
     (async () => {
-      const kp = await getOrCreateDeviceKeyPair();
+      if (!me) return;
+      const kp = await getOrCreateDeviceKeyPair(me);
       if (!isGroup) {
         const recipientKey = await fetchPublicKey(targetId);
         if (!recipientKey) return;

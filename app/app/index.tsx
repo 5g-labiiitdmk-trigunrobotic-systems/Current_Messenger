@@ -35,7 +35,13 @@ export default function SplashRoute() {
       if (initializing) return;
       if (!session) router.replace('/(auth)/onboarding');
       else if (needsProfileSetup) router.replace('/(auth)/finish-setup');
-      else router.replace('/(tabs)/chats');
+      else {
+        // Same reasoning as finish-setup.tsx's matching await: don't let
+        // navigation into the chat list outrun this device's E2E key
+        // publish. Usually already done well within SPLASH_HOLD_MS, so
+        // this is a fast no-op in the common case, not an extra delay.
+        useAuthStore.getState().ensureDeviceKeyPublished().finally(() => router.replace('/(tabs)/chats'));
+      }
     }, SPLASH_HOLD_MS);
     return () => clearTimeout(t);
   }, [initializing, session, needsProfileSetup]);

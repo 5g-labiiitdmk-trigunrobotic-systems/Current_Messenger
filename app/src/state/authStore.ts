@@ -20,6 +20,16 @@ interface AuthState {
   needsProfileSetup: boolean;
   initialize: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  /** Generates (if needed) and publishes this device's E2E public key for
+   * the current session. Called from the auth-state-change listener below,
+   * but also awaited directly from the fresh-signup flow (finish-setup.tsx)
+   * — see that call site for why: navigating into the app is not itself
+   * gated on this finishing, so without an explicit await there, a
+   * brand-new account can reach the chat list and receive/send its first
+   * message before its own key has finished publishing. No-ops if there's
+   * no active session. Safe to call multiple times — publishPublicKey()
+   * itself already no-ops once the exact key is on record. */
+  ensureDeviceKeyPublished: () => Promise<void>;
   updateProfile: (patch: Partial<Pick<UserRow, 'display_name' | 'bio' | 'status_visibility'>>) => Promise<void>;
   /** Resolves to null on success, or a user-facing error message. */
   changeUsername: (username: string) => Promise<string | null>;
@@ -47,8 +57,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ session });
       if (session) {
         await get().refreshProfile();
-        const kp = await getOrCreateDeviceKeyPair();
-        await publishPublicKey(session.user.id, kp.publicKey).catch(() => {});
+        await get().ensureDeviceKeyPublished();
         relayClient.connect(session.access_token);
         if (!get().needsProfileSetup) {
           registerForPushNotifications(session.user.id).catch(() => {});
@@ -58,6 +67,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         relayClient.disconnect();
       }
     });
+  },
+
+  ensureDeviceKeyPublished: async () => {
+    const session = get().session;
+    if (!session) return;
+    const kp = await getOrCreateDeviceKeyPair(session.user.id);
+    await publishPublicKey(session.user.id, kp.publicKey).catch(() => {});
   },
 
   refreshProfile: async () => {
