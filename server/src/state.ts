@@ -236,6 +236,17 @@ class RelayState {
     return this.groups.get(id);
   }
 
+  /** Every group this user currently belongs to — used to snapshot their
+   * group list right after auth, the same way presence:snapshot covers
+   * online status. Without this, a client that reconnects (including a
+   * plain app relaunch, since nothing here is persisted client-side
+   * either — see groupStore.ts) had no way to learn which groups it was
+   * already in; the relay never told it unless something else happened
+   * to re-trigger a group:invited/group:created for that group. */
+  getGroupsForUser(userId: string): Group[] {
+    return [...this.groups.values()].filter((g) => g.memberIds.has(userId));
+  }
+
   addGroupMember(groupId: string, userId: string) {
     this.groups.get(groupId)?.memberIds.add(userId);
   }

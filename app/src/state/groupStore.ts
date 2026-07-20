@@ -63,6 +63,35 @@ export const useGroupStore = create<GroupState>((set, get) => ({
     if (get().wired) return;
     set({ wired: true });
     relayClient.on((event: ServerEvent) => {
+      if (event.type === 'group:snapshot') {
+        // Sent once, right after every successful auth (fresh connect,
+        // reconnect, or a plain app relaunch) — see the matching
+        // server-side comment. Without this, `groups` only ever got
+        // populated by group:created/group:invited firing at the exact
+        // moment they originally happened; nothing ever re-sent that
+        // state afterward, so a closed-and-reopened app started with an
+        // empty `groups` and never found out otherwise — groups just
+        // silently "disappeared". Replaces the whole map with what the
+        // relay says is current (also correctly drops any group this
+        // account is no longer a member of, or that the relay itself
+        // lost — group membership is zero-persistence server-side too),
+        // preserving each group's already-known createdAt rather than
+        // resetting it every reconnect.
+        set((s) => {
+          const groups: Record<string, GroupInfo> = {};
+          for (const g of event.groups) {
+            groups[g.groupId] = {
+              id: g.groupId,
+              name: g.name,
+              memberIds: g.memberIds,
+              ownerId: g.ownerId,
+              isBroadcast: g.isBroadcast,
+              createdAt: s.groups[g.groupId]?.createdAt ?? new Date().toISOString(),
+            };
+          }
+          return { groups };
+        });
+      }
       if (event.type === 'group:created') {
         set((s) => ({
           groups: {

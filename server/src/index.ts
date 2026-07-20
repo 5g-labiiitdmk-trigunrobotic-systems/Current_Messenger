@@ -137,6 +137,22 @@ wss.on('connection', (socket) => {
       // was already online until each of those contacts' presence next
       // changes for some unrelated reason.
       send(socket, { type: 'presence:snapshot', onlineUserIds: relayState.onlineUserIds().filter((id) => id !== userId) });
+      // Same idiom as presence:snapshot above — without this, groups
+      // "disappeared" on every reconnect/app relaunch, since neither the
+      // relay nor the client ever persists group membership anywhere; the
+      // client's local groupStore.ts state was only ever populated by
+      // group:created/group:invited events at the moment they originally
+      // happened, never re-sent afterward.
+      send(socket, {
+        type: 'group:snapshot',
+        groups: relayState.getGroupsForUser(userId).map((g) => ({
+          groupId: g.id,
+          name: g.name,
+          ownerId: g.ownerId,
+          memberIds: [...g.memberIds],
+          isBroadcast: g.isBroadcast,
+        })),
+      });
       broadcastPresence(userId, 'online');
       // Replay a still-pending incoming ring, if any — the original 'ring'
       // signal is only ever forwarded live (see the call:signal case
@@ -561,12 +577,18 @@ function handleSessionRespond(userId: string, peerId: string, accept: boolean) {
   send(requesterSocket, accept ? { type: 'session:accepted', from: userId } : { type: 'session:rejected', from: userId, reason: 'declined' });
 }
 
-// Same shape as SESSION_REQUEST_TIMEOUT_MS/handleSessionRequest above,
-// reused for group invites rather than inventing a separate model: an
-// invite is only a member once explicitly accepted, times out if ignored,
-// and requires the inviter/invitee to already be approved contacts —
-// exactly the same consent gate 1:1 sessions already enforce.
-const GROUP_INVITE_TIMEOUT_MS = 60_000;
+// Same MECHANISM as SESSION_REQUEST_TIMEOUT_MS/handleSessionRequest above
+// (an invite is only a member once explicitly accepted, requires the
+// inviter/invitee to already be approved contacts, times out if never
+// answered), reused rather than inventing a separate model — but
+// deliberately NOT the same duration. A 1:1 session request is about
+// "are you both here right now" — 60s makes sense for something meant to
+// be answered live. A group invite is "do you want to join this
+// (persistent-for-the-relay's-lifetime) group" — the invitee might not
+// open the app again for hours, and there's no reason to force-expire
+// that the way an ephemeral live session should. SESSION_REQUEST_TIMEOUT_MS
+// itself is intentionally untouched.
+const GROUP_INVITE_TIMEOUT_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
 
 async function handleGroupInviteRequest(userId: string, groupId: string, to: string) {
   const socket = relayState.getSocket(userId);

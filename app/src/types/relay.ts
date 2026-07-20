@@ -71,6 +71,11 @@ export type ServerEvent =
   | { type: 'read'; from: string; groupId?: string; messageId: string }
   | { type: 'presence'; userId: string; status: 'online' | 'offline'; lastSeenAt?: string }
   | { type: 'presence:snapshot'; onlineUserIds: string[] }
+  // Sent once, right after auth:ok — every group this user currently
+  // belongs to. Group membership is relay-memory-only and nothing
+  // client-side persists it either, so without this a reconnect/app
+  // relaunch had no way to learn which groups were already joined.
+  | { type: 'group:snapshot'; groups: { groupId: string; name: string; ownerId: string; memberIds: string[]; isBroadcast: boolean }[] }
   | { type: 'group:created'; groupId: string; name: string; memberIds: string[]; isBroadcast?: boolean }
   // Sent only once an invite is accepted, to the new member and every
   // existing member. `ownerId` is explicit, not inferred from `from` (the

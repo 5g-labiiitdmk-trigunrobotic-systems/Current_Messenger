@@ -119,6 +119,12 @@ export type ServerEvent =
   // it connected (it would only find out once each of those contacts next
   // disconnects/reconnects/toggles, which could be arbitrarily long after).
   | { type: 'presence:snapshot'; onlineUserIds: string[] }
+  // Sent once, right after auth:ok, same idiom as presence:snapshot —
+  // every group this user currently belongs to. Group membership is
+  // relay-memory-only and nothing client-side persists it either (see
+  // groupStore.ts), so without this, a reconnect/app relaunch had no way
+  // to learn which groups the user was already in.
+  | { type: 'group:snapshot'; groups: { groupId: string; name: string; ownerId: string; memberIds: string[]; isBroadcast: boolean }[] }
   | { type: 'group:created'; groupId: string; name: string; memberIds: string[]; isBroadcast?: boolean }
   // Sent only once someone has actually ACCEPTED an invite (never on
   // invite-sent) — to the new member, and to every existing member, so
