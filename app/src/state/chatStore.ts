@@ -188,18 +188,31 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
 
       if (event.type === 'message:receive') {
-        const kp = await getOrCreateDeviceKeyPair(me);
+        // Same local-SecureStore risk as sendText/sendRich (see their
+        // comments) — unguarded here would abort this whole handler
+        // before the message is ever added to the thread, on top of
+        // whatever specifically triggers "[unable to decrypt]" below.
+        let kp: Awaited<ReturnType<typeof getOrCreateDeviceKeyPair>> | null = null;
+        try {
+          kp = await getOrCreateDeviceKeyPair(me);
+        } catch (e: any) {
+          // eslint-disable-next-line no-console
+          console.error('[chatStore] getOrCreateDeviceKeyPair failed while receiving a message:', e?.message ?? e);
+        }
         // Retries: a brand-new sender's publishPublicKey() write can still
         // be in flight (it's a background call, decoupled from message
         // delivery — see keystore.ts) at the exact moment their very first
         // message arrives here. A one-shot fetchPublicKey() null result
         // used to be treated as permanent, writing "[unable to decrypt]"
         // to local storage with nothing ever retrying it — see
-        // fetchPublicKeyWithRetry's doc comment.
+        // fetchPublicKeyWithRetry's doc comment. Now that fetchPublicKey
+        // no longer caches (see its own doc comment — the cache made
+        // these retries a no-op once a stale value was already cached),
+        // each attempt here is a genuine fresh query.
         const senderKey = await fetchPublicKeyWithRetry(event.from);
         let text: string | undefined;
         let richMeta: Record<string, unknown> | undefined;
-        const decrypted = senderKey ? decryptMessage(event.payload, senderKey, kp.secretKey) : null;
+        const decrypted = senderKey && kp ? decryptMessage(event.payload, senderKey, kp.secretKey) : null;
 
         if (event.kind === 'text' || event.kind === 'edit' || event.kind === 'reply') {
           text = decrypted ?? '[unable to decrypt]';

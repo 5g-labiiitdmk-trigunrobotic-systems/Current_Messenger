@@ -75,14 +75,33 @@ export async function publishPublicKey(userId: string, publicKey: string) {
   });
 }
 
-const keyCache = new Map<string, string>();
-
-/** Fetches (and caches) a contact's current active public key for encryption.
- * Failures (no row found yet, network error) are deliberately NOT cached —
- * only a successful lookup is — so a later call for the same userId always
- * re-queries Supabase instead of being stuck returning null forever. */
+/**
+ * Fetches a contact's current active public key for encryption. Always
+ * queries fresh — this used to cache successful lookups in an in-memory
+ * Map with no invalidation, which was a real, serious bug: a contact's
+ * key legitimately changes (reinstall, this app's own SecureStore
+ * format migrations earlier this session, a second device), and once
+ * that happened, every OTHER user's already-cached copy of their old key
+ * stayed wrong for the rest of that sender's app session — every message
+ * to that contact would keep getting encrypted against a public key
+ * nobody held the matching secret key for anymore, decrypting to
+ * "[unable to decrypt]" on the receiving end, permanently, until the
+ * sender's app happened to restart. Worse, fetchPublicKeyWithRetry's
+ * retry loop was completely powerless against this: the cache is checked
+ * BEFORE any network call, so every retry just re-read the same stale
+ * cached value instead of ever re-querying Supabase — a "retry" that
+ * never actually retried anything once a value was cached, regardless of
+ * whether that value was still correct.
+ *
+ * device_keys.created_at DESC + LIMIT 1 already guarantees a fresh query
+ * gets the CURRENT key even if a contact has old, never-deactivated
+ * key rows sitting around, so removing the cache is not just safer, it
+ * makes fetchPublicKeyWithRetry's retries meaningful for the first time
+ * for this specific failure mode. The cost is one extra fast, indexed
+ * Supabase SELECT per message send/decrypt — a correctness-critical path
+ * for an E2E-encrypted messenger is exactly where that tradeoff belongs.
+ */
 export async function fetchPublicKey(userId: string): Promise<string | null> {
-  if (keyCache.has(userId)) return keyCache.get(userId)!;
   const { data, error } = await supabase
     .from('device_keys')
     .select('public_key')
@@ -92,7 +111,6 @@ export async function fetchPublicKey(userId: string): Promise<string | null> {
     .limit(1)
     .maybeSingle();
   if (error || !data) return null;
-  keyCache.set(userId, data.public_key);
   return data.public_key;
 }
 
