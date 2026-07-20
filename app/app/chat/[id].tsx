@@ -147,9 +147,13 @@ export default function ChatScreen() {
 
   const onMic = async () => {
     if (!recording) {
-      const ok = await startVoiceRecording(recorder);
-      if (!ok) {
+      const result = await startVoiceRecording(recorder);
+      if (result === 'permission_denied') {
         appAlert('Microphone permission needed', 'Enable microphone access to send voice messages.');
+        return;
+      }
+      if (result === 'start_failed') {
+        appAlert('Could not start recording', 'Something went wrong starting the microphone — try again in a moment.');
         return;
       }
       setRecording(true);
@@ -157,6 +161,7 @@ export default function ChatScreen() {
       setRecording(false);
       const result = await stopVoiceRecording(recorder);
       if (result) sendRich(id ?? '', false, 'voice', result);
+      else appAlert('Recording failed', "Your voice message couldn't be saved — try recording again.");
     }
   };
 
