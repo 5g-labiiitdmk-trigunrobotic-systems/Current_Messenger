@@ -23,7 +23,24 @@ const SECRET_KEY_STORE_ID = 'current_e2e_secret_key';
  * happily "finds" the other account's key and returns it unchanged.
  */
 export async function getOrCreateDeviceKeyPair(userId: string): Promise<KeyPairB64> {
-  const storeId = `${SECRET_KEY_STORE_ID}:${userId}`;
+  // NOT a ':' separator — expo-secure-store validates keys against
+  // /^[\w.-]+$/ (confirmed by reading its actual source,
+  // node_modules/expo-secure-store/src/SecureStore.ts's isValidKey/
+  // ensureValidKey) and throws "Invalid key provided to SecureStore" for
+  // anything outside alphanumerics, ".", "-", "_". A colon here was the
+  // actual root cause of a real, universal, 100%-reproducing regression
+  // on every native build: getItemAsync/setItemAsync threw on every
+  // single call, for every user, the moment this namespacing was added.
+  // That's invisible in this sandbox's own web-based smoke tests (they
+  // never carry a real authenticated session, so this function was never
+  // actually reached with a real userId) but broke every real caller:
+  // sendText/sendRich/editMessage in chatStore.ts call this directly,
+  // unguarded, so every message send failed silently with zero relay
+  // traffic — while login kept working because ensureDeviceKeyPublished()
+  // (authStore.ts) already catches this exact failure internally, and
+  // calls (callStore.ts) never touch this function at all, which is
+  // exactly the working-calls-but-not-messages split that was reported.
+  const storeId = `${SECRET_KEY_STORE_ID}.${userId}`;
   const existingSecret = await SecureStore.getItemAsync(storeId);
   if (existingSecret) {
     const [publicKey, secretKey] = existingSecret.split('|');

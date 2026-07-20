@@ -326,7 +326,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (!me || !text.trim()) return;
     const key = chatKey(targetId, isGroup);
     const tempId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const kp = await getOrCreateDeviceKeyPair(me);
 
     const optimistic: ChatMessage = {
       id: tempId,
@@ -344,13 +343,35 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((s) => ({ threads: { ...s.threads, [key]: [...(s.threads[key] ?? []), optimistic] } }));
     saveMessage(me, key, optimistic).catch(() => {});
 
+    const markFailed = (failReason: string) => {
+      const failed = { ...optimistic, status: 'failed' as const, failReason };
+      set((s) => ({ threads: { ...s.threads, [key]: (s.threads[key] ?? []).map((m) => (m.tempId === tempId ? failed : m)) } }));
+      saveMessage(me, key, failed).catch(() => {});
+    };
+
+    // getOrCreateDeviceKeyPair is a local SecureStore call, not a network
+    // request — its own failures used to be completely invisible: nothing
+    // here caught them, so a throw skipped past the optimistic message
+    // above straight to an unhandled promise rejection, meaning nothing
+    // was ever sent to the relay AND no failed status ever appeared. The
+    // optimistic message is now created before this call specifically so
+    // that even a local key failure still leaves the user looking at a
+    // clearly failed message instead of nothing happening at all.
+    let kp: Awaited<ReturnType<typeof getOrCreateDeviceKeyPair>>;
+    try {
+      kp = await getOrCreateDeviceKeyPair(me);
+    } catch (e: any) {
+      // eslint-disable-next-line no-console
+      console.error('[chatStore] getOrCreateDeviceKeyPair failed, message not sent:', e?.message ?? e);
+      markFailed('local_key_error');
+      return;
+    }
+
     if (!isGroup) {
       // 1-1: encrypt to the one recipient's public key.
       const recipientKey = await fetchPublicKey(targetId);
       if (!recipientKey) {
-        const failed = { ...optimistic, status: 'failed' as const, failReason: 'no_key' };
-        set((s) => ({ threads: { ...s.threads, [key]: (s.threads[key] ?? []).map((m) => (m.tempId === tempId ? failed : m)) } }));
-        saveMessage(me, key, failed).catch(() => {});
+        markFailed('no_key');
         return;
       }
       const payload = encryptMessage(text, recipientKey, kp.secretKey);
@@ -376,9 +397,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // per recipient.
       const payloads = await encryptForGroupMembers(targetId, me, text, kp.secretKey);
       if (Object.keys(payloads).length === 0) {
-        const failed = { ...optimistic, status: 'failed' as const, failReason: 'no_key' };
-        set((s) => ({ threads: { ...s.threads, [key]: (s.threads[key] ?? []).map((m) => (m.tempId === tempId ? failed : m)) } }));
-        saveMessage(me, key, failed).catch(() => {});
+        markFailed('no_key');
         return;
       }
       relayClient.send({
@@ -397,7 +416,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (!me) return;
     const key = chatKey(targetId, isGroup);
     const tempId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const kp = await getOrCreateDeviceKeyPair(me);
 
     const optimistic: ChatMessage = {
       id: tempId,
@@ -415,6 +433,27 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((s) => ({ threads: { ...s.threads, [key]: [...(s.threads[key] ?? []), optimistic] } }));
     saveMessage(me, key, optimistic).catch(() => {});
 
+    const markFailed = (failReason: string) => {
+      const failed = { ...optimistic, status: 'failed' as const, failReason };
+      set((s) => ({ threads: { ...s.threads, [key]: (s.threads[key] ?? []).map((m) => (m.tempId === tempId ? failed : m)) } }));
+      saveMessage(me, key, failed).catch(() => {});
+    };
+
+    // See the matching comment in sendText — a local SecureStore failure
+    // here used to be an unhandled rejection with no failed status and no
+    // relay traffic, affecting every rich kind (photo/voice/location/
+    // sticker/poll) the same as plain text, since they all go through
+    // this one function.
+    let kp: Awaited<ReturnType<typeof getOrCreateDeviceKeyPair>>;
+    try {
+      kp = await getOrCreateDeviceKeyPair(me);
+    } catch (e: any) {
+      // eslint-disable-next-line no-console
+      console.error('[chatStore] getOrCreateDeviceKeyPair failed, message not sent:', e?.message ?? e);
+      markFailed('local_key_error');
+      return;
+    }
+
     const json = JSON.stringify(content);
 
     if (isGroup) {
@@ -428,9 +467,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // sender the moment any group screen gained the UI to send one.
       const payloads = await encryptForGroupMembers(targetId, me, json, kp.secretKey);
       if (Object.keys(payloads).length === 0) {
-        const failed = { ...optimistic, status: 'failed' as const, failReason: 'no_key' };
-        set((s) => ({ threads: { ...s.threads, [key]: (s.threads[key] ?? []).map((m) => (m.tempId === tempId ? failed : m)) } }));
-        saveMessage(me, key, failed).catch(() => {});
+        markFailed('no_key');
         return;
       }
       relayClient.send({ type: 'message:send', tempId, groupId: targetId, kind, payloads, meta: { replyToId } });
@@ -439,9 +476,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     const encryptTo = await fetchPublicKey(targetId);
     if (!encryptTo) {
-      const failed = { ...optimistic, status: 'failed' as const, failReason: 'no_key' };
-      set((s) => ({ threads: { ...s.threads, [key]: (s.threads[key] ?? []).map((m) => (m.tempId === tempId ? failed : m)) } }));
-      saveMessage(me, key, failed).catch(() => {});
+      markFailed('no_key');
       return;
     }
     const payload = encryptMessage(json, encryptTo, kp.secretKey);
@@ -564,12 +599,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (me && updatedMsg) saveMessage(me, key, updatedMsg).catch(() => {});
     (async () => {
       if (!me) return;
-      const kp = await getOrCreateDeviceKeyPair(me);
-      if (!isGroup) {
-        const recipientKey = await fetchPublicKey(targetId);
-        if (!recipientKey) return;
-        const payload = encryptMessage(newText, recipientKey, kp.secretKey);
-        relayClient.send({ type: 'message:send', tempId: `edit-${Date.now()}`, to: targetId, kind: 'edit', payload, meta: { targetMessageId: messageId } });
+      try {
+        const kp = await getOrCreateDeviceKeyPair(me);
+        if (!isGroup) {
+          const recipientKey = await fetchPublicKey(targetId);
+          if (!recipientKey) return;
+          const payload = encryptMessage(newText, recipientKey, kp.secretKey);
+          relayClient.send({ type: 'message:send', tempId: `edit-${Date.now()}`, to: targetId, kind: 'edit', payload, meta: { targetMessageId: messageId } });
+        }
+      } catch (e: any) {
+        // The local edit above already applied regardless — this only
+        // syncs it to the other party over the wire, so a failure here
+        // (same local SecureStore risk as sendText/sendRich) means the
+        // edit silently never reaches them, not that it's lost locally.
+        // eslint-disable-next-line no-console
+        console.error('[chatStore] editMessage failed to sync to recipient:', e?.message ?? e);
       }
     })();
   },
