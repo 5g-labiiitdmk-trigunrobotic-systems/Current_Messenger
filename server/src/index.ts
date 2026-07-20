@@ -181,22 +181,23 @@ wss.on('connection', (socket) => {
         break;
       }
       case 'group:create': {
-        const group = relayState.createGroup(event.groupId, event.name, userId, event.memberIds, event.isBroadcast);
-        const memberIds = [...group.memberIds];
-        for (const memberId of memberIds) {
+        // Only the creator is an actual member right away — everyone else
+        // they picked goes through the same invite-consent flow as
+        // group:invite below, not a direct add.
+        const group = relayState.createGroup(event.groupId, event.name, userId, event.isBroadcast);
+        send(socket, { type: 'group:created', groupId: group.id, name: group.name, memberIds: [...group.memberIds], isBroadcast: group.isBroadcast });
+        for (const memberId of event.memberIds) {
           if (memberId === userId) continue;
-          const s = relayState.getSocket(memberId);
-          if (s) send(s, { type: 'group:invited', groupId: group.id, name: group.name, from: userId, memberIds, isBroadcast: group.isBroadcast });
+          await handleGroupInviteRequest(userId, group.id, memberId);
         }
-        send(socket, { type: 'group:created', groupId: group.id, name: group.name, memberIds, isBroadcast: group.isBroadcast });
         break;
       }
       case 'group:invite': {
-        const group = relayState.getGroup(event.groupId);
-        if (!group || !group.memberIds.has(userId)) break;
-        relayState.addGroupMember(event.groupId, event.to);
-        const s = relayState.getSocket(event.to);
-        if (s) send(s, { type: 'group:invited', groupId: group.id, name: group.name, from: userId, memberIds: [...group.memberIds], isBroadcast: group.isBroadcast });
+        await handleGroupInviteRequest(userId, event.groupId, event.to);
+        break;
+      }
+      case 'group:invite_respond': {
+        handleGroupInviteRespond(userId, event.groupId, event.accept);
         break;
       }
       case 'group:leave': {
@@ -308,6 +309,11 @@ wss.on('connection', (socket) => {
         const s = relayState.getSocket(requesterId);
         if (s) send(s, { type: 'session:rejected', from: userId, reason: 'peer_disconnected' });
       }
+      // Drop any group invites still waiting on this user's response — see
+      // clearPendingGroupInvitesFor's doc comment for why no notification
+      // is needed here (the inviter's own pending timeout already covers
+      // telling them, if this user never reconnects to respond).
+      relayState.clearPendingGroupInvitesFor(userId);
     }
   });
 });
@@ -553,6 +559,62 @@ function handleSessionRespond(userId: string, peerId: string, accept: boolean) {
   const requesterSocket = relayState.getSocket(peerId);
   if (!requesterSocket) return; // requester disconnected in the meantime; clearSessionsFor already handled notifying (moot) or will on their close
   send(requesterSocket, accept ? { type: 'session:accepted', from: userId } : { type: 'session:rejected', from: userId, reason: 'declined' });
+}
+
+// Same shape as SESSION_REQUEST_TIMEOUT_MS/handleSessionRequest above,
+// reused for group invites rather than inventing a separate model: an
+// invite is only a member once explicitly accepted, times out if ignored,
+// and requires the inviter/invitee to already be approved contacts —
+// exactly the same consent gate 1:1 sessions already enforce.
+const GROUP_INVITE_TIMEOUT_MS = 60_000;
+
+async function handleGroupInviteRequest(userId: string, groupId: string, to: string) {
+  const socket = relayState.getSocket(userId);
+  const group = relayState.getGroup(groupId);
+  if (!group || !group.memberIds.has(userId)) return; // inviter isn't actually in this group
+  if (group.memberIds.has(to)) return; // already a member — nothing to do
+  if (!(await areApprovedContacts(userId, to))) {
+    if (socket) send(socket, { type: 'group:invite_declined', groupId, userId: to, reason: 'not_contact' });
+    return;
+  }
+  const targetSocket = relayState.getSocket(to);
+  if (!targetSocket) {
+    if (socket) send(socket, { type: 'group:invite_declined', groupId, userId: to, reason: 'recipient_offline' });
+    return;
+  }
+  relayState.requestGroupInvite(groupId, userId, to);
+  const requestedAt = relayState.getPendingGroupInvite(groupId, to)!.requestedAt;
+  send(targetSocket, { type: 'group:invite_request', groupId, groupName: group.name, from: userId, isBroadcast: group.isBroadcast });
+
+  setTimeout(() => {
+    const pending = relayState.getPendingGroupInvite(groupId, to);
+    if (!pending || pending.inviterId !== userId || pending.requestedAt !== requestedAt) return;
+    relayState.clearPendingGroupInvite(groupId, to);
+    const inviterSocket = relayState.getSocket(userId);
+    if (inviterSocket) send(inviterSocket, { type: 'group:invite_declined', groupId, userId: to, reason: 'timeout' });
+  }, GROUP_INVITE_TIMEOUT_MS);
+}
+
+function handleGroupInviteRespond(userId: string, groupId: string, accept: boolean) {
+  const pending = relayState.getPendingGroupInvite(groupId, userId);
+  if (!pending) return; // no matching pending invite — ignore
+  relayState.clearPendingGroupInvite(groupId, userId);
+  const inviterSocket = relayState.getSocket(pending.inviterId);
+  if (!accept) {
+    if (inviterSocket) send(inviterSocket, { type: 'group:invite_declined', groupId, userId, reason: 'declined' });
+    return;
+  }
+  relayState.addGroupMember(groupId, userId);
+  const group = relayState.getGroup(groupId);
+  if (!group) return;
+  const memberIds = [...group.memberIds];
+  // Tell the new member AND every existing member the updated roster, so
+  // everyone's local group state converges — a join was previously only
+  // ever announced to the person joining.
+  for (const memberId of memberIds) {
+    const s = relayState.getSocket(memberId);
+    if (s) send(s, { type: 'group:invited', groupId: group.id, name: group.name, from: pending.inviterId, ownerId: group.ownerId, memberIds, isBroadcast: group.isBroadcast });
+  }
 }
 
 async function forwardToRecipients(userId: string, to: string | undefined, groupId: string | undefined, sendFn: (targetId: string) => void) {

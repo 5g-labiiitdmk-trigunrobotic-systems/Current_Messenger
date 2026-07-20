@@ -154,12 +154,26 @@ export default function GroupChatScreen() {
                 style={{ fontSize: 15, color: tokens.text, fontFamily: fontFamilies.regular }}
               />
             </Glass>
+            {/* Was always the mic icon regardless of draft content — group
+                chat has no voice-recording wired up at all (no onMic, no
+                recording state), so this button was ALWAYS actually a send
+                button underneath (onSend already no-ops on an empty draft),
+                just permanently showing the wrong icon for it. Matches
+                chat/[id].tsx's send/mic icon swap for the send case only —
+                not adding voice recording here, that's a separate feature
+                this fix doesn't touch. */}
             <Pressable onPress={onSend}>
               <View style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: a1, alignItems: 'center', justifyContent: 'center' }}>
-                <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={1.9}>
-                  <Path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
-                  <Path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3" />
-                </Svg>
+                {draft.trim() ? (
+                  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+                    <Path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7Z" />
+                  </Svg>
+                ) : (
+                  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={1.9}>
+                    <Path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                    <Path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3" />
+                  </Svg>
+                )}
               </View>
             </Pressable>
           </Glass>

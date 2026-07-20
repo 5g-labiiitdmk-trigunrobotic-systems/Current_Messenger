@@ -19,6 +19,7 @@ export default function GroupInfoScreen() {
   const { tokens, a1, a2 } = useTheme();
   const group = useGroupStore((s) => s.groups[id ?? '']);
   const leave = useGroupStore((s) => s.leave);
+  const invite = useGroupStore((s) => s.invite);
   const approved = useContactStore((s) => s.approved);
   const me = useAuthStore((s) => s.session?.user.id);
   const myProfile = useAuthStore((s) => s.profile);
@@ -36,6 +37,36 @@ export default function GroupInfoScreen() {
     const c = approved.find((c) => c.id === uid);
     return { id: uid, name: c?.display_name ?? c?.username ?? 'Member', hue: c?.avatar_hue ?? 200, photoUrl: c?.avatar_url ?? null, isAdmin: uid === group.ownerId };
   });
+
+  // This screen never had any way to add someone to an existing group at
+  // all — useGroupStore.invite() existed but had zero call sites anywhere
+  // in the app; the only place membership was ever set was at creation
+  // time. Minimal action-sheet contact picker, same idiom chat/[id].tsx's
+  // onForward already uses, rather than building a dedicated picker
+  // screen for this. invite() now sends a request the other person must
+  // accept (see groupStore.ts) — this only ever confirms the request was
+  // SENT, not that they've joined.
+  const onAddMember = () => {
+    const invitable = approved.filter((c) => !group.memberIds.includes(c.id));
+    if (invitable.length === 0) {
+      appAlert('No one to invite', 'Every approved contact is already a member of this group.');
+      return;
+    }
+    appAlert(
+      'Invite to group',
+      undefined,
+      invitable
+        .slice(0, 6)
+        .map((c) => ({
+          text: c.display_name || c.username,
+          onPress: () => {
+            invite(group.id, c.id);
+            appAlert('Invite sent', `${c.display_name || c.username} needs to accept before they're added to the group.`);
+          },
+        }))
+        .concat([{ text: 'Cancel', style: 'cancel' } as any])
+    );
+  };
 
   const onLeave = () => {
     appAlert('Leave group', `Leave ${group.name}?`, [
@@ -75,7 +106,12 @@ export default function GroupInfoScreen() {
         </Text>
       </View>
 
-      <Text style={{ fontSize: 12, fontFamily: fontFamilies.heavy, color: tokens.text3, textTransform: 'uppercase', letterSpacing: 0.8, margin: 4, marginTop: 24, marginBottom: 10 }}>Members</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', margin: 4, marginTop: 24, marginBottom: 10 }}>
+        <Text style={{ fontSize: 12, fontFamily: fontFamilies.heavy, color: tokens.text3, textTransform: 'uppercase', letterSpacing: 0.8 }}>Members</Text>
+        <Pressable onPress={onAddMember}>
+          <Text style={{ fontSize: 12.5, fontFamily: fontFamilies.bold, color: a1 }}>Add member</Text>
+        </Pressable>
+      </View>
       <Glass radius={22} style={{ overflow: 'hidden' }}>
         {members.map((m, i) => (
           <View key={m.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 13, padding: 12, paddingHorizontal: 16, borderBottomWidth: i === members.length - 1 ? 0 : 1, borderBottomColor: tokens.glassBorder }}>

@@ -28,6 +28,13 @@ interface PendingSession {
   requestedAt: number;
 }
 
+interface PendingGroupInvite {
+  groupId: string;
+  inviterId: string;
+  inviteeId: string;
+  requestedAt: number;
+}
+
 interface ActiveRing {
   callerId: string;
   callKind: 'voice' | 'video';
@@ -81,6 +88,16 @@ class RelayState {
    */
   private activeSessions = new Set<string>(); // canonical pairKey
   private pendingSessions = new Map<string, PendingSession>(); // canonical pairKey -> request
+
+  /**
+   * Pending group-membership invites, same "request must be accepted"
+   * model as pendingSessions above, reused rather than reinvented — an
+   * invite doesn't make someone a member until they respond. Keyed by
+   * `${groupId}:${inviteeId}` (not a pair-sorted key like sessions, since
+   * this is inherently one-directional: the group is inviting a specific
+   * person, not two peers requesting each other).
+   */
+  private pendingGroupInvites = new Map<string, PendingGroupInvite>();
 
   private pairKey(a: string, b: string): string {
     return [a, b].sort().join(':');
@@ -197,12 +214,16 @@ class RelayState {
     return { notifyWithdrawn, notifyRejected };
   }
 
-  createGroup(id: string, name: string, ownerId: string, memberIds: string[], isBroadcast = false): Group {
+  // Only the owner becomes a member immediately — everyone else the
+  // creator wants to add goes through the same invite-consent flow as
+  // group:invite (see handleGroupInviteRequest in index.ts), instead of
+  // being added directly the moment the group is created.
+  createGroup(id: string, name: string, ownerId: string, isBroadcast = false): Group {
     const group: Group = {
       id,
       name,
       ownerId,
-      memberIds: new Set([ownerId, ...memberIds]),
+      memberIds: new Set([ownerId]),
       admins: new Set([ownerId]),
       isBroadcast,
       createdAt: Date.now(),
@@ -229,6 +250,35 @@ class RelayState {
 
   isGroupMember(groupId: string, userId: string): boolean {
     return this.groups.get(groupId)?.memberIds.has(userId) ?? false;
+  }
+
+  private groupInviteKey(groupId: string, inviteeId: string): string {
+    return `${groupId}:${inviteeId}`;
+  }
+
+  requestGroupInvite(groupId: string, inviterId: string, inviteeId: string) {
+    this.pendingGroupInvites.set(this.groupInviteKey(groupId, inviteeId), { groupId, inviterId, inviteeId, requestedAt: Date.now() });
+  }
+
+  getPendingGroupInvite(groupId: string, inviteeId: string): PendingGroupInvite | undefined {
+    return this.pendingGroupInvites.get(this.groupInviteKey(groupId, inviteeId));
+  }
+
+  clearPendingGroupInvite(groupId: string, inviteeId: string) {
+    this.pendingGroupInvites.delete(this.groupInviteKey(groupId, inviteeId));
+  }
+
+  /** Called on disconnect — drops any invites waiting on this user's
+   * response so they don't linger forever unanswered by someone who's
+   * gone. Mirrors clearSessionsFor's disconnect cleanup, but doesn't need
+   * to notify inviters the way that one notifies session requesters: an
+   * invite has no live "waiting" UI state on the inviter's side to unstick,
+   * just a pending timeout that will fire and tell them 'timeout' anyway if
+   * this player never reconnects to respond. */
+  clearPendingGroupInvitesFor(userId: string) {
+    for (const [key, invite] of [...this.pendingGroupInvites]) {
+      if (invite.inviteeId === userId) this.pendingGroupInvites.delete(key);
+    }
   }
 }
 

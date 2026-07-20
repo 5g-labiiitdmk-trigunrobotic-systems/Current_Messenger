@@ -47,8 +47,11 @@ export type ClientEvent =
   | { type: 'typing'; to?: string; groupId?: string; isTyping: boolean }
   | { type: 'read'; to?: string; groupId?: string; messageId: string }
   | { type: 'presence:set'; status: 'online' | 'away' }
+  // `memberIds` is who to invite — only the creator becomes a member
+  // immediately, everyone else gets a pending group:invite_request.
   | { type: 'group:create'; groupId: string; name: string; memberIds: string[]; isBroadcast?: boolean }
   | { type: 'group:invite'; groupId: string; to: string }
+  | { type: 'group:invite_respond'; groupId: string; accept: boolean }
   | { type: 'group:leave'; groupId: string }
   | { type: 'call:signal'; to: string; signal: Record<string, unknown> }
   | { type: 'contact:request_sent'; to: string }
@@ -69,7 +72,12 @@ export type ServerEvent =
   | { type: 'presence'; userId: string; status: 'online' | 'offline'; lastSeenAt?: string }
   | { type: 'presence:snapshot'; onlineUserIds: string[] }
   | { type: 'group:created'; groupId: string; name: string; memberIds: string[]; isBroadcast?: boolean }
-  | { type: 'group:invited'; groupId: string; name: string; from: string; memberIds: string[]; isBroadcast?: boolean }
+  // Sent only once an invite is accepted, to the new member and every
+  // existing member. `ownerId` is explicit, not inferred from `from` (the
+  // inviter — any member can invite, not just the owner).
+  | { type: 'group:invited'; groupId: string; name: string; from: string; ownerId: string; memberIds: string[]; isBroadcast?: boolean }
+  | { type: 'group:invite_request'; groupId: string; groupName: string; from: string; isBroadcast?: boolean }
+  | { type: 'group:invite_declined'; groupId: string; userId: string; reason: 'declined' | 'timeout' | 'not_contact' | 'recipient_offline' }
   | { type: 'group:member_left'; groupId: string; userId: string }
   | { type: 'call:signal'; from: string; signal: Record<string, unknown> }
   | { type: 'contact:refresh' }

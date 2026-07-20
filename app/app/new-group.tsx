@@ -40,7 +40,7 @@ export default function NewGroupScreen() {
       return;
     }
     if (selected.size === 0) {
-      appAlert('Add members', 'Select at least one contact to add.');
+      appAlert('Invite members', 'Select at least one contact to invite.');
       return;
     }
     const groupId = createGroup(name.trim(), [...selected], isBroadcast);
@@ -84,7 +84,7 @@ export default function NewGroupScreen() {
       </Pressable>
 
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 22, marginBottom: 10, marginHorizontal: 4 }}>
-        <Text style={{ fontSize: 12, fontFamily: fontFamilies.heavy, color: tokens.text3, textTransform: 'uppercase', letterSpacing: 0.8 }}>Add members</Text>
+        <Text style={{ fontSize: 12, fontFamily: fontFamilies.heavy, color: tokens.text3, textTransform: 'uppercase', letterSpacing: 0.8 }}>Invite members</Text>
         <Text style={{ fontSize: 12.5, fontFamily: fontFamilies.bold, color: a1 }}>{selected.size} selected</Text>
       </View>
 
