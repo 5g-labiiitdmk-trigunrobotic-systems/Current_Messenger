@@ -84,10 +84,19 @@ export default function FinishSetupScreen() {
     // races this can't cover (e.g. network latency on the OTHER party's
     // device). ensureDeviceKeyPublished() no-ops fast if already done —
     // it usually finishes well before the app even gets here.
-    (async () => {
-      await useAuthStore.getState().ensureDeviceKeyPublished();
-      router.replace('/(tabs)/chats');
-    })();
+    //
+    // ensureDeviceKeyPublished() now catches its own errors internally
+    // (see authStore.ts) and never rejects, but this .finally() matches
+    // index.tsx's identical navigation call for the returning-session
+    // path — navigation must never depend on nothing else in this block
+    // ever throwing, the same lesson the unguarded version of this exact
+    // line just taught: it left the app permanently stuck on this loading
+    // spinner after a successful login, with every server-side call
+    // (auth, profile, contacts) already having completed.
+    useAuthStore
+      .getState()
+      .ensureDeviceKeyPublished()
+      .finally(() => router.replace('/(tabs)/chats'));
   }, [session, profile]);
 
   return (

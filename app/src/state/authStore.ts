@@ -72,8 +72,28 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   ensureDeviceKeyPublished: async () => {
     const session = get().session;
     if (!session) return;
-    const kp = await getOrCreateDeviceKeyPair(session.user.id);
-    await publishPublicKey(session.user.id, kp.publicKey).catch(() => {});
+    // Every caller of this method awaits it specifically to gate
+    // navigation/relay-connect on it finishing (see finish-setup.tsx,
+    // index.tsx, and the auth-state-change listener above) — which means
+    // this must NEVER reject, or whichever await is blocking on it never
+    // resolves either, permanently stranding the caller. That's exactly
+    // what happened: getOrCreateDeviceKeyPair() (a local SecureStore call,
+    // not a network request — invisible to any server-side log) had no
+    // try/catch here, so any failure reading/writing the keychain left
+    // finish-setup.tsx's unguarded `await ensureDeviceKeyPublished();
+    // router.replace(...)` block permanently stuck before its
+    // router.replace ever ran — a login/signup that looks fully successful
+    // server-side (every Supabase call in the logs shows 200/101) but
+    // never leaves the loading spinner client-side. publishPublicKey was
+    // already wrapped in .catch(() => {}) below; this closes the matching
+    // gap on the SecureStore side instead of just at one of its callers.
+    try {
+      const kp = await getOrCreateDeviceKeyPair(session.user.id);
+      await publishPublicKey(session.user.id, kp.publicKey).catch(() => {});
+    } catch (e: any) {
+      // eslint-disable-next-line no-console
+      console.error('[auth] ensureDeviceKeyPublished failed (device key unavailable this session):', e?.message ?? e);
+    }
   },
 
   refreshProfile: async () => {
