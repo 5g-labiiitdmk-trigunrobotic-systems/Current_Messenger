@@ -13,6 +13,8 @@ import { useChatStore, getThreadKey } from '../../src/state/chatStore';
 import { useGroupStore } from '../../src/state/groupStore';
 import { useContactStore } from '../../src/state/contactStore';
 import { useAuthStore } from '../../src/state/authStore';
+import { previewFor } from '../../src/data/conversations';
+import { appAlert } from '../../src/state/alertStore';
 
 export default function GroupChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -27,8 +29,14 @@ export default function GroupChatScreen() {
   const key = getThreadKey(id ?? '', true);
   const messages = threads[key] ?? [];
   const [draft, setDraft] = useState('');
+  const [replyTo, setReplyTo] = useState<string | null>(null);
   const listRef = useRef<FlatList>(null);
   const typingTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Same reply feature as chat/[id].tsx's 1:1 screen, applied here — the
+  // composer's reply banner and each sent bubble's quoted-reply strip both
+  // need the actual replied-to message, not just its id.
+  const replyToMessage = replyTo ? messages.find((m) => m.id === replyTo) : null;
 
   // FlatList below is rendered `inverted` — see the detailed comment in
   // app/chat/[id].tsx for the full four-round history of the keyboard-open
@@ -62,9 +70,19 @@ export default function GroupChatScreen() {
 
   const onSend = () => {
     if (!draft.trim()) return;
-    sendText(id ?? '', true, draft.trim());
+    sendText(id ?? '', true, draft.trim(), { replyToId: replyTo ?? undefined });
     setDraft('');
+    setReplyTo(null);
     setTyping(id ?? '', true, false);
+  };
+
+  const onLongPressMessage = (messageId: string) => {
+    appAlert('Message', undefined, [
+      { text: '👍 React', onPress: () => react(id ?? '', true, messageId, '👍') },
+      { text: '❤️ React', onPress: () => react(id ?? '', true, messageId, '❤️') },
+      { text: 'Reply', onPress: () => setReplyTo(messageId) },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
   };
 
   if (!group) {
@@ -139,9 +157,34 @@ export default function GroupChatScreen() {
             // reversed array in the opposite direction.
             const chronoPrev = invertedMessages[index + 1];
             const showName = item.from !== me && (!chronoPrev || chronoPrev.from !== item.from);
-            return <MessageBubble message={item} isMe={item.from === me} senderName={showName ? nameFor(item.from) : undefined} onLongPress={() => react(id ?? '', true, item.id, '👍')} />;
+            const repliedTo = item.replyToId ? messages.find((m) => m.id === item.replyToId) : null;
+            return (
+              <MessageBubble
+                message={item}
+                isMe={item.from === me}
+                senderName={showName ? nameFor(item.from) : undefined}
+                onLongPress={() => onLongPressMessage(item.id)}
+                replyPreview={repliedTo ? { senderLabel: nameFor(repliedTo.from), text: previewFor(repliedTo) } : null}
+              />
+            );
           }}
         />
+
+        {replyTo && replyToMessage && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 6, gap: 8 }}>
+            <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', gap: 8, borderLeftWidth: 3, borderLeftColor: a1, paddingLeft: 8 }}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={{ fontSize: 11.5, fontFamily: fontFamilies.bold, color: a1 }}>{nameFor(replyToMessage.from)}</Text>
+                <Text numberOfLines={1} ellipsizeMode="tail" style={{ fontSize: 12, color: tokens.text2, fontFamily: fontFamilies.medium }}>
+                  {previewFor(replyToMessage)}
+                </Text>
+              </View>
+            </View>
+            <Pressable onPress={() => setReplyTo(null)}>
+              <Text style={{ color: a1, fontFamily: fontFamilies.bold, fontSize: 12 }}>Cancel</Text>
+            </Pressable>
+          </View>
+        )}
 
         {canPost ? (
           <Glass radius={0} bordered={false} style={{ paddingHorizontal: 14, paddingTop: 10, paddingBottom: insets.bottom + 12, flexDirection: 'row', alignItems: 'center', gap: 9 }}>
