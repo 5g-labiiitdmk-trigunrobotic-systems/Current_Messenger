@@ -15,6 +15,8 @@ import { useContactStore } from '../../src/state/contactStore';
 import { useAuthStore } from '../../src/state/authStore';
 import { previewFor } from '../../src/data/conversations';
 import { appAlert } from '../../src/state/alertStore';
+import { pickImageBase64, startVoiceRecording, stopVoiceRecording } from '../../src/lib/media';
+import { useAudioRecorder, RecordingPresets } from 'expo-audio';
 
 export default function GroupChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -24,14 +26,19 @@ export default function GroupChatScreen() {
   const group = useGroupStore((s) => s.groups[id ?? '']);
   const approved = useContactStore((s) => s.approved);
   const threads = useChatStore((s) => s.threads);
-  const { sendText, setTyping, react, markRead } = useChatStore();
+  const { sendText, sendRich, setTyping, react, markRead } = useChatStore();
 
   const key = getThreadKey(id ?? '', true);
   const messages = threads[key] ?? [];
   const [draft, setDraft] = useState('');
   const [replyTo, setReplyTo] = useState<string | null>(null);
+  const [recording, setRecording] = useState(false);
   const listRef = useRef<FlatList>(null);
   const typingTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Same recorder ownership pattern as chat/[id].tsx — AudioRecorder
+  // instances can only be created via this hook, so the component owns
+  // it and passes it into media.ts's start/stopVoiceRecording.
+  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
 
   // Same reply feature as chat/[id].tsx's 1:1 screen, applied here — the
   // composer's reply banner and each sent bubble's quoted-reply strip both
@@ -74,6 +81,44 @@ export default function GroupChatScreen() {
     setDraft('');
     setReplyTo(null);
     setTyping(id ?? '', true, false);
+  };
+
+  // Directly reuses chat/[id].tsx's own onMic — same media.ts functions,
+  // same error handling (the 3-way start result and the "Recording
+  // failed" fallback are both from that recent reliability fix, carried
+  // over unchanged here rather than reimplemented). The only difference
+  // from the 1:1 version is `true` for isGroup on sendRich, which routes
+  // through sendRich's existing group branch (encryptForGroupMembers —
+  // already-working pairwise fan-out encryption, the same mechanism
+  // group text/replies already use), not the 1:1 single-recipient path.
+  const onMic = async () => {
+    if (!recording) {
+      const result = await startVoiceRecording(recorder);
+      if (result === 'permission_denied') {
+        appAlert('Microphone permission needed', 'Enable microphone access to send voice messages.');
+        return;
+      }
+      if (result === 'start_failed') {
+        appAlert('Could not start recording', 'Something went wrong starting the microphone — try again in a moment.');
+        return;
+      }
+      setRecording(true);
+    } else {
+      setRecording(false);
+      const result = await stopVoiceRecording(recorder);
+      if (result) sendRich(id ?? '', true, 'voice', result);
+      else appAlert('Recording failed', "Your voice message couldn't be saved — try recording again.");
+    }
+  };
+
+  // Directly reuses chat/[id].tsx's photo path (pickImageBase64 handles
+  // permission + picker + compression) — not the rest of its "Share"
+  // menu (Location/Sticker/Poll), which wasn't asked for and doesn't
+  // exist in group chat. No intermediate menu since there's only one
+  // option here — tapping attach opens the picker directly.
+  const onAttach = async () => {
+    const img = await pickImageBase64();
+    if (img) sendRich(id ?? '', true, 'media', img);
   };
 
   const onLongPressMessage = (messageId: string) => {
@@ -188,25 +233,32 @@ export default function GroupChatScreen() {
 
         {canPost ? (
           <Glass radius={0} bordered={false} style={{ paddingHorizontal: 14, paddingTop: 10, paddingBottom: insets.bottom + 12, flexDirection: 'row', alignItems: 'center', gap: 9 }}>
+            {/* Photo attach — directly reuses chat/[id].tsx's pickImageBase64
+                + sendRich pipeline, wired to the group branch (isGroup=true)
+                instead of duplicating the picker/compression/encryption
+                logic. */}
+            <Pressable onPress={onAttach} style={{ width: 42, height: 42, alignItems: 'center', justifyContent: 'center' }}>
+              <Glass radius={21} style={{ width: 42, height: 42, alignItems: 'center', justifyContent: 'center' }}>
+                <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={tokens.text2} strokeWidth={2} strokeLinecap="round">
+                  <Path d="M12 5v14M5 12h14" />
+                </Svg>
+              </Glass>
+            </Pressable>
             <Glass radius={23} style={{ flex: 1, height: 46, paddingHorizontal: 16, justifyContent: 'center' }} variant="field">
               <TextInput
                 value={draft}
                 onChangeText={onChangeDraft}
-                placeholder={`Message ${group.name}…`}
+                placeholder={recording ? 'Recording…' : `Message ${group.name}…`}
                 placeholderTextColor={tokens.text3}
+                editable={!recording}
                 style={{ fontSize: 15, color: tokens.text, fontFamily: fontFamilies.regular }}
               />
             </Glass>
-            {/* Was always the mic icon regardless of draft content — group
-                chat has no voice-recording wired up at all (no onMic, no
-                recording state), so this button was ALWAYS actually a send
-                button underneath (onSend already no-ops on an empty draft),
-                just permanently showing the wrong icon for it. Matches
-                chat/[id].tsx's send/mic icon swap for the send case only —
-                not adding voice recording here, that's a separate feature
-                this fix doesn't touch. */}
-            <Pressable onPress={onSend}>
-              <View style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: a1, alignItems: 'center', justifyContent: 'center' }}>
+            {/* Send/mic toggle — now genuinely wired to voice recording
+                (see onMic above), matching chat/[id].tsx's composer
+                exactly, including the recording-in-progress red tint. */}
+            <Pressable onPress={draft.trim() ? onSend : onMic}>
+              <View style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: recording ? '#ff5a6e' : a1, alignItems: 'center', justifyContent: 'center' }}>
                 {draft.trim() ? (
                   <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
                     <Path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7Z" />
