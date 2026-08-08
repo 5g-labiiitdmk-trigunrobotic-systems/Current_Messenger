@@ -568,7 +568,17 @@ export default function ChatScreen() {
         <Glass
           radius={0}
           bordered={false}
-          style={{ paddingHorizontal: 14, paddingTop: 10, paddingBottom: 12, flexDirection: 'row', alignItems: 'center', gap: 9, opacity: canSend ? 1 : 0.5 }}
+          style={{
+            paddingHorizontal: 14,
+            paddingTop: 10,
+            paddingBottom: 12,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 9,
+            opacity: canSend ? 1 : 0.5,
+            borderTopWidth: 1,
+            borderTopColor: tokens.glassBorder,
+          }}
         >
           <Pressable onPress={onAttach} disabled={!canSend} style={{ width: 42, height: 42, alignItems: 'center', justifyContent: 'center' }}>
             <Glass radius={21} style={{ width: 42, height: 42, alignItems: 'center', justifyContent: 'center' }}>
