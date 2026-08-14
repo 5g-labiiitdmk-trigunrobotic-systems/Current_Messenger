@@ -13,7 +13,7 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.current.app",
+      "bundleIdentifier": "com.trigunrobotics.current",
       "infoPlist": {
         "NSCameraUsageDescription": "Current uses the camera to scan contact QR codes and take photos to share in chats.",
         "NSMicrophoneUsageDescription": "Current uses the microphone for voice messages and voice/video calls.",
