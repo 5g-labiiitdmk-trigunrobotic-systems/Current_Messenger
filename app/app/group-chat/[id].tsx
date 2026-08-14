@@ -232,7 +232,16 @@ export default function GroupChatScreen() {
         )}
 
         {canPost ? (
-          <Glass radius={0} bordered={false} style={{ paddingHorizontal: 14, paddingTop: 10, paddingBottom: insets.bottom + 12, flexDirection: 'row', alignItems: 'center', gap: 9 }}>
+          <View
+            style={{
+              paddingHorizontal: 14,
+              paddingTop: 10,
+              paddingBottom: 12,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 9,
+            }}
+          >
             {/* Photo attach — directly reuses chat/[id].tsx's pickImageBase64
                 + sendRich pipeline, wired to the group branch (isGroup=true)
                 instead of duplicating the picker/compression/encryption
@@ -271,7 +280,7 @@ export default function GroupChatScreen() {
                 )}
               </View>
             </Pressable>
-          </Glass>
+          </View>
         ) : (
           <View style={{ padding: 16, paddingBottom: insets.bottom + 16 }}>
             <Text style={{ textAlign: 'center', color: tokens.text3, fontFamily: fontFamilies.semibold, fontSize: 12.5 }}>Only the channel owner can post here.</Text>
