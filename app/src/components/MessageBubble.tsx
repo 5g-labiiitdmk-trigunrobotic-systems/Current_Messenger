@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Image, Pressable, Modal, Platform, Linking, useWindowDimensions } from 'react-native';
+import { View, Text, Image, Pressable, Modal, Platform, Linking, useWindowDimensions, ActivityIndicator } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import Animated, { FadeInUp } from 'react-native-reanimated';
+import * as FileSystem from 'expo-file-system/legacy';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import { Glass } from './Glass';
 import { useTheme } from '../theme/useTheme';
 import { fontFamilies } from '../theme/tokens';
@@ -132,6 +134,9 @@ function BubbleContent({ m, isMe, a1, a2, tokens, meId, onVote, replyPreview }: 
         )}
       </Pressable>
     );
+  }
+  if (m.kind === 'media' && m.meta?.base64 && m.meta?.mediaType === 'video') {
+    return <VideoMessageBubble meta={m.meta} />;
   }
   if (m.kind === 'media' && m.meta?.base64) {
     return (
@@ -592,6 +597,152 @@ function MentionText({ text, baseColor, mentionColor, isMe }: { text: string; ba
         )
       )}
     </Text>
+  );
+}
+
+/**
+ * Same defense-in-depth purpose as LocationErrorBoundary above — expo-video
+ * is a new dependency this round with no real-device verification
+ * available in this sandbox, so a native-surface error here falls back to
+ * a plain message instead of taking the whole chat list down.
+ */
+class VideoErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(error: unknown) {
+    // eslint-disable-next-line no-console
+    console.error('[VideoMessageBubble] playback error:', error);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <View style={{ flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={{ color: '#fff', fontFamily: fontFamilies.medium }}>Couldn't play this video.</Text>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function VideoPlayerModalInner({ onClose, base64, mime }: { onClose: () => void; base64: string; mime: string }) {
+  const [uri, setUri] = useState<string | null>(null);
+  // Distinct from "uri still null because staging hasn't finished yet" —
+  // without this, a write failure (confirmed on web: expo-file-system's
+  // writeAsStringAsync has no web implementation at all, throwing
+  // "not available on web") left the modal spinning forever with no
+  // indication anything had gone wrong.
+  const [stageError, setStageError] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const ext = mime.includes('quicktime') ? 'mov' : 'mp4';
+        const path = `${FileSystem.cacheDirectory}video-${Date.now()}.${ext}`;
+        await FileSystem.writeAsStringAsync(path, base64, { encoding: FileSystem.EncodingType.Base64 });
+        if (!cancelled) setUri(path);
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.error('[VideoMessageBubble] failed to stage video file:', e);
+        if (!cancelled) setStageError(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // base64/mime are effectively immutable for a given message — re-run
+    // only if this modal instance is reused for a different message.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [base64, mime]);
+
+  // null source is valid — expo-video shows nothing/idle until replaced,
+  // which is exactly the "still staging the file" state above.
+  const player = useVideoPlayer(uri, (p) => {
+    p.loop = false;
+    if (uri) p.play();
+  });
+
+  return (
+    <Modal visible animationType="fade" onRequestClose={onClose} statusBarTranslucent>
+      <View style={{ flex: 1, backgroundColor: '#000' }}>
+        <VideoErrorBoundary>
+          {uri ? (
+            <VideoView player={player} style={{ flex: 1 }} nativeControls contentFit="contain" />
+          ) : stageError ? (
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 }}>
+              <Text style={{ color: '#fff', fontFamily: fontFamilies.medium, textAlign: 'center' }}>Couldn't play this video.</Text>
+            </View>
+          ) : (
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+              <ActivityIndicator color="#fff" />
+            </View>
+          )}
+        </VideoErrorBoundary>
+        <Pressable
+          onPress={onClose}
+          style={{ position: 'absolute', top: 56, right: 20, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' }}
+        >
+          <Text style={{ color: '#fff', fontSize: 18, fontFamily: fontFamilies.bold }}>✕</Text>
+        </Pressable>
+      </View>
+    </Modal>
+  );
+}
+
+// Only mounted while the modal is open, so useVideoPlayer (a hook) never
+// runs for videos the user hasn't tapped to play — same on-demand cost
+// tradeoff already used for the location bubble's expanded map view.
+function VideoPlayerModal({ visible, onClose, base64, mime }: { visible: boolean; onClose: () => void; base64: string; mime: string }) {
+  if (!visible) return null;
+  return <VideoPlayerModalInner onClose={onClose} base64={base64} mime={mime} />;
+}
+
+function PlayIcon({ size = 22 }: { size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="#fff">
+      <Path d="M8 5v14l11-7-11-7Z" />
+    </Svg>
+  );
+}
+
+/**
+ * Thumbnail + play button, never autoplaying inline — tapping opens a
+ * fullscreen player (VideoPlayerModal). thumbnailBase64 can be null (see
+ * pickVideoBase64's own try/catch around thumbnail generation), in which
+ * case a plain film-strip placeholder is shown instead of leaving a
+ * broken image.
+ */
+function VideoMessageBubble({ meta }: { meta: any }) {
+  const [expanded, setExpanded] = useState(false);
+  const thumb = meta.thumbnailBase64 ? `data:image/jpeg;base64,${meta.thumbnailBase64}` : null;
+  return (
+    <>
+      <Pressable onPress={() => setExpanded(true)} style={{ borderRadius: 20, overflow: 'hidden', width: 220, height: 220 }}>
+        {thumb ? (
+          <Image source={{ uri: thumb }} style={{ width: 220, height: 220 }} resizeMode="cover" />
+        ) : (
+          <View style={{ width: 220, height: 220, alignItems: 'center', justifyContent: 'center', backgroundColor: '#1c1c22' }}>
+            <PlayIcon size={30} />
+          </View>
+        )}
+        <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}>
+          <View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' }}>
+            <PlayIcon />
+          </View>
+        </View>
+        {meta.durationLabel && (
+          <View style={{ position: 'absolute', right: 6, bottom: 6, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+            <Text style={{ color: '#fff', fontSize: 10.5, fontFamily: fontFamilies.semibold }}>{meta.durationLabel}</Text>
+          </View>
+        )}
+      </Pressable>
+      <VideoPlayerModal visible={expanded} onClose={() => setExpanded(false)} base64={String(meta.base64)} mime={String(meta.mime ?? 'video/mp4')} />
+    </>
   );
 }
 

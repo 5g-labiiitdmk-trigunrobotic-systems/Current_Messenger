@@ -2,6 +2,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import * as FileSystem from 'expo-file-system/legacy';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
+import * as VideoThumbnails from 'expo-video-thumbnails';
 import type { AudioRecorder } from 'expo-audio';
 import { createAudioPlayer, requestRecordingPermissionsAsync, setAudioModeAsync } from 'expo-audio';
 
@@ -46,6 +47,89 @@ export async function pickAvatarImage(source: 'camera' | 'library'): Promise<{ b
   const saved = await rendered.saveAsync({ compress: 0.7, format: SaveFormat.JPEG, base64: true });
   if (!saved.base64) return null;
   return { base64: saved.base64, mime: 'image/jpeg' };
+}
+
+// The relay has zero persistence and just forwards messages as-is — a
+// video's base64 encoding (~4/3 the raw byte size) travels in a single
+// WebSocket frame, and in a group chat gets fanned out pairwise, once
+// per member (see sendRich in chatStore.ts). A 15MB cap keeps a single
+// group send's total relay traffic bounded (15MB * ~4/3 * N members,
+// not unbounded), while still covering a genuinely short compressed
+// clip from a phone camera. Duration is capped first and separately
+// (60s) since that's the more meaningful abuse limit from a user's
+// perspective — "not a huge file" vs "not a mistakenly-shared movie".
+export const MAX_VIDEO_DURATION_SECONDS = 60;
+export const MAX_VIDEO_FILE_BYTES = 15 * 1024 * 1024;
+// Matches pickAvatarImage's downsizing reasoning below — a video frame
+// grabbed at the source video's native resolution (e.g. 1080p+) would
+// make the thumbnail itself bigger than most photo messages this app
+// sends, for something that only ever renders at bubble-preview size.
+const THUMBNAIL_MAX_WIDTH = 320;
+
+export type PickVideoResult =
+  | { ok: true; base64: string; mime: string; durationLabel: string; thumbnailBase64: string | null }
+  | { ok: false; reason: 'canceled' | 'permission_denied' | 'too_long' | 'too_large' | 'failed' };
+
+function formatDuration(totalSeconds: number): string {
+  const mins = Math.floor(totalSeconds / 60);
+  const secs = totalSeconds % 60;
+  return `${mins}:${String(secs).padStart(2, '0')}`;
+}
+
+/**
+ * Video picker, mirroring pickImageBase64's shape and error handling.
+ * Unlike images, expo-image-picker never returns base64 for video assets
+ * (only a file uri) — read separately via FileSystem, same technique
+ * already proven in stopVoiceRecording below. Thumbnail generation is a
+ * new native dependency (expo-video-thumbnails, official Expo SDK,
+ * version-aligned with the rest of this project's ^57.0.x packages) —
+ * wrapped in its own try/catch so a thumbnail failure degrades to "send
+ * the video without a preview frame" rather than failing the whole send;
+ * its on-device native behavior is unverified in this sandbox (no real
+ * device here), same disclosed limitation as every other native-module
+ * change this project has made.
+ */
+export async function pickVideoBase64(): Promise<PickVideoResult> {
+  try {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) return { ok: false, reason: 'permission_denied' };
+
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['videos'], quality: 0.6 });
+    if (result.canceled || !result.assets[0]) return { ok: false, reason: 'canceled' };
+    const asset = result.assets[0];
+
+    const durationSeconds = asset.duration ? Math.round(asset.duration / 1000) : 0;
+    if (durationSeconds > MAX_VIDEO_DURATION_SECONDS) return { ok: false, reason: 'too_long' };
+
+    // Fast-path rejection when the picker reports a size, before ever
+    // reading the file into memory — not all platforms populate
+    // fileSize, so this is a best-effort early check, not the only one.
+    if (asset.fileSize && asset.fileSize > MAX_VIDEO_FILE_BYTES) return { ok: false, reason: 'too_large' };
+
+    const base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 });
+    const approxBytes = (base64.length * 3) / 4;
+    if (approxBytes > MAX_VIDEO_FILE_BYTES) return { ok: false, reason: 'too_large' };
+
+    let thumbnailBase64: string | null = null;
+    try {
+      const { uri: rawThumbUri } = await VideoThumbnails.getThumbnailAsync(asset.uri, { time: 0 });
+      const context = ImageManipulator.manipulate(rawThumbUri);
+      context.resize({ width: THUMBNAIL_MAX_WIDTH });
+      const rendered = await context.renderAsync();
+      const saved = await rendered.saveAsync({ compress: 0.6, format: SaveFormat.JPEG, base64: true });
+      thumbnailBase64 = saved.base64 ?? null;
+    } catch (e: any) {
+      // eslint-disable-next-line no-console
+      console.error('[media] video thumbnail generation failed, sending without one:', e?.message ?? e);
+      thumbnailBase64 = null;
+    }
+
+    return { ok: true, base64, mime: asset.mimeType ?? 'video/mp4', durationLabel: formatDuration(durationSeconds), thumbnailBase64 };
+  } catch (e: any) {
+    // eslint-disable-next-line no-console
+    console.error('[media] pickVideoBase64 failed:', e?.message ?? e);
+    return { ok: false, reason: 'failed' };
+  }
 }
 
 export async function getCurrentLocationOnce(): Promise<{ lat: number; lng: number } | null> {

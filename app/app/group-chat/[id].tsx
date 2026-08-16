@@ -15,7 +15,7 @@ import { useContactStore } from '../../src/state/contactStore';
 import { useAuthStore } from '../../src/state/authStore';
 import { previewFor } from '../../src/data/conversations';
 import { appAlert } from '../../src/state/alertStore';
-import { pickImageBase64, startVoiceRecording, stopVoiceRecording } from '../../src/lib/media';
+import { pickImageBase64, pickVideoBase64, startVoiceRecording, stopVoiceRecording, MAX_VIDEO_DURATION_SECONDS, MAX_VIDEO_FILE_BYTES } from '../../src/lib/media';
 import { useAudioRecorder, RecordingPresets } from 'expo-audio';
 
 export default function GroupChatScreen() {
@@ -117,8 +117,34 @@ export default function GroupChatScreen() {
   // exist in group chat. No intermediate menu since there's only one
   // option here — tapping attach opens the picker directly.
   const onAttach = async () => {
-    const img = await pickImageBase64();
-    if (img) sendRich(id ?? '', true, 'media', img);
+    appAlert('Share', undefined, [
+      {
+        text: 'Photo',
+        onPress: async () => {
+          const img = await pickImageBase64();
+          if (img) sendRich(id ?? '', true, 'media', img);
+        },
+      },
+      {
+        text: 'Video',
+        onPress: async () => {
+          const result = await pickVideoBase64();
+          if (result.ok) {
+            sendRich(id ?? '', true, 'media', { base64: result.base64, mime: result.mime, mediaType: 'video', durationLabel: result.durationLabel, thumbnailBase64: result.thumbnailBase64 });
+          } else if (result.reason === 'permission_denied') {
+            appAlert('Photo library permission needed', 'Enable access to your photo library to share a video.');
+          } else if (result.reason === 'too_long') {
+            appAlert('Video too long', `Shared videos are limited to ${MAX_VIDEO_DURATION_SECONDS} seconds.`);
+          } else if (result.reason === 'too_large') {
+            appAlert('Video too large', `Shared videos are limited to ${Math.round(MAX_VIDEO_FILE_BYTES / (1024 * 1024))}MB.`);
+          } else if (result.reason === 'failed') {
+            appAlert('Could not share this video', 'Something went wrong reading that video — try a different one.');
+          }
+          // 'canceled': user backed out of the picker, nothing to show.
+        },
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
   };
 
   const onLongPressMessage = (messageId: string) => {

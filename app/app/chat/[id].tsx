@@ -19,7 +19,7 @@ import { useAuthStore } from '../../src/state/authStore';
 import { useChatSessionStore } from '../../src/state/chatSessionStore';
 import { appAlert } from '../../src/state/alertStore';
 import { isPresenceVisible } from '../../src/lib/presencePolicy';
-import { pickImageBase64, getCurrentLocationOnce, startVoiceRecording, stopVoiceRecording, playAudioBase64 } from '../../src/lib/media';
+import { pickImageBase64, pickVideoBase64, getCurrentLocationOnce, startVoiceRecording, stopVoiceRecording, playAudioBase64, MAX_VIDEO_DURATION_SECONDS, MAX_VIDEO_FILE_BYTES } from '../../src/lib/media';
 import { useAudioRecorder, RecordingPresets } from 'expo-audio';
 import type { RejectReason } from '../../src/state/chatSessionStore';
 
@@ -172,6 +172,24 @@ export default function ChatScreen() {
         onPress: async () => {
           const img = await pickImageBase64();
           if (img) sendRich(id ?? '', false, 'media', img);
+        },
+      },
+      {
+        text: 'Video',
+        onPress: async () => {
+          const result = await pickVideoBase64();
+          if (result.ok) {
+            sendRich(id ?? '', false, 'media', { base64: result.base64, mime: result.mime, mediaType: 'video', durationLabel: result.durationLabel, thumbnailBase64: result.thumbnailBase64 });
+          } else if (result.reason === 'permission_denied') {
+            appAlert('Photo library permission needed', 'Enable access to your photo library to share a video.');
+          } else if (result.reason === 'too_long') {
+            appAlert('Video too long', `Shared videos are limited to ${MAX_VIDEO_DURATION_SECONDS} seconds.`);
+          } else if (result.reason === 'too_large') {
+            appAlert('Video too large', `Shared videos are limited to ${Math.round(MAX_VIDEO_FILE_BYTES / (1024 * 1024))}MB.`);
+          } else if (result.reason === 'failed') {
+            appAlert('Could not share this video', 'Something went wrong reading that video — try a different one.');
+          }
+          // 'canceled': user backed out of the picker, nothing to show.
         },
       },
       {
