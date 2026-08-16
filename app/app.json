@@ -56,6 +56,16 @@
       "expo-font",
       "expo-secure-store",
       [
+        "expo-build-properties",
+        {
+          "android": {
+            "enableMinifyInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true,
+            "extraProguardRules": "# react-native-webrtc, @notifee/react-native, expo-notifications, and every\n# expo-modules-core-based module (expo-sqlite, expo-video, etc.) already\n# bundle their own consumer ProGuard rules via consumerProguardFiles in\n# their own build.gradle — confirmed by reading each package's android/\n# directory in node_modules, not assumed — so none of those need duplicate\n# rules here. expo-sqlite's useSQLCipher mode vendors SQLCipher from C\n# source directly into its own native module (see expo-sqlite/android/\n# build.gradle's SQLITE3_SRC_DIR) rather than depending on a separate\n# net.sqlcipher.* Java package, so the commonly-cited net.sqlcipher.**\n# keep rule does not apply to this project's setup and was deliberately\n# left out rather than added on the assumption it would.\n#\n# What's below covers the two dependencies that do NOT bundle their own\n# rules and have a documented history of R8-related native-bridge issues:\n# react-native-maps' own bridge code (the underlying Play Services Maps\n# SDK bundles its own rules, but the com.rnmaps.maps.* bridge classes\n# do not), and react-native-incall-manager (no bundled rules at all).\n-keep class com.google.android.gms.maps.** { *; }\n-keep interface com.google.android.gms.maps.** { *; }\n-keep class com.google.android.gms.internal.maps.** { *; }\n-keep class com.rnmaps.maps.** { *; }\n-keep class com.zxcpoiu.incallmanager.** { *; }\n"
+          }
+        }
+      ],
+      [
         "expo-camera",
         {
           "cameraPermission": "Current uses the camera to scan contact QR codes and take photos to share in chats."
