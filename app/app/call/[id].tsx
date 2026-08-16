@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet, AppState } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
@@ -12,6 +12,7 @@ import { useContactStore } from '../../src/state/contactStore';
 import { RTCView } from '../../src/lib/webrtc';
 import type { AudioRoute } from '../../src/lib/callAudio';
 import { appAlert } from '../../src/state/alertStore';
+import { isPipSupported, setPipEligible } from '../../src/lib/pipController';
 
 const END_REASON_LABEL: Record<string, string> = {
   hangup: 'Call ended',
@@ -114,6 +115,39 @@ export default function CallScreen() {
     }
   }, [phase]);
 
+  // Picture-in-picture: only eligible for an active VIDEO call — voice
+  // calls have no video to show in a PiP window (per the request, no PiP
+  // for those). The actual enter-PiP trigger runs natively (see
+  // pipController.ts / modules/pip-controller's OnUserLeavesActivity), not
+  // here — this effect only ever tells native whether that's currently
+  // allowed. Cleared on any dependency change or unmount so eligibility
+  // can never outlive this exact call.
+  useEffect(() => {
+    setPipEligible(phase === 'active' && kind === 'video');
+    return () => setPipEligible(false);
+  }, [phase, kind]);
+
+  // Best-effort inference of "we're probably in PiP right now" — there is
+  // no native onPictureInPictureModeChanged bridge (see pipController.ts's
+  // comment on why), so this is backgrounding-while-eligible, not a
+  // guaranteed-accurate signal from Android itself. Used only to simplify
+  // this screen's own rendering (see isInPip below) while backgrounded, not
+  // for anything call-state-affecting — getting this "wrong" in either
+  // direction has no worse consequence than the PiP window still showing
+  // full controls it can't fit, or the full-screen UI staying simplified
+  // for a moment after returning to the app.
+  const [isInPip, setIsInPip] = useState(false);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'background' && phase === 'active' && kind === 'video' && isPipSupported()) {
+        setIsInPip(true);
+      } else if (state === 'active') {
+        setIsInPip(false);
+      }
+    });
+    return () => sub.remove();
+  }, [phase, kind]);
+
   const name = contact?.display_name || contact?.username || 'Unknown';
   const isVideo = kind === 'video' && !cameraOff;
   const showRemoteVideo = isVideo && !!remoteStream;
@@ -138,6 +172,46 @@ export default function CallScreen() {
         .concat([{ text: 'Cancel', style: 'cancel' } as any])
     );
   };
+
+  // PiP window is the OS resizing this same screen's view tree down to a
+  // tiny floating window — the normal full-screen layout (header text,
+  // avatar, name, mute/camera/speaker/hangup buttons) would be illegibly
+  // cramped or entirely unreachable at that size, so this renders only the
+  // remote video plus a minimal mute indicator instead of the full UI
+  // below. Real device confirmation needed that Android actually resizes
+  // this cleanly — see this round's report.
+  if (isInPip) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#0a0a0c' }}>
+        {showRemoteVideo ? (
+          <RTCView streamURL={(remoteStream as any).toURL()} style={StyleSheet.absoluteFill} objectFit="cover" />
+        ) : (
+          <BokehBackground />
+        )}
+        {muted && (
+          <View
+            style={{
+              position: 'absolute',
+              top: 8,
+              left: 8,
+              width: 26,
+              height: 26,
+              borderRadius: 13,
+              backgroundColor: 'rgba(0,0,0,0.55)',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+              <Path d="M1 1l22 22" />
+              <Path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V5a3 3 0 0 0-5.94-.6" />
+              <Path d="M17 16.95A7 7 0 0 1 5 12v-2M19 10v2a7 7 0 0 1-.11 1.23" />
+            </Svg>
+          </View>
+        )}
+      </View>
+    );
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: '#0a0a0c' }}>

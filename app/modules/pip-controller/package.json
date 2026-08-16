@@ -1,0 +1,7 @@
+{
+  "name": "pip-controller",
+  "version": "1.0.0",
+  "description": "Local Expo module: minimal native surface for entering Android Picture-in-Picture during an active video call. Android only — see expo-module.config.json.",
+  "main": "index.ts",
+  "private": true
+}

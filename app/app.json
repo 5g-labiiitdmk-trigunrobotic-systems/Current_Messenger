@@ -124,7 +124,8 @@
         }
       ],
       "react-native-maps",
-      "./plugins/withLockScreenCallActivity"
+      "./plugins/withLockScreenCallActivity",
+      "./plugins/withPictureInPicture"
     ],
     "experiments": {
       "typedRoutes": true
