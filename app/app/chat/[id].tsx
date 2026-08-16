@@ -583,7 +583,9 @@ export default function ChatScreen() {
           </View>
         )}
 
-        <View
+        <Glass
+          radius={0}
+          bordered={false}
           style={{
             paddingHorizontal: 14,
             paddingTop: 10,
@@ -592,6 +594,8 @@ export default function ChatScreen() {
             alignItems: 'center',
             gap: 9,
             opacity: canSend ? 1 : 0.5,
+            borderTopWidth: 1,
+            borderTopColor: tokens.glassBorder,
           }}
         >
           <Pressable onPress={onAttach} disabled={!canSend} style={{ width: 42, height: 42, alignItems: 'center', justifyContent: 'center' }}>
@@ -625,7 +629,7 @@ export default function ChatScreen() {
               )}
             </View>
           </Pressable>
-        </View>
+        </Glass>
       </KeyboardAvoidingView>
     </View>
   );
