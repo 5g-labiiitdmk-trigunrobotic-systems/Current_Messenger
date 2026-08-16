@@ -248,7 +248,23 @@ client embedding and can optionally be domain/bundle-ID restricted from
 their dashboard, unlike TURN's shared-secret relay credentials, which must
 never leave the server. Leave it unset and shared-location messages on
 Android fall back to a plain coordinate bubble instead of a map — nothing
-crashes, and it never falls back to hotlinking OSM's server again.
+crashes, and it never falls back to hotlinking OSM's server again. The
+fallback bubble has its own "Why no map?" action that names the exact
+reason (missing key vs. tiles failing to load vs. a render error) —
+check that first if this ever needs debugging again, rather than
+guessing.
+
+**If you're building with `eas build`**: a local `app/.env` is only read
+by `expo start`/local builds — EAS's cloud build servers do not see it.
+Every `EXPO_PUBLIC_` variable your build needs (this one included) has to
+be added to EAS's own environment configuration separately, e.g.
+`eas env:create --name EXPO_PUBLIC_MAPTILER_API_KEY --value <key> --environment production`
+(or the equivalent in `eas.json`'s `build.<profile>.env`, or the EAS
+dashboard). It's easy to add a new `EXPO_PUBLIC_` var to your local
+`.env` when a feature is first built and forget it also needs adding to
+EAS separately — if other `EXPO_PUBLIC_` values already work in your EAS
+builds (Supabase auth, etc.) but this one doesn't, that mismatch is the
+most likely explanation.
 
 ## 4. Running the app
 

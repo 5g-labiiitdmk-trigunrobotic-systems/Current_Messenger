@@ -9,6 +9,7 @@ import { useTheme } from '../theme/useTheme';
 import { fontFamilies } from '../theme/tokens';
 import type { ChatMessage } from '../state/chatStore';
 import { playAudioBase64 } from '../lib/media';
+import { appAlert } from '../state/alertStore';
 
 function timeLabel(iso: string) {
   const d = new Date(iso);
@@ -328,17 +329,19 @@ function StaticTileMap({
   // way for the caller to react. This tracks failures per tile and fires
   // once every tile in the current layout has failed, so the caller can
   // swap to a labeled fallback instead of leaving a wordless blank box.
-  onAllTilesFailed?: () => void;
+  onAllTilesFailed?: (failedCount: number, totalCount: number, lastError?: string) => void;
 }) {
   const tiles = buildTileLayout(lat, lng, zoom, width, height);
   const [failedKeys, setFailedKeys] = useState<Set<string>>(new Set());
+  const lastErrorRef = React.useRef<string | undefined>(undefined);
 
   useEffect(() => {
     setFailedKeys(new Set());
+    lastErrorRef.current = undefined;
   }, [lat, lng, zoom, width, height]);
 
   useEffect(() => {
-    if (tiles.length > 0 && failedKeys.size >= tiles.length) onAllTilesFailed?.();
+    if (tiles.length > 0 && failedKeys.size >= tiles.length) onAllTilesFailed?.(failedKeys.size, tiles.length, lastErrorRef.current);
     // tiles is rebuilt fresh every render — comparing by count, not
     // identity, is what actually reflects "did every tile fail".
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -351,7 +354,18 @@ function StaticTileMap({
           key={t.key}
           source={{ uri: t.url }}
           style={{ position: 'absolute', left: t.left, top: t.top, width: TILE_SIZE, height: TILE_SIZE }}
-          onError={() => setFailedKeys((prev) => (prev.has(t.key) ? prev : new Set(prev).add(t.key)))}
+          onError={(e) => {
+            // RN's Image onError payload shape differs by platform (native
+            // gives nativeEvent.error, web gives a plain Event with no
+            // equivalent detail) — captured best-effort, not guaranteed
+            // present, since this is exactly the kind of platform
+            // difference this round is about not guessing at further.
+            const msg = (e?.nativeEvent as any)?.error;
+            if (msg) lastErrorRef.current = String(msg);
+            // eslint-disable-next-line no-console
+            console.warn('[StaticTileMap] tile failed to load:', t.url, msg ?? '(no error detail from this platform)');
+            setFailedKeys((prev) => (prev.has(t.key) ? prev : new Set(prev).add(t.key)));
+          }}
         />
       ))}
       <View style={{ position: 'absolute', left: width / 2 - 15, top: height / 2 - 30 }}>
@@ -378,6 +392,15 @@ function openInMaps(lat: number, lng: number) {
 // states (config missing, tiles failed to load) still hand off to the
 // device's own maps app, same as the real map preview's expanded view
 // already does.
+// debugReason: this is the direct response to "we can't tell what's
+// actually failing on Android without guessing again" — every fallback
+// path now carries a concrete, specific reason string (not just a
+// console.error that requires a debugger/logcat to ever see) and this
+// renders a tappable "Why no map?" action that shows it in a plain
+// appAlert, reachable on a real device with zero tooling. Kept separate
+// from "Open in Maps" (which stays the primary action) rather than
+// merging them, since a user who just wants to open the location
+// shouldn't be interrupted by diagnostic text.
 function PlainLocationBubble({
   lat,
   lng,
@@ -386,6 +409,7 @@ function PlainLocationBubble({
   tokens,
   label,
   showOpenInMaps,
+  debugReason,
 }: {
   lat: number;
   lng: number;
@@ -394,6 +418,7 @@ function PlainLocationBubble({
   tokens: any;
   label: string;
   showOpenInMaps?: boolean;
+  debugReason?: string;
 }) {
   const validCoords = Number.isFinite(lat) && Number.isFinite(lng);
   return (
@@ -402,11 +427,18 @@ function PlainLocationBubble({
       <Text style={{ fontFamily: fontFamilies.medium, color: isMe ? 'rgba(255,255,255,0.85)' : tokens.text2, fontSize: 12, marginTop: 3 }}>
         {validCoords ? `${lat.toFixed(4)}, ${lng.toFixed(4)}` : 'Coordinates unavailable'}
       </Text>
-      {showOpenInMaps && validCoords && (
-        <Pressable onPress={() => openInMaps(lat, lng)} style={{ marginTop: 8 }}>
-          <Text style={{ fontFamily: fontFamilies.bold, fontSize: 12, color: isMe ? '#fff' : a1, textDecorationLine: 'underline' }}>Open in Maps</Text>
-        </Pressable>
-      )}
+      <View style={{ flexDirection: 'row', gap: 14, marginTop: 8 }}>
+        {showOpenInMaps && validCoords && (
+          <Pressable onPress={() => openInMaps(lat, lng)}>
+            <Text style={{ fontFamily: fontFamilies.bold, fontSize: 12, color: isMe ? '#fff' : a1, textDecorationLine: 'underline' }}>Open in Maps</Text>
+          </Pressable>
+        )}
+        {debugReason && (
+          <Pressable onPress={() => appAlert('Why no map?', debugReason)}>
+            <Text style={{ fontFamily: fontFamilies.medium, fontSize: 12, color: isMe ? 'rgba(255,255,255,0.75)' : tokens.text3, textDecorationLine: 'underline' }}>Why no map?</Text>
+          </Pressable>
+        )}
+      </View>
     </View>
   );
 }
@@ -425,20 +457,25 @@ function PlainLocationBubble({
  * that native view at all. This boundary exists as ordinary defense in
  * depth for the JS-level map code, not as the crash fix itself.
  */
-class LocationErrorBoundary extends React.Component<{ children: React.ReactNode; fallback: React.ReactNode }, { hasError: boolean }> {
-  constructor(props: { children: React.ReactNode; fallback: React.ReactNode }) {
+// fallback is a render-prop (error) => ReactNode, not a static node — a
+// static fallback rendered before any error occurred has no way to show
+// what the error actually WAS, which is exactly the "silently falling
+// back to raw text" problem this whole round is about. Now the caught
+// error's own message reaches the fallback UI's "Why no map?" action.
+class LocationErrorBoundary extends React.Component<{ children: React.ReactNode; fallback: (error: unknown) => React.ReactNode }, { hasError: boolean; error: unknown }> {
+  constructor(props: { children: React.ReactNode; fallback: (error: unknown) => React.ReactNode }) {
     super(props);
-    this.state = { hasError: false };
+    this.state = { hasError: false, error: null };
   }
-  static getDerivedStateFromError() {
-    return { hasError: true };
+  static getDerivedStateFromError(error: unknown) {
+    return { hasError: true, error };
   }
   componentDidCatch(error: unknown) {
     // eslint-disable-next-line no-console
     console.error('[LocationBubble] render error, falling back:', error);
   }
   render() {
-    return this.state.hasError ? this.props.fallback : this.props.children;
+    return this.state.hasError ? this.props.fallback(this.state.error) : this.props.children;
   }
 }
 
@@ -469,17 +506,54 @@ class LocationErrorBoundary extends React.Component<{ children: React.ReactNode;
  */
 function LocationBubble({ meta, isMe, a1, tokens }: { meta: any; isMe: boolean; a1: string; tokens: any }) {
   const [expanded, setExpanded] = useState(false);
-  const [tilesFailed, setTilesFailed] = useState(false);
+  // Was a plain boolean — now carries the actual failure detail (tile
+  // count + last onError message where the platform provides one) so the
+  // fallback bubble's "Why no map?" action can show something concrete
+  // instead of a generic "failed to load".
+  const [tilesFailedInfo, setTilesFailedInfo] = useState<{ failed: number; total: number; lastError?: string } | null>(null);
   const lat = Number(meta.lat);
   const lng = Number(meta.lng);
   const { width: screenW, height: screenH } = useWindowDimensions();
 
-  const crashFallback = <PlainLocationBubble lat={lat} lng={lng} isMe={isMe} a1={a1} tokens={tokens} label="Location" showOpenInMaps />;
-  const configFallback = <PlainLocationBubble lat={lat} lng={lng} isMe={isMe} a1={a1} tokens={tokens} label="Location (map unavailable)" showOpenInMaps />;
-  const loadFailedFallback = <PlainLocationBubble lat={lat} lng={lng} isMe={isMe} a1={a1} tokens={tokens} label="Location (map failed to load)" showOpenInMaps />;
+  const crashFallback = (error: unknown) => (
+    <PlainLocationBubble
+      lat={lat}
+      lng={lng}
+      isMe={isMe}
+      a1={a1}
+      tokens={tokens}
+      label="Location"
+      showOpenInMaps
+      debugReason={`Platform: ${Platform.OS}. The map view threw a JS error while rendering: ${error instanceof Error ? error.message : String(error)}`}
+    />
+  );
+  const configFallback = (
+    <PlainLocationBubble
+      lat={lat}
+      lng={lng}
+      isMe={isMe}
+      a1={a1}
+      tokens={tokens}
+      label="Location (map unavailable)"
+      showOpenInMaps
+      debugReason={`Platform: ${Platform.OS}. EXPO_PUBLIC_MAPTILER_API_KEY is not set in this build, so no tile requests are attempted (this is expected without a key — see docs/SETUP.md section 3.6). If other EXPO_PUBLIC_ values (e.g. Supabase) already work in this same build, this specific key most likely was set in app/.env but never added to EAS's own environment configuration — a local .env file is not read by "eas build" on its own; each EXPO_PUBLIC_ var needs to be added there separately (eas env:create, or eas.json's build.<profile>.env) for a cloud build to see it.`}
+    />
+  );
+  const loadFailedFallback = (
+    <PlainLocationBubble
+      lat={lat}
+      lng={lng}
+      isMe={isMe}
+      a1={a1}
+      tokens={tokens}
+      label="Location (map failed to load)"
+      showOpenInMaps
+      debugReason={`Platform: ${Platform.OS}. ${tilesFailedInfo?.failed ?? '?'} of ${tilesFailedInfo?.total ?? '?'} tile requests failed (a key is configured, so this is a network/quota/expired-key issue, not a missing-config one).${tilesFailedInfo?.lastError ? ` Last error: ${tilesFailedInfo.lastError}` : ' No further error detail was reported by this platform\'s Image component.'}`}
+    />
+  );
 
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-    return <PlainLocationBubble lat={lat} lng={lng} isMe={isMe} a1={a1} tokens={tokens} label="Location unavailable" />;
+    return <PlainLocationBubble lat={lat} lng={lng} isMe={isMe} a1={a1} tokens={tokens} label="Location unavailable" debugReason={`Platform: ${Platform.OS}. meta.lat/meta.lng did not parse as finite numbers (lat=${JSON.stringify(meta.lat)}, lng=${JSON.stringify(meta.lng)}).`} />;
   }
 
   if (Platform.OS !== 'ios') {
@@ -491,15 +565,30 @@ function LocationBubble({ meta, isMe, a1, tokens }: { meta: any; isMe: boolean; 
     // a distinct label (rather than the generic "Location" used
     // elsewhere) so this state reads as "map isn't set up" instead of
     // looking identical to a deliberate text-only share.
-    if (!MAPTILER_API_KEY) return configFallback;
+    if (!MAPTILER_API_KEY) {
+      // eslint-disable-next-line no-console
+      console.warn('[LocationBubble] no MAPTILER_API_KEY on', Platform.OS, '— showing config-missing fallback, not attempting any tile request.');
+      return configFallback;
+    }
     // Tiles genuinely failed to load at runtime (bad/expired key, network,
     // MapTiler quota) — previously indistinguishable from "still loading"
     // since StaticTileMap had no error handling; see its onAllTilesFailed.
-    if (tilesFailed) return loadFailedFallback;
+    if (tilesFailedInfo) {
+      // eslint-disable-next-line no-console
+      console.warn('[LocationBubble] all tiles failed on', Platform.OS, '—', tilesFailedInfo);
+      return loadFailedFallback;
+    }
     return (
       <LocationErrorBoundary fallback={crashFallback}>
         <Pressable onPress={() => setExpanded(true)} style={{ borderRadius: 20, overflow: 'hidden', width: 220 }}>
-          <StaticTileMap lat={lat} lng={lng} width={220} height={140} zoom={16} onAllTilesFailed={() => setTilesFailed(true)} />
+          <StaticTileMap
+            lat={lat}
+            lng={lng}
+            width={220}
+            height={140}
+            zoom={16}
+            onAllTilesFailed={(failed, total, lastError) => setTilesFailedInfo({ failed, total, lastError })}
+          />
           <View
             style={[
               { paddingHorizontal: 12, paddingVertical: 10 },
