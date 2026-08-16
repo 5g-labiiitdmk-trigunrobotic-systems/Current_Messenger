@@ -53,7 +53,9 @@ export type ClientEvent =
   | { type: 'group:invite'; groupId: string; to: string }
   | { type: 'group:invite_respond'; groupId: string; accept: boolean }
   | { type: 'group:leave'; groupId: string }
-  | { type: 'call:signal'; to: string; signal: Record<string, unknown> }
+  // groupId is set only for a group call's signaling — see the mirrored
+  // comment in server/src/protocol.ts. Absent for an ordinary 1:1 call.
+  | { type: 'call:signal'; to: string; signal: Record<string, unknown>; groupId?: string }
   | { type: 'contact:request_sent'; to: string }
   | { type: 'contact:request_responded'; to: string }
   | { type: 'session:request'; to: string }
@@ -84,7 +86,7 @@ export type ServerEvent =
   | { type: 'group:invite_request'; groupId: string; groupName: string; from: string; isBroadcast?: boolean }
   | { type: 'group:invite_declined'; groupId: string; userId: string; reason: 'declined' | 'timeout' | 'not_contact' | 'recipient_offline' }
   | { type: 'group:member_left'; groupId: string; userId: string }
-  | { type: 'call:signal'; from: string; signal: Record<string, unknown> }
+  | { type: 'call:signal'; from: string; signal: Record<string, unknown>; groupId?: string }
   | { type: 'contact:refresh' }
   | { type: 'session:request'; from: string }
   | { type: 'session:requested'; to: string }

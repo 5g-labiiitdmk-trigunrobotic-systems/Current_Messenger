@@ -39,6 +39,12 @@ interface ActiveRing {
   callerId: string;
   callKind: 'voice' | 'video';
   ringSentAt: number;
+  // Present only for a group-call ring, so a reconnecting client's
+  // replayed 'ring' (see index.ts's auth:ok handler) carries the groupId
+  // through exactly like a live group call:signal would. Absent for an
+  // ordinary 1:1 ring — every existing call site that doesn't pass one
+  // is unaffected.
+  groupId?: string;
 }
 
 // Matches callStore.ts's own RING_TIMEOUT_MS — a ring record older than
@@ -166,8 +172,8 @@ class RelayState {
     this.pendingSessions.delete(this.pairKey(a, b));
   }
 
-  recordRing(callerId: string, calleeId: string, callKind: 'voice' | 'video') {
-    this.activeRings.set(calleeId, { callerId, callKind, ringSentAt: Date.now() });
+  recordRing(callerId: string, calleeId: string, callKind: 'voice' | 'video', groupId?: string) {
+    this.activeRings.set(calleeId, { callerId, callKind, ringSentAt: Date.now(), groupId });
   }
 
   /** Returns the pending ring for this callee, or undefined if there is

@@ -79,7 +79,11 @@ export type ClientEvent =
   // Sent by the invitee in response to a group:invite_request.
   | { type: 'group:invite_respond'; groupId: string; accept: boolean }
   | { type: 'group:leave'; groupId: string }
-  | { type: 'call:signal'; to: string; signal: Record<string, unknown> }
+  // groupId is set only for a group call's signaling (client sends one of
+  // these per target group member; see index.ts's call:signal handler and
+  // docs/GROUP_CALLING.md) — absent for an ordinary 1:1 call, in which case
+  // this is byte-identical to before groupId existed.
+  | { type: 'call:signal'; to: string; signal: Record<string, unknown>; groupId?: string }
   // contact_requests rows are written directly from the client to Supabase
   // (see contactStore.ts) — the relay never sees that insert happen, so it
   // has no other way to know a contact request needs a push notification.
@@ -141,7 +145,7 @@ export type ServerEvent =
   // member, for any reason.
   | { type: 'group:invite_declined'; groupId: string; userId: string; reason: 'declined' | 'timeout' | 'not_contact' | 'recipient_offline' }
   | { type: 'group:member_left'; groupId: string; userId: string }
-  | { type: 'call:signal'; from: string; signal: Record<string, unknown> }
+  | { type: 'call:signal'; from: string; signal: Record<string, unknown>; groupId?: string }
   // Tells the client "something about your contact_requests changed, go
   // refetch" — carries no data of its own, since Supabase's contact_requests
   // table remains the actual source of truth (see contactStore.ts's

@@ -164,7 +164,7 @@ wss.on('connection', (socket) => {
       // client-side code path needed.
       const pendingRing = relayState.getActiveRingFor(userId);
       if (pendingRing) {
-        send(socket, { type: 'call:signal', from: pendingRing.callerId, signal: { kind: 'ring', callKind: pendingRing.callKind } });
+        send(socket, { type: 'call:signal', from: pendingRing.callerId, signal: { kind: 'ring', callKind: pendingRing.callKind }, groupId: pendingRing.groupId });
       }
       return;
     }
@@ -228,9 +228,17 @@ wss.on('connection', (socket) => {
         break;
       }
       case 'call:signal': {
-        // Same contact-approval rule as messages — signaling payloads must
-        // not reach users who never approved the sender.
-        if (!(await areApprovedContacts(userId, event.to))) break;
+        // groupId present -> this is one leg of a group call's signaling
+        // (the client sends one call:signal per target group member — see
+        // docs/GROUP_CALLING.md). The trust boundary there is group
+        // membership, not 1:1 contact approval — same distinction
+        // handleMessageSend already makes between group and 1:1 messages —
+        // so both sender and target must be members of that group. Absent
+        // groupId, this is byte-identical to the original 1:1-only gate.
+        const allowed = event.groupId
+          ? relayState.isGroupMember(event.groupId, userId) && relayState.isGroupMember(event.groupId, event.to)
+          : await areApprovedContacts(userId, event.to);
+        if (!allowed) break;
         const s = relayState.getSocket(event.to);
         // Diagnostic only — kind + routing, never the SDP/candidate payload
         // itself. Added specifically so "call stuck on connecting" can be
@@ -241,8 +249,8 @@ wss.on('connection', (socket) => {
         // client-side, see callStore.ts's own icecandidate logging) while
         // the call sits on 'connecting', that points at TURN allocation
         // failing rather than a signaling bug.
-        console.log(`[call:signal] ${event.signal.kind} ${userId} -> ${event.to}${s ? '' : ' (recipient offline/not connected)'}`);
-        if (s) send(s, { type: 'call:signal', from: userId, signal: event.signal });
+        console.log(`[call:signal] ${event.signal.kind} ${userId} -> ${event.to}${event.groupId ? ` (group ${event.groupId})` : ''}${s ? '' : ' (recipient offline/not connected)'}`);
+        if (s) send(s, { type: 'call:signal', from: userId, signal: event.signal, groupId: event.groupId });
         if (event.signal.kind === 'ring') {
           // Fired unconditionally (not gated on relayState.isOnline), since
           // an open WebSocket doesn't tell us whether the recipient's app is
@@ -255,7 +263,7 @@ wss.on('connection', (socket) => {
           // Recorded regardless of forwarding success — this is what lets a
           // fully-closed recipient learn about the call once they reconnect
           // (see the auth:ok handler above), not just a live-only recipient.
-          relayState.recordRing(userId, event.to, callKind);
+          relayState.recordRing(userId, event.to, callKind, event.groupId);
         } else if (
           event.signal.kind === 'accept' ||
           event.signal.kind === 'decline' ||
