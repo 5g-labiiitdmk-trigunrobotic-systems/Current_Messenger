@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, Image, Pressable, Modal, Platform, Linking, useWindowDimensions } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import Animated, { FadeInUp } from 'react-native-reanimated';
@@ -299,15 +299,55 @@ function PinIcon({ size = 30, color = '#ff4d4f' }: { size?: number; color?: stri
 }
 
 /**
- * Non-interactive static map for Android — see the MAPS/MapView comment
- * above for why Android never renders react-native-maps' native view.
+ * Non-interactive static map for Android/web — see the MAPS/MapView
+ * comment above for why neither ever renders react-native-maps' native
+ * view.
  */
-function StaticTileMap({ lat, lng, width, height, zoom }: { lat: number; lng: number; width: number; height: number; zoom: number }) {
+function StaticTileMap({
+  lat,
+  lng,
+  width,
+  height,
+  zoom,
+  onAllTilesFailed,
+}: {
+  lat: number;
+  lng: number;
+  width: number;
+  height: number;
+  zoom: number;
+  // Previously each tile <Image> had no onError at all — a bad/expired
+  // key, a network blip, or a MapTiler quota block left tiles silently
+  // blank against the '#dfe3e8' placeholder background, with nothing
+  // distinguishing "still loading" from "never going to load" and no
+  // way for the caller to react. This tracks failures per tile and fires
+  // once every tile in the current layout has failed, so the caller can
+  // swap to a labeled fallback instead of leaving a wordless blank box.
+  onAllTilesFailed?: () => void;
+}) {
   const tiles = buildTileLayout(lat, lng, zoom, width, height);
+  const [failedKeys, setFailedKeys] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    setFailedKeys(new Set());
+  }, [lat, lng, zoom, width, height]);
+
+  useEffect(() => {
+    if (tiles.length > 0 && failedKeys.size >= tiles.length) onAllTilesFailed?.();
+    // tiles is rebuilt fresh every render — comparing by count, not
+    // identity, is what actually reflects "did every tile fail".
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [failedKeys.size, tiles.length]);
+
   return (
     <View style={{ width, height, overflow: 'hidden', backgroundColor: '#dfe3e8' }}>
       {tiles.map((t) => (
-        <Image key={t.key} source={{ uri: t.url }} style={{ position: 'absolute', left: t.left, top: t.top, width: TILE_SIZE, height: TILE_SIZE }} />
+        <Image
+          key={t.key}
+          source={{ uri: t.url }}
+          style={{ position: 'absolute', left: t.left, top: t.top, width: TILE_SIZE, height: TILE_SIZE }}
+          onError={() => setFailedKeys((prev) => (prev.has(t.key) ? prev : new Set(prev).add(t.key)))}
+        />
       ))}
       <View style={{ position: 'absolute', left: width / 2 - 15, top: height / 2 - 30 }}>
         <PinIcon />
@@ -327,13 +367,41 @@ function openInMaps(lat: number, lng: number) {
   });
 }
 
-function PlainLocationBubble({ lat, lng, isMe, a1, tokens, label }: { lat: number; lng: number; isMe: boolean; a1: string; tokens: any; label: string }) {
+// showOpenInMaps: the fallback bubble used to be a dead end — no map
+// image AND no way to act on the coordinates either, even though the
+// coordinates themselves were received and valid. Added so degraded
+// states (config missing, tiles failed to load) still hand off to the
+// device's own maps app, same as the real map preview's expanded view
+// already does.
+function PlainLocationBubble({
+  lat,
+  lng,
+  isMe,
+  a1,
+  tokens,
+  label,
+  showOpenInMaps,
+}: {
+  lat: number;
+  lng: number;
+  isMe: boolean;
+  a1: string;
+  tokens: any;
+  label: string;
+  showOpenInMaps?: boolean;
+}) {
+  const validCoords = Number.isFinite(lat) && Number.isFinite(lng);
   return (
     <View style={[{ borderRadius: 20, padding: 14, minWidth: 180 }, isMe ? { backgroundColor: a1 } : { backgroundColor: tokens.glassBg2, borderWidth: 1, borderColor: tokens.glassBorder }]}>
       <Text style={{ fontFamily: fontFamilies.bold, color: isMe ? '#fff' : tokens.text, fontSize: 13.5 }}>📍 {label}</Text>
       <Text style={{ fontFamily: fontFamilies.medium, color: isMe ? 'rgba(255,255,255,0.85)' : tokens.text2, fontSize: 12, marginTop: 3 }}>
-        {Number.isFinite(lat) && Number.isFinite(lng) ? `${lat.toFixed(4)}, ${lng.toFixed(4)}` : 'Coordinates unavailable'}
+        {validCoords ? `${lat.toFixed(4)}, ${lng.toFixed(4)}` : 'Coordinates unavailable'}
       </Text>
+      {showOpenInMaps && validCoords && (
+        <Pressable onPress={() => openInMaps(lat, lng)} style={{ marginTop: 8 }}>
+          <Text style={{ fontFamily: fontFamilies.bold, fontSize: 12, color: isMe ? '#fff' : a1, textDecorationLine: 'underline' }}>Open in Maps</Text>
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -376,40 +444,57 @@ class LocationErrorBoundary extends React.Component<{ children: React.ReactNode;
  *
  * iOS: real interactive react-native-maps MapView (Apple MapKit backend,
  * no API key needed, unaffected by the Android crash below).
- * Android: a non-interactive static tile mosaic (see StaticTileMap) in
- * both the bubble preview and the expanded view, plus an "Open in Maps"
- * button in the expanded view for real pan/zoom/navigation via the
+ * Android + web: a non-interactive static tile mosaic (see StaticTileMap)
+ * in both the bubble preview and the expanded view, plus an "Open in
+ * Maps" button in the expanded view for real pan/zoom/navigation via the
  * device's own maps app.
- * Web: plain coordinate text (react-native-maps has no web backend at all,
- * see the MAPS comment above TILE_URL_TEMPLATE for why the module
- * import itself is guarded).
+ *
+ * Web used to hard-fall-back to plain coordinate text unconditionally,
+ * with this doc comment claiming it was because "react-native-maps has
+ * no web backend" — true, but irrelevant: StaticTileMap below never uses
+ * react-native-maps at all, it's plain Image/View tile fetches, which
+ * react-native-web renders exactly like Android's. That reasoning
+ * conflated "the interactive MapView (iOS-only) can't run on web" with
+ * "no map can run on web", and produced a raw-coordinates regression on
+ * whatever platform someone actually re-tested on after the Android
+ * crash fix — since this sandbox's own verification is web-only, that's
+ * almost certainly what was observed. Fixed by routing web through the
+ * exact same static-tile-mosaic path as Android instead of bailing out
+ * early.
  */
 function LocationBubble({ meta, isMe, a1, tokens }: { meta: any; isMe: boolean; a1: string; tokens: any }) {
   const [expanded, setExpanded] = useState(false);
+  const [tilesFailed, setTilesFailed] = useState(false);
   const lat = Number(meta.lat);
   const lng = Number(meta.lng);
   const { width: screenW, height: screenH } = useWindowDimensions();
 
-  const fallback = <PlainLocationBubble lat={lat} lng={lng} isMe={isMe} a1={a1} tokens={tokens} label="Location" />;
+  const crashFallback = <PlainLocationBubble lat={lat} lng={lng} isMe={isMe} a1={a1} tokens={tokens} label="Location" showOpenInMaps />;
+  const configFallback = <PlainLocationBubble lat={lat} lng={lng} isMe={isMe} a1={a1} tokens={tokens} label="Location (map unavailable)" showOpenInMaps />;
+  const loadFailedFallback = <PlainLocationBubble lat={lat} lng={lng} isMe={isMe} a1={a1} tokens={tokens} label="Location (map failed to load)" showOpenInMaps />;
 
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
     return <PlainLocationBubble lat={lat} lng={lng} isMe={isMe} a1={a1} tokens={tokens} label="Location unavailable" />;
   }
 
-  if (Platform.OS === 'web') return fallback;
-
-  // No MapTiler key configured (see .env.example / docs/SETUP.md section
-  // 3.6) — fall back to plain text rather than either crashing on a broken
-  // tile URL or, worse, silently reverting to hotlinking
-  // tile.openstreetmap.org directly, which is exactly the traffic pattern
-  // that got this app blocked in the first place.
-  if (Platform.OS === 'android' && !MAPTILER_API_KEY) return fallback;
-
-  if (Platform.OS === 'android') {
+  if (Platform.OS !== 'ios') {
+    // No MapTiler key configured (see .env.example / docs/SETUP.md section
+    // 3.6) — fall back to plain text rather than either crashing on a
+    // broken tile URL or, worse, silently reverting to hotlinking
+    // tile.openstreetmap.org directly, which is exactly the traffic
+    // pattern that got this app blocked in the first place. Surfaced with
+    // a distinct label (rather than the generic "Location" used
+    // elsewhere) so this state reads as "map isn't set up" instead of
+    // looking identical to a deliberate text-only share.
+    if (!MAPTILER_API_KEY) return configFallback;
+    // Tiles genuinely failed to load at runtime (bad/expired key, network,
+    // MapTiler quota) — previously indistinguishable from "still loading"
+    // since StaticTileMap had no error handling; see its onAllTilesFailed.
+    if (tilesFailed) return loadFailedFallback;
     return (
-      <LocationErrorBoundary fallback={fallback}>
+      <LocationErrorBoundary fallback={crashFallback}>
         <Pressable onPress={() => setExpanded(true)} style={{ borderRadius: 20, overflow: 'hidden', width: 220 }}>
-          <StaticTileMap lat={lat} lng={lng} width={220} height={140} zoom={16} />
+          <StaticTileMap lat={lat} lng={lng} width={220} height={140} zoom={16} onAllTilesFailed={() => setTilesFailed(true)} />
           <View
             style={[
               { paddingHorizontal: 12, paddingVertical: 10 },
@@ -446,7 +531,7 @@ function LocationBubble({ meta, isMe, a1, tokens }: { meta: any; isMe: boolean; 
   // iOS
   const region = { latitude: lat, longitude: lng, latitudeDelta: 0.01, longitudeDelta: 0.01 };
   return (
-    <LocationErrorBoundary fallback={fallback}>
+    <LocationErrorBoundary fallback={crashFallback}>
       <Pressable onPress={() => setExpanded(true)} style={{ borderRadius: 20, overflow: 'hidden', width: 220 }}>
         <MapView
           style={{ width: 220, height: 140 }}
