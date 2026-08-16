@@ -10,6 +10,8 @@ import { BokehBackground } from '../../src/components/BokehBackground';
 import { useTheme } from '../../src/theme/useTheme';
 import { fontFamilies } from '../../src/theme/tokens';
 import { useChatStore, getThreadKey } from '../../src/state/chatStore';
+import type { ChatMessage } from '../../src/state/chatStore';
+import { withDateSeparators } from '../../src/lib/dateSeparators';
 import { useGroupStore } from '../../src/state/groupStore';
 import { useContactStore } from '../../src/state/contactStore';
 import { useAuthStore } from '../../src/state/authStore';
@@ -52,6 +54,18 @@ export default function GroupChatScreen() {
   // counter-transform (verified live: RN's `inverted` already renders
   // content right-side up on its own).
   const invertedMessages = useMemo(() => [...messages].reverse(), [messages]);
+  const rowsWithSeparators = useMemo(() => withDateSeparators(invertedMessages), [invertedMessages]);
+  // Inserting date-separator rows shifts every message's position within
+  // the FlatList's own `data` array, so the existing "chronologically
+  // preceding message" lookup below can no longer use `index + 1` into
+  // that array (see renderItem) — this maps each message id straight to
+  // its predecessor in the separator-free, newest-first order instead,
+  // immune to how many separators end up between them on screen.
+  const chronoPrevByMessageId = useMemo(() => {
+    const map = new Map<string, ChatMessage | undefined>();
+    invertedMessages.forEach((m, i) => map.set(m.id, invertedMessages[i + 1]));
+    return map;
+  }, [invertedMessages]);
 
   useEffect(() => {
     // Was entirely missing here — unlike chat/[id].tsx's DM screen, this
@@ -198,7 +212,7 @@ export default function GroupChatScreen() {
         <FlatList
           ref={listRef}
           inverted
-          data={invertedMessages}
+          data={rowsWithSeparators}
           keyExtractor={(m) => m.id}
           contentContainerStyle={{ padding: 16, gap: 11 }}
           // Was ListHeaderComponent (visual top) before inverting — with
@@ -219,14 +233,21 @@ export default function GroupChatScreen() {
               </Glass>
             </View>
           }
-          renderItem={({ item, index }) => {
-            // `invertedMessages` is newest-first (index 0 = newest), so the
+          renderItem={({ item }) => {
+            if (item.kind === 'date-separator') {
+              return (
+                <View style={{ alignSelf: 'center', marginVertical: 4 }}>
+                  <Glass radius={12} style={{ paddingHorizontal: 12, paddingVertical: 5 }} variant="bg2">
+                    <Text style={{ fontSize: 11.5, fontFamily: fontFamilies.bold, color: tokens.text2 }}>{item.label}</Text>
+                  </Glass>
+                </View>
+              );
+            }
             // chronologically-PRECEDING message (used to decide whether to
-            // show the sender's name above this bubble) is at index + 1,
-            // not index - 1 as it would be in the original chronological
-            // order. Same grouping rule as before, just walking the
-            // reversed array in the opposite direction.
-            const chronoPrev = invertedMessages[index + 1];
+            // show the sender's name above this bubble) — see
+            // chronoPrevByMessageId's comment for why this is no longer an
+            // index lookup.
+            const chronoPrev = chronoPrevByMessageId.get(item.id);
             const showName = item.from !== me && (!chronoPrev || chronoPrev.from !== item.from);
             const repliedTo = item.replyToId ? messages.find((m) => m.id === item.replyToId) : null;
             return (

@@ -20,6 +20,7 @@ import { useChatSessionStore } from '../../src/state/chatSessionStore';
 import { appAlert } from '../../src/state/alertStore';
 import { isPresenceVisible } from '../../src/lib/presencePolicy';
 import { pickImageBase64, pickVideoBase64, getCurrentLocationOnce, startVoiceRecording, stopVoiceRecording, playAudioBase64, MAX_VIDEO_DURATION_SECONDS, MAX_VIDEO_FILE_BYTES } from '../../src/lib/media';
+import { withDateSeparators } from '../../src/lib/dateSeparators';
 import { useAudioRecorder, RecordingPresets } from 'expo-audio';
 import type { RejectReason } from '../../src/state/chatSessionStore';
 
@@ -100,6 +101,7 @@ export default function ChatScreen() {
   // which cancel out); adding a manual counter-transform actively broke
   // this (net odd number of flips = upside-down content).
   const invertedMessages = useMemo(() => [...messages].reverse(), [messages]);
+  const rowsWithSeparators = useMemo(() => withDateSeparators(invertedMessages), [invertedMessages]);
 
   // The composer's reply banner and each sent bubble's quoted-reply strip
   // (see MessageBubble.tsx) both need the actual replied-to message, not
@@ -484,7 +486,7 @@ export default function ChatScreen() {
         <FlatList
           ref={listRef}
           inverted
-          data={invertedMessages}
+          data={rowsWithSeparators}
           keyExtractor={(m) => m.id}
           contentContainerStyle={{ padding: 16, gap: 11 }}
           // Inverted lists flip both content order AND which end
@@ -520,6 +522,15 @@ export default function ChatScreen() {
             </View>
           }
           renderItem={({ item }) => {
+            if (item.kind === 'date-separator') {
+              return (
+                <View style={{ alignSelf: 'center', marginVertical: 4 }}>
+                  <Glass radius={12} style={{ paddingHorizontal: 12, paddingVertical: 5 }} variant="bg2">
+                    <Text style={{ fontSize: 11.5, fontFamily: fontFamilies.bold, color: tokens.text2 }}>{item.label}</Text>
+                  </Glass>
+                </View>
+              );
+            }
             const repliedTo = item.replyToId ? allMessages.find((m) => m.id === item.replyToId) : null;
             return (
               <MessageBubble
