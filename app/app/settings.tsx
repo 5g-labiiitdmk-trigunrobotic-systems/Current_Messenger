@@ -14,6 +14,7 @@ import { useThemeStore } from '../src/state/themeStore';
 import { useSettingsStore } from '../src/state/settingsStore';
 import { useAuthStore } from '../src/state/authStore';
 import { appAlert } from '../src/state/alertStore';
+import Constants from 'expo-constants';
 
 const ACCENTS: { key: keyof typeof accentPalettes; label: string }[] = [
   { key: 'purple', label: 'Purple' },
@@ -160,6 +161,17 @@ export default function SettingsScreen() {
           <Text style={{ color: '#ff5a6e', fontFamily: fontFamilies.bold, fontSize: 14.5 }}>Log out</Text>
         </View>
       </Pressable>
+
+      {/* Build provenance: computed by app.config.js from the actual git
+          checkout at prebuild/bundle time (see that file's comment) — not
+          hand-maintained, so this can't itself go stale. Exists to answer
+          "is this device actually running the commit I think it is"
+          without needing EAS dashboard access, after a round where two
+          reported-fixed bugs kept reproducing and there was no way to
+          confirm on-device whether the build even contained the fix. */}
+      <Text style={{ marginTop: 18, textAlign: 'center', fontSize: 11, fontFamily: fontFamilies.medium, color: tokens.text3 }}>
+        Current v{Constants.expoConfig?.version ?? '?'} · build {String(Constants.expoConfig?.extra?.gitCommit ?? 'unknown')}
+      </Text>
     </ScreenScaffold>
   );
 }
