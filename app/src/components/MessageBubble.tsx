@@ -175,39 +175,31 @@ function BubbleContent({ m, isMe, a1, a2, tokens, meId, onVote, replyPreview }: 
   );
 }
 
-// CORRECTED again, this time after a real production block: tile.openstreetmap.org
-// (OSM's own free "main" tile server) started returning "Access blocked: App
-// is not following the tile usage policy of OpenStreetMap's volunteer-run
-// servers" for this app's traffic — exactly the risk the comment that used
-// to be here already flagged ("a high-traffic rollout should move to a paid
-// OSM-tile provider... to avoid risking an IP-based block") but treated as a
-// future concern rather than something to act on immediately. It happened
-// faster than expected, so hotlinking tile.openstreetmap.org directly is
-// retired for good, not just rate-limited harder.
+// REVERTED, deliberately, with the risk below fully known: this app briefly
+// used MapTiler (https://www.maptiler.com) instead of hotlinking
+// tile.openstreetmap.org directly, specifically because OSM's own tile
+// server had already returned "Access blocked: App is not following the
+// tile usage policy of OpenStreetMap's volunteer-run servers" for this
+// app's traffic once before. That block is real and can plausibly happen
+// again — this revert does not remove that risk, it accepts it. The
+// reason for reverting anyway: MapTiler's free tier (and most comparable
+// providers' free tiers) carries a non-commercial-use restriction that is
+// a real problem for a live, published app, and switching tile providers
+// again to a paid/commercially-licensed one was explicitly not the
+// direction chosen — see the conversation that led to this commit for the
+// full tradeoff discussion, not just this comment. If OSM blocks this
+// app's traffic again, the "Why no map?" diagnostic below is what surfaces
+// that immediately instead of the bubble silently going text-only with no
+// visible reason — see LocationBubble/PlainLocationBubble's debugReason.
 //
-// Now using MapTiler (https://www.maptiler.com), a tile provider built
-// specifically for production app traffic — free tier is 100,000 tile
-// loads/month, no card required, no risk of the volunteer-infrastructure
-// abuse-policy block that just happened. Requires an API key, but unlike
-// TURN_URLS/TURN_USERNAME/TURN_CREDENTIAL (server/.env, proxied through the
-// relay via GET /ice-servers — see server/src/index.ts), this key is NOT
-// treated as a server-relayed secret: MapTiler's keys are explicitly
-// designed for direct client embedding (optionally domain/bundle-ID
-// restricted from their dashboard), the same risk category as this app's
-// existing EXPO_PUBLIC_SUPABASE_ANON_KEY, not a shared-secret relay
-// credential like TURN's. Baking it in via EXPO_PUBLIC_MAPTILER_API_KEY
-// (app/.env, see .env.example) avoids adding a network round-trip to the
-// relay just to read a config value on every location-bubble render, which
-// the server-relay pattern would've required. See docs/SETUP.md section 3.6
-// for the exact account/key setup.
-const MAPTILER_API_KEY = process.env.EXPO_PUBLIC_MAPTILER_API_KEY ?? '';
-// MapTiler's "openstreetmap" style renders standard OSM cartography (same
-// look as the tile.openstreetmap.org tiles this replaces) but served from
-// MapTiler's own production CDN, not OSM's volunteer servers.
-const TILE_URL_TEMPLATE = 'https://api.maptiler.com/maps/openstreetmap/{z}/{x}/{y}.png?key=' + MAPTILER_API_KEY;
-// Required by MapTiler's terms (crediting both MapTiler and the underlying
-// OSM data) — see https://www.maptiler.com/copyright/.
-const TILE_ATTRIBUTION = '© MapTiler © OpenStreetMap contributors';
+// No API key of any kind is used or required for this tile source —
+// EXPO_PUBLIC_MAPTILER_API_KEY and every reference to it were removed from
+// this file (search history shows the prior commit's key-presence checks
+// are gone, not just unused).
+const TILE_URL_TEMPLATE = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+// Required by OSM's tile usage policy — see
+// https://operations.osmfoundation.org/policies/tiles/#attribution.
+const TILE_ATTRIBUTION = '© OpenStreetMap contributors';
 
 // CORRECTED after a real-device crash (IllegalStateException: API key not
 // found, thrown from com.rnmaps.maps.MapView.onCreate via Google Play
@@ -225,8 +217,8 @@ const TILE_ATTRIBUTION = '© MapTiler © OpenStreetMap contributors';
 // plain <Image>-based static tile mosaic (buildTileLayout below) instead
 // — genuinely independent of Google's native map engine, since it never
 // constructs a native map view at all, just fetches raster tiles over HTTP
-// like any other image (from MapTiler as of the round after this one — see
-// the TILE_URL_TEMPLATE comment below). This trades away pinch/zoom/pan (a static
+// like any other image (see the TILE_URL_TEMPLATE comment below for the
+// tile source's own history). This trades away pinch/zoom/pan (a static
 // snapshot only) for a bought-and-paid-for guarantee that it cannot repeat
 // this crash; "Open in Maps" in the expanded view hands off to the device's
 // own maps app for real interactive navigation. iOS is untouched — its
@@ -322,8 +314,8 @@ function StaticTileMap({
   width: number;
   height: number;
   zoom: number;
-  // Previously each tile <Image> had no onError at all — a bad/expired
-  // key, a network blip, or a MapTiler quota block left tiles silently
+  // Previously each tile <Image> had no onError at all — a network blip
+  // or the tile server blocking this app's traffic left tiles silently
   // blank against the '#dfe3e8' placeholder background, with nothing
   // distinguishing "still loading" from "never going to load" and no
   // way for the caller to react. This tracks failures per tile and fires
@@ -527,18 +519,6 @@ function LocationBubble({ meta, isMe, a1, tokens }: { meta: any; isMe: boolean; 
       debugReason={`Platform: ${Platform.OS}. The map view threw a JS error while rendering: ${error instanceof Error ? error.message : String(error)}`}
     />
   );
-  const configFallback = (
-    <PlainLocationBubble
-      lat={lat}
-      lng={lng}
-      isMe={isMe}
-      a1={a1}
-      tokens={tokens}
-      label="Location (map unavailable)"
-      showOpenInMaps
-      debugReason={`Platform: ${Platform.OS}. EXPO_PUBLIC_MAPTILER_API_KEY is not set in this build, so no tile requests are attempted (this is expected without a key — see docs/SETUP.md section 3.6). If other EXPO_PUBLIC_ values (e.g. Supabase) already work in this same build, this specific key most likely was set in app/.env but never added to EAS's own environment configuration — a local .env file is not read by "eas build" on its own; each EXPO_PUBLIC_ var needs to be added there separately (eas env:create, or eas.json's build.<profile>.env) for a cloud build to see it.`}
-    />
-  );
   const loadFailedFallback = (
     <PlainLocationBubble
       lat={lat}
@@ -548,7 +528,7 @@ function LocationBubble({ meta, isMe, a1, tokens }: { meta: any; isMe: boolean; 
       tokens={tokens}
       label="Location (map failed to load)"
       showOpenInMaps
-      debugReason={`Platform: ${Platform.OS}. ${tilesFailedInfo?.failed ?? '?'} of ${tilesFailedInfo?.total ?? '?'} tile requests failed (a key is configured, so this is a network/quota/expired-key issue, not a missing-config one).${tilesFailedInfo?.lastError ? ` Last error: ${tilesFailedInfo.lastError}` : ' No further error detail was reported by this platform\'s Image component.'}`}
+      debugReason={`Platform: ${Platform.OS}. ${tilesFailedInfo?.failed ?? '?'} of ${tilesFailedInfo?.total ?? '?'} tile requests to tile.openstreetmap.org failed. No API key is used for this tile source, so this isn't a config problem — most likely a network issue, or OpenStreetMap's tile server blocking this app's traffic again (it has done this before for this exact app; see the comment above TILE_URL_TEMPLATE in MessageBubble.tsx).${tilesFailedInfo?.lastError ? ` Last error: ${tilesFailedInfo.lastError}` : ' No further error detail was reported by this platform\'s Image component.'}`}
     />
   );
 
@@ -557,22 +537,11 @@ function LocationBubble({ meta, isMe, a1, tokens }: { meta: any; isMe: boolean; 
   }
 
   if (Platform.OS !== 'ios') {
-    // No MapTiler key configured (see .env.example / docs/SETUP.md section
-    // 3.6) — fall back to plain text rather than either crashing on a
-    // broken tile URL or, worse, silently reverting to hotlinking
-    // tile.openstreetmap.org directly, which is exactly the traffic
-    // pattern that got this app blocked in the first place. Surfaced with
-    // a distinct label (rather than the generic "Location" used
-    // elsewhere) so this state reads as "map isn't set up" instead of
-    // looking identical to a deliberate text-only share.
-    if (!MAPTILER_API_KEY) {
-      // eslint-disable-next-line no-console
-      console.warn('[LocationBubble] no MAPTILER_API_KEY on', Platform.OS, '— showing config-missing fallback, not attempting any tile request.');
-      return configFallback;
-    }
-    // Tiles genuinely failed to load at runtime (bad/expired key, network,
-    // MapTiler quota) — previously indistinguishable from "still loading"
-    // since StaticTileMap had no error handling; see its onAllTilesFailed.
+    // Tiles genuinely failed to load at runtime (network issue, or OSM's
+    // tile server blocking this app's traffic again — see the comment
+    // above TILE_URL_TEMPLATE) — previously indistinguishable from "still
+    // loading" since StaticTileMap had no error handling; see its
+    // onAllTilesFailed.
     if (tilesFailedInfo) {
       // eslint-disable-next-line no-console
       console.warn('[LocationBubble] all tiles failed on', Platform.OS, '—', tilesFailedInfo);

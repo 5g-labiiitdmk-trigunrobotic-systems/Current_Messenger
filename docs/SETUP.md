@@ -225,46 +225,32 @@ HTTPS/WSS, not the raw UDP relay ports TURN needs.
 
 Shared-location messages render an actual map (not raw coordinates) — a
 static tile mosaic on Android, a real interactive `react-native-maps` view
-on iOS (Apple MapKit, no key needed, nothing to set up). Android's tiles
-used to hotlink `tile.openstreetmap.org` directly, OSM's own free
-volunteer-run tile server — that server has since started blocking this
-app's traffic for not following its production-usage policy (it's meant
-for light/evaluation use, not app traffic at any real scale), so that path
-is retired for good.
+on iOS (Apple MapKit, no key needed, nothing to set up). No API key or
+env var is needed for Android's tiles either — they hotlink
+`tile.openstreetmap.org` directly, OSM's own free volunteer-run tile
+server.
 
-Sign up for **[MapTiler](https://www.maptiler.com)** instead — free tier is
-100,000 tile loads/month, no card required, and it's explicitly built for
-this kind of app usage (unlike OSM's own server). From their dashboard,
-grab your API key and set it in `app/.env`:
+**Known risk, accepted deliberately, not an oversight**: this app's
+traffic to `tile.openstreetmap.org` was blocked once before in
+production ("Access blocked: App is not following the tile usage
+policy of OpenStreetMap's volunteer-run servers"), which is exactly
+what that server's own usage policy warns can happen to app traffic at
+any real scale. A paid tile provider (MapTiler, Stadia Maps,
+Thunderforest, etc.) was used for a while instead specifically to avoid
+repeating that block, but was reverted back to raw OSM tiles because
+those providers' free tiers carry a non-commercial-use restriction that
+was judged the bigger problem for a live, published app — trading a
+"might get blocked again" risk for a "definitely not properly licensed"
+one. If this app's usage grows enough that OSM blocks it again, the fix
+is a **paid** tile plan from a commercially-licensed provider, not
+another free-tier one (see MessageBubble.tsx's comment above
+`TILE_URL_TEMPLATE` for the full history).
 
-```
-EXPO_PUBLIC_MAPTILER_API_KEY=<from MapTiler dashboard>
-```
-
-Unlike the TURN credentials above, this key is safe to bake directly into
-the app bundle via the `EXPO_PUBLIC_` prefix (same category as
-`EXPO_PUBLIC_SUPABASE_ANON_KEY`) — MapTiler's keys are designed for direct
-client embedding and can optionally be domain/bundle-ID restricted from
-their dashboard, unlike TURN's shared-secret relay credentials, which must
-never leave the server. Leave it unset and shared-location messages on
-Android fall back to a plain coordinate bubble instead of a map — nothing
-crashes, and it never falls back to hotlinking OSM's server again. The
-fallback bubble has its own "Why no map?" action that names the exact
-reason (missing key vs. tiles failing to load vs. a render error) —
-check that first if this ever needs debugging again, rather than
-guessing.
-
-**If you're building with `eas build`**: a local `app/.env` is only read
-by `expo start`/local builds — EAS's cloud build servers do not see it.
-Every `EXPO_PUBLIC_` variable your build needs (this one included) has to
-be added to EAS's own environment configuration separately, e.g.
-`eas env:create --name EXPO_PUBLIC_MAPTILER_API_KEY --value <key> --environment production`
-(or the equivalent in `eas.json`'s `build.<profile>.env`, or the EAS
-dashboard). It's easy to add a new `EXPO_PUBLIC_` var to your local
-`.env` when a feature is first built and forget it also needs adding to
-EAS separately — if other `EXPO_PUBLIC_` values already work in your EAS
-builds (Supabase auth, etc.) but this one doesn't, that mismatch is the
-most likely explanation.
+Shared-location messages have their own "Why no map?" action right on
+the fallback bubble that names the exact reason (tiles failing to load,
+or a render error) — check that first if this ever needs debugging
+again, rather than guessing. If it reports OSM tile requests failing
+outright, that's very possibly this exact block happening again.
 
 ## 4. Running the app
 
