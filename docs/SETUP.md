@@ -224,33 +224,44 @@ HTTPS/WSS, not the raw UDP relay ports TURN needs.
 ## 3.6 Map tiles for shared locations (Android)
 
 Shared-location messages render an actual map (not raw coordinates) — a
-static tile mosaic on Android, a real interactive `react-native-maps` view
-on iOS (Apple MapKit, no key needed, nothing to set up). No API key or
-env var is needed for Android's tiles either — they hotlink
-`tile.openstreetmap.org` directly, OSM's own free volunteer-run tile
-server.
+real interactive [MapLibre Native](https://maplibre.org/) view on
+Android using [OpenFreeMap](https://openfreemap.org)'s vector tiles, and
+a real interactive `react-native-maps` view on iOS (Apple MapKit, no key
+needed, nothing to set up). **No API key or env var is needed for
+Android either** — OpenFreeMap is free, keyless, registration-free, and
+carries no commercial-use restriction (unlike MapTiler/Stadia/
+Thunderforest's free tiers).
 
-**Known risk, accepted deliberately, not an oversight**: this app's
-traffic to `tile.openstreetmap.org` was blocked once before in
-production ("Access blocked: App is not following the tile usage
-policy of OpenStreetMap's volunteer-run servers"), which is exactly
-what that server's own usage policy warns can happen to app traffic at
-any real scale. A paid tile provider (MapTiler, Stadia Maps,
-Thunderforest, etc.) was used for a while instead specifically to avoid
-repeating that block, but was reverted back to raw OSM tiles because
-those providers' free tiers carry a non-commercial-use restriction that
-was judged the bigger problem for a live, published app — trading a
-"might get blocked again" risk for a "definitely not properly licensed"
-one. If this app's usage grows enough that OSM blocks it again, the fix
-is a **paid** tile plan from a commercially-licensed provider, not
-another free-tier one (see MessageBubble.tsx's comment above
-`TILE_URL_TEMPLATE` for the full history).
+**History, for context if this ever needs revisiting** (see
+`LocationMapSurface.android.tsx`'s own comment for the fuller version):
+raw `tile.openstreetmap.org` raster tiles (original implementation) →
+blocked once in production by OSM's own usage-policy enforcement → moved
+to MapTiler (paid-tier-licensed raster tiles) to avoid repeating that →
+reverted back to raw OSM tiles because MapTiler's free tier's
+non-commercial-use restriction was judged the bigger problem for a live
+app → **now OpenFreeMap via MapLibre Native**, which resolves both prior
+problems at once (no block risk — OpenFreeMap's whole reason to exist is
+handling that at scale server-side; no licensing restriction). The
+trade-off: OpenFreeMap only serves **vector** tiles, so using it at all
+required adding `@maplibre/maplibre-react-native` (MapLibre Native's
+official React Native binding) as a new native dependency — a bigger
+change than a tile-URL swap, and one whose on-device Android behavior
+could not be verified in the sandbox this was built in (no Android SDK
+there). It was verified there via: `npx tsc --noEmit`, `expo prebuild
+--platform android` (confirmed `@maplibre/maplibre-react-native` is
+correctly discovered by the exact `react-native-config` autolinking
+command Gradle's `settings.gradle` invokes), and a live Playwright test
+of the same component's `.web.tsx` variant (using `maplibre-gl`, MapLibre
+Native's JS sibling) against a real `tiles.openfreemap.org` request —
+confirming the request is built correctly and failures are handled
+gracefully, though that sandbox's own network egress policy blocked the
+live tile fetch there too, so actual tile *rendering* still needs a real
+device/build to confirm.
 
 Shared-location messages have their own "Why no map?" action right on
 the fallback bubble that names the exact reason (tiles failing to load,
 or a render error) — check that first if this ever needs debugging
-again, rather than guessing. If it reports OSM tile requests failing
-outright, that's very possibly this exact block happening again.
+again, rather than guessing.
 
 ## 4. Running the app
 

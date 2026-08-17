@@ -5,6 +5,7 @@ import Animated, { FadeInUp } from 'react-native-reanimated';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { Glass } from './Glass';
+import { LocationMapSurface } from './LocationMapSurface';
 import { useTheme } from '../theme/useTheme';
 import { fontFamilies } from '../theme/tokens';
 import type { ChatMessage } from '../state/chatStore';
@@ -175,201 +176,13 @@ function BubbleContent({ m, isMe, a1, a2, tokens, meId, onVote, replyPreview }: 
   );
 }
 
-// REVERTED, deliberately, with the risk below fully known: this app briefly
-// used MapTiler (https://www.maptiler.com) instead of hotlinking
-// tile.openstreetmap.org directly, specifically because OSM's own tile
-// server had already returned "Access blocked: App is not following the
-// tile usage policy of OpenStreetMap's volunteer-run servers" for this
-// app's traffic once before. That block is real and can plausibly happen
-// again — this revert does not remove that risk, it accepts it. The
-// reason for reverting anyway: MapTiler's free tier (and most comparable
-// providers' free tiers) carries a non-commercial-use restriction that is
-// a real problem for a live, published app, and switching tile providers
-// again to a paid/commercially-licensed one was explicitly not the
-// direction chosen — see the conversation that led to this commit for the
-// full tradeoff discussion, not just this comment. If OSM blocks this
-// app's traffic again, the "Why no map?" diagnostic below is what surfaces
-// that immediately instead of the bubble silently going text-only with no
-// visible reason — see LocationBubble/PlainLocationBubble's debugReason.
-//
-// No API key of any kind is used or required for this tile source —
-// EXPO_PUBLIC_MAPTILER_API_KEY and every reference to it were removed from
-// this file (search history shows the prior commit's key-presence checks
-// are gone, not just unused).
-const TILE_URL_TEMPLATE = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
-// Required by OSM's tile usage policy — see
-// https://operations.osmfoundation.org/policies/tiles/#attribution.
-const TILE_ATTRIBUTION = '© OpenStreetMap contributors';
-
-// CORRECTED after a real-device crash (IllegalStateException: API key not
-// found, thrown from com.rnmaps.maps.MapView.onCreate via Google Play
-// Services' CreatorImpl.newMapViewDelegate): react-native-maps' Android
-// native view is built entirely on top of com.google.android.gms.maps —
-// there is no alternate Android backend in this library. `mapType="none"`
-// only controls what tiles get drawn AFTER the underlying GoogleMap object
-// finishes initializing; it does NOT skip that initialization, which
-// unconditionally requires a com.google.android.geo.API_KEY manifest
-// entry regardless of mapType/tile source. The previous round's "OSM tiles
-// avoid needing a Google key" reasoning was wrong. Since this app has no
-// Google Maps API key configured (that was the whole point of switching to
-// OSM), rendering react-native-maps' <MapView> on Android is a guaranteed
-// crash — so it is never rendered there anymore. Android now renders a
-// plain <Image>-based static tile mosaic (buildTileLayout below) instead
-// — genuinely independent of Google's native map engine, since it never
-// constructs a native map view at all, just fetches raster tiles over HTTP
-// like any other image (see the TILE_URL_TEMPLATE comment below for the
-// tile source's own history). This trades away pinch/zoom/pan (a static
-// snapshot only) for a bought-and-paid-for guarantee that it cannot repeat
-// this crash; "Open in Maps" in the expanded view hands off to the device's
-// own maps app for real interactive navigation. iOS is untouched — its
-// react-native-maps backend is Apple MapKit (confirmed via the plugin
-// source: it only links Google Maps when iosGoogleMapsApiKey is set, which
-// this app never sets), which needs no API key and was never at risk.
-//
-// A real native OSM-tile map view (e.g. MapLibre, which has no Google
-// dependency at all and would restore full interactivity on Android) is a
-// reasonable future upgrade, but is deliberately NOT what's shipped here:
-// it would mean introducing another brand-new native module whose on-device
-// behavior this sandbox cannot fully verify either — exactly the class of
-// mistake that caused this crash. The static-image approach below is
-// verifiable end-to-end without a native build (it's pure JS + network
-// image fetches), so it ships now; MapLibre is worth evaluating later with
-// real-device testing before it replaces this.
-const MAPS = Platform.OS === 'ios' ? require('react-native-maps') : null;
-const MapView: any = MAPS?.default;
-const Marker: any = MAPS?.Marker;
-
-const TILE_SIZE = 256;
-
-// Standard Web Mercator projection: lat/lng -> fractional tile coordinates
-// at a given zoom. See https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames
-function projectToTile(lat: number, lng: number, zoom: number) {
-  const latRad = (lat * Math.PI) / 180;
-  const n = Math.pow(2, zoom);
-  const x = ((lng + 180) / 360) * n;
-  const y = ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n;
-  return { x, y };
-}
-
-/**
- * Computes which raster tiles are needed to cover a width x height
- * viewport centered on (lat, lng), and each tile's pixel offset within that
- * viewport. Centering this way means the target point always lands at
- * exactly (width/2, height/2) in the returned container — the pin overlay
- * never needs its own position math.
- */
-function buildTileLayout(lat: number, lng: number, zoom: number, width: number, height: number) {
-  const { x, y } = projectToTile(lat, lng, zoom);
-  const centerPxX = x * TILE_SIZE;
-  const centerPxY = y * TILE_SIZE;
-  const originPxX = centerPxX - width / 2;
-  const originPxY = centerPxY - height / 2;
-  const tileX0 = Math.floor(originPxX / TILE_SIZE);
-  const tileY0 = Math.floor(originPxY / TILE_SIZE);
-  const tilesWide = Math.ceil((originPxX + width) / TILE_SIZE) - tileX0 + 1;
-  const tilesHigh = Math.ceil((originPxY + height) / TILE_SIZE) - tileY0 + 1;
-  const maxTileIndex = Math.pow(2, zoom) - 1;
-
-  const tiles: { key: string; left: number; top: number; url: string }[] = [];
-  for (let ty = 0; ty < tilesHigh; ty++) {
-    for (let tx = 0; tx < tilesWide; tx++) {
-      const tileX = tileX0 + tx;
-      const tileY = tileY0 + ty;
-      if (tileX < 0 || tileY < 0 || tileX > maxTileIndex || tileY > maxTileIndex) continue;
-      tiles.push({
-        key: `${tileX}-${tileY}`,
-        left: tileX * TILE_SIZE - originPxX,
-        top: tileY * TILE_SIZE - originPxY,
-        url: TILE_URL_TEMPLATE.replace('{z}', String(zoom)).replace('{x}', String(tileX)).replace('{y}', String(tileY)),
-      });
-    }
-  }
-  return tiles;
-}
-
-function PinIcon({ size = 30, color = '#ff4d4f' }: { size?: number; color?: string }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24">
-      <Path d="M12 2C7.6 2 4 5.6 4 10c0 6 8 12 8 12s8-6 8-12c0-4.4-3.6-8-8-8Z" fill={color} />
-      <Path d="M12 7a3 3 0 110 6 3 3 0 010-6Z" fill="#fff" />
-    </Svg>
-  );
-}
-
-/**
- * Non-interactive static map for Android/web — see the MAPS/MapView
- * comment above for why neither ever renders react-native-maps' native
- * view.
- */
-function StaticTileMap({
-  lat,
-  lng,
-  width,
-  height,
-  zoom,
-  onAllTilesFailed,
-}: {
-  lat: number;
-  lng: number;
-  width: number;
-  height: number;
-  zoom: number;
-  // Previously each tile <Image> had no onError at all — a network blip
-  // or the tile server blocking this app's traffic left tiles silently
-  // blank against the '#dfe3e8' placeholder background, with nothing
-  // distinguishing "still loading" from "never going to load" and no
-  // way for the caller to react. This tracks failures per tile and fires
-  // once every tile in the current layout has failed, so the caller can
-  // swap to a labeled fallback instead of leaving a wordless blank box.
-  onAllTilesFailed?: (failedCount: number, totalCount: number, lastError?: string) => void;
-}) {
-  const tiles = buildTileLayout(lat, lng, zoom, width, height);
-  const [failedKeys, setFailedKeys] = useState<Set<string>>(new Set());
-  const lastErrorRef = React.useRef<string | undefined>(undefined);
-
-  useEffect(() => {
-    setFailedKeys(new Set());
-    lastErrorRef.current = undefined;
-  }, [lat, lng, zoom, width, height]);
-
-  useEffect(() => {
-    if (tiles.length > 0 && failedKeys.size >= tiles.length) onAllTilesFailed?.(failedKeys.size, tiles.length, lastErrorRef.current);
-    // tiles is rebuilt fresh every render — comparing by count, not
-    // identity, is what actually reflects "did every tile fail".
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [failedKeys.size, tiles.length]);
-
-  return (
-    <View style={{ width, height, overflow: 'hidden', backgroundColor: '#dfe3e8' }}>
-      {tiles.map((t) => (
-        <Image
-          key={t.key}
-          source={{ uri: t.url }}
-          style={{ position: 'absolute', left: t.left, top: t.top, width: TILE_SIZE, height: TILE_SIZE }}
-          onError={(e) => {
-            // RN's Image onError payload shape differs by platform (native
-            // gives nativeEvent.error, web gives a plain Event with no
-            // equivalent detail) — captured best-effort, not guaranteed
-            // present, since this is exactly the kind of platform
-            // difference this round is about not guessing at further.
-            const msg = (e?.nativeEvent as any)?.error;
-            if (msg) lastErrorRef.current = String(msg);
-            // eslint-disable-next-line no-console
-            console.warn('[StaticTileMap] tile failed to load:', t.url, msg ?? '(no error detail from this platform)');
-            setFailedKeys((prev) => (prev.has(t.key) ? prev : new Set(prev).add(t.key)));
-          }}
-        />
-      ))}
-      <View style={{ position: 'absolute', left: width / 2 - 15, top: height / 2 - 30 }}>
-        <PinIcon />
-      </View>
-      <View style={{ position: 'absolute', right: 4, bottom: 4, backgroundColor: 'rgba(255,255,255,0.8)', paddingHorizontal: 4, paddingVertical: 1, borderRadius: 3 }}>
-        <Text style={{ fontSize: 8, color: '#333' }}>{TILE_ATTRIBUTION}</Text>
-      </View>
-    </View>
-  );
-}
-
+// The actual map surface (tile source + rendering engine) now lives in
+// LocationMapSurface.{ios,android,web}.tsx, not inline here — see that
+// file set's own comments for the full history (raw OSM raster tiles ->
+// MapTiler -> raw OSM raster tiles again -> now OpenFreeMap via MapLibre)
+// and exactly why each platform does what it does. This file only keeps
+// the fallback/diagnostic UI shell, which doesn't care which renderer is
+// behind it.
 function openInMaps(lat: number, lng: number) {
   const url = Platform.OS === 'ios' ? `http://maps.apple.com/?ll=${lat},${lng}&q=Shared+location` : `geo:${lat},${lng}?q=${lat},${lng}(Shared+location)`;
   Linking.canOpenURL(url).then((can) => {
@@ -476,33 +289,19 @@ class LocationErrorBoundary extends React.Component<{ children: React.ReactNode;
  * there is no live/continuous tracking, this is a single point in time
  * captured once and sent like any other rich message).
  *
- * iOS: real interactive react-native-maps MapView (Apple MapKit backend,
- * no API key needed, unaffected by the Android crash below).
- * Android + web: a non-interactive static tile mosaic (see StaticTileMap)
- * in both the bubble preview and the expanded view, plus an "Open in
- * Maps" button in the expanded view for real pan/zoom/navigation via the
- * device's own maps app.
- *
- * Web used to hard-fall-back to plain coordinate text unconditionally,
- * with this doc comment claiming it was because "react-native-maps has
- * no web backend" — true, but irrelevant: StaticTileMap below never uses
- * react-native-maps at all, it's plain Image/View tile fetches, which
- * react-native-web renders exactly like Android's. That reasoning
- * conflated "the interactive MapView (iOS-only) can't run on web" with
- * "no map can run on web", and produced a raw-coordinates regression on
- * whatever platform someone actually re-tested on after the Android
- * crash fix — since this sandbox's own verification is web-only, that's
- * almost certainly what was observed. Fixed by routing web through the
- * exact same static-tile-mosaic path as Android instead of bailing out
- * early.
+ * The actual map surface is LocationMapSurface, resolved per-platform by
+ * Metro (.ios.tsx / .android.tsx / .web.tsx) — iOS keeps its existing
+ * react-native-maps/MapKit implementation untouched (this app's current
+ * phase is Android-focused; iOS already works and wasn't part of this
+ * round's scope), Android and web both now render real interactive
+ * OpenFreeMap vector tiles via MapLibre. This component only owns the
+ * shell around that: preview vs. expanded-fullscreen layout, the "Open in
+ * Maps" handoff, and the fallback/diagnostic UI when the map surface
+ * itself fails.
  */
 function LocationBubble({ meta, isMe, a1, tokens }: { meta: any; isMe: boolean; a1: string; tokens: any }) {
   const [expanded, setExpanded] = useState(false);
-  // Was a plain boolean — now carries the actual failure detail (tile
-  // count + last onError message where the platform provides one) so the
-  // fallback bubble's "Why no map?" action can show something concrete
-  // instead of a generic "failed to load".
-  const [tilesFailedInfo, setTilesFailedInfo] = useState<{ failed: number; total: number; lastError?: string } | null>(null);
+  const [loadFailedReason, setLoadFailedReason] = useState<string | null>(null);
   const lat = Number(meta.lat);
   const lng = Number(meta.lng);
   const { width: screenW, height: screenH } = useWindowDimensions();
@@ -528,7 +327,7 @@ function LocationBubble({ meta, isMe, a1, tokens }: { meta: any; isMe: boolean; 
       tokens={tokens}
       label="Location (map failed to load)"
       showOpenInMaps
-      debugReason={`Platform: ${Platform.OS}. ${tilesFailedInfo?.failed ?? '?'} of ${tilesFailedInfo?.total ?? '?'} tile requests to tile.openstreetmap.org failed. No API key is used for this tile source, so this isn't a config problem — most likely a network issue, or OpenStreetMap's tile server blocking this app's traffic again (it has done this before for this exact app; see the comment above TILE_URL_TEMPLATE in MessageBubble.tsx).${tilesFailedInfo?.lastError ? ` Last error: ${tilesFailedInfo.lastError}` : ' No further error detail was reported by this platform\'s Image component.'}`}
+      debugReason={`Platform: ${Platform.OS}. The OpenFreeMap map view reported a load failure: ${loadFailedReason ?? '(no detail)'}. No API key is used for this tile source, so this isn't a config problem — most likely a network issue, or tiles.openfreemap.org being unreachable/blocking this app's traffic (see LocationMapSurface.android.tsx's comment for the tile-provider history this app has already been through).`}
     />
   );
 
@@ -536,77 +335,16 @@ function LocationBubble({ meta, isMe, a1, tokens }: { meta: any; isMe: boolean; 
     return <PlainLocationBubble lat={lat} lng={lng} isMe={isMe} a1={a1} tokens={tokens} label="Location unavailable" debugReason={`Platform: ${Platform.OS}. meta.lat/meta.lng did not parse as finite numbers (lat=${JSON.stringify(meta.lat)}, lng=${JSON.stringify(meta.lng)}).`} />;
   }
 
-  if (Platform.OS !== 'ios') {
-    // Tiles genuinely failed to load at runtime (network issue, or OSM's
-    // tile server blocking this app's traffic again — see the comment
-    // above TILE_URL_TEMPLATE) — previously indistinguishable from "still
-    // loading" since StaticTileMap had no error handling; see its
-    // onAllTilesFailed.
-    if (tilesFailedInfo) {
-      // eslint-disable-next-line no-console
-      console.warn('[LocationBubble] all tiles failed on', Platform.OS, '—', tilesFailedInfo);
-      return loadFailedFallback;
-    }
-    return (
-      <LocationErrorBoundary fallback={crashFallback}>
-        <Pressable onPress={() => setExpanded(true)} style={{ borderRadius: 20, overflow: 'hidden', width: 220 }}>
-          <StaticTileMap
-            lat={lat}
-            lng={lng}
-            width={220}
-            height={140}
-            zoom={16}
-            onAllTilesFailed={(failed, total, lastError) => setTilesFailedInfo({ failed, total, lastError })}
-          />
-          <View
-            style={[
-              { paddingHorizontal: 12, paddingVertical: 10 },
-              isMe ? { backgroundColor: a1 } : { backgroundColor: tokens.glassBg2, borderWidth: 1, borderColor: tokens.glassBorder, borderTopWidth: 0 },
-            ]}
-          >
-            <Text style={{ fontFamily: fontFamilies.bold, color: isMe ? '#fff' : tokens.text, fontSize: 13.5 }}>📍 Location</Text>
-            <Text style={{ fontFamily: fontFamilies.medium, color: isMe ? 'rgba(255,255,255,0.85)' : tokens.text2, fontSize: 12, marginTop: 2 }}>
-              {lat.toFixed(4)}, {lng.toFixed(4)}
-            </Text>
-          </View>
-        </Pressable>
-        <Modal visible={expanded} animationType="fade" onRequestClose={() => setExpanded(false)} statusBarTranslucent>
-          <View style={{ flex: 1, backgroundColor: '#000' }}>
-            <StaticTileMap lat={lat} lng={lng} width={screenW} height={screenH} zoom={16} />
-            <Pressable
-              onPress={() => openInMaps(lat, lng)}
-              style={{ position: 'absolute', left: 20, right: 20, bottom: 46, borderRadius: 16, paddingVertical: 14, alignItems: 'center', backgroundColor: a1 }}
-            >
-              <Text style={{ color: '#fff', fontSize: 15, fontFamily: fontFamilies.bold }}>Open in Maps</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => setExpanded(false)}
-              style={{ position: 'absolute', top: 56, right: 20, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' }}
-            >
-              <Text style={{ color: '#fff', fontSize: 18, fontFamily: fontFamilies.bold }}>✕</Text>
-            </Pressable>
-          </View>
-        </Modal>
-      </LocationErrorBoundary>
-    );
+  if (loadFailedReason) {
+    // eslint-disable-next-line no-console
+    console.warn('[LocationBubble] map failed to load on', Platform.OS, '—', loadFailedReason);
+    return loadFailedFallback;
   }
 
-  // iOS
-  const region = { latitude: lat, longitude: lng, latitudeDelta: 0.01, longitudeDelta: 0.01 };
   return (
     <LocationErrorBoundary fallback={crashFallback}>
       <Pressable onPress={() => setExpanded(true)} style={{ borderRadius: 20, overflow: 'hidden', width: 220 }}>
-        <MapView
-          style={{ width: 220, height: 140 }}
-          initialRegion={region}
-          pointerEvents="none"
-          scrollEnabled={false}
-          zoomEnabled={false}
-          rotateEnabled={false}
-          pitchEnabled={false}
-        >
-          <Marker coordinate={{ latitude: lat, longitude: lng }} />
-        </MapView>
+        <LocationMapSurface lat={lat} lng={lng} width={220} height={140} interactive={false} onLoadFailed={setLoadFailedReason} />
         <View
           style={[
             { paddingHorizontal: 12, paddingVertical: 10 },
@@ -621,9 +359,13 @@ function LocationBubble({ meta, isMe, a1, tokens }: { meta: any; isMe: boolean; 
       </Pressable>
       <Modal visible={expanded} animationType="fade" onRequestClose={() => setExpanded(false)} statusBarTranslucent>
         <View style={{ flex: 1, backgroundColor: '#000' }}>
-          <MapView style={{ flex: 1 }} initialRegion={region}>
-            <Marker coordinate={{ latitude: lat, longitude: lng }} />
-          </MapView>
+          <LocationMapSurface lat={lat} lng={lng} width={screenW} height={screenH} interactive />
+          <Pressable
+            onPress={() => openInMaps(lat, lng)}
+            style={{ position: 'absolute', left: 20, right: 20, bottom: 46, borderRadius: 16, paddingVertical: 14, alignItems: 'center', backgroundColor: a1 }}
+          >
+            <Text style={{ color: '#fff', fontSize: 15, fontFamily: fontFamilies.bold }}>Open in Maps</Text>
+          </Pressable>
           <Pressable
             onPress={() => setExpanded(false)}
             style={{ position: 'absolute', top: 56, right: 20, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' }}

@@ -124,6 +124,7 @@
         }
       ],
       "react-native-maps",
+      "@maplibre/maplibre-react-native",
       "./plugins/withLockScreenCallActivity",
       "./plugins/withPictureInPicture",
       "./plugins/withLargeScreenSupport"
