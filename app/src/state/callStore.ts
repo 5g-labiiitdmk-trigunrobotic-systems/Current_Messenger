@@ -225,6 +225,14 @@ export const useCallStore = create<CallState>((set, get) => ({
 
     relayClient.on(async (event: ServerEvent) => {
       if (event.type !== 'call:signal') return;
+      // A group call's signaling rides this exact same wire message
+      // (see docs/GROUP_CALLING.md and src/state/groupCallStore.ts) —
+      // without this guard, a group ring/offer/answer/ice-candidate would
+      // also match the switch below and get misinterpreted as a 1:1 call
+      // from that sender. groupCallStore.ts's own listener handles every
+      // call:signal that has groupId set; this store only ever handles
+      // the groupId-absent (1:1) case, unchanged from before.
+      if (event.groupId) return;
       const signal = event.signal as unknown as CallSignal;
       const from = event.from;
 

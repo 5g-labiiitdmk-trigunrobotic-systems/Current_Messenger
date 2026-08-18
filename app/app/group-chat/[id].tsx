@@ -13,6 +13,7 @@ import { useChatStore, getThreadKey } from '../../src/state/chatStore';
 import type { ChatMessage } from '../../src/state/chatStore';
 import { withDateSeparators } from '../../src/lib/dateSeparators';
 import { useGroupStore } from '../../src/state/groupStore';
+import { useGroupCallStore, GROUP_CALL_CAP } from '../../src/state/groupCallStore';
 import { useContactStore } from '../../src/state/contactStore';
 import { useAuthStore } from '../../src/state/authStore';
 import { previewFor } from '../../src/data/conversations';
@@ -29,6 +30,8 @@ export default function GroupChatScreen() {
   const approved = useContactStore((s) => s.approved);
   const threads = useChatStore((s) => s.threads);
   const { sendText, sendRich, setTyping, react, markRead } = useChatStore();
+  const startGroupCall = useGroupCallStore((s) => s.startGroupCall);
+  const groupCallPhase = useGroupCallStore((s) => s.phase);
 
   const key = getThreadKey(id ?? '', true);
   const messages = threads[key] ?? [];
@@ -161,6 +164,31 @@ export default function GroupChatScreen() {
     ]);
   };
 
+  // See docs/GROUP_CALLING.md and src/state/groupCallStore.ts — mesh
+  // calling hard-capped at GROUP_CALL_CAP participants. startGroupCall()
+  // itself already only rings the first (GROUP_CALL_CAP - 1) other
+  // members; this just sets expectations up front for a group bigger than
+  // that, rather than silently leaving some members out with no
+  // explanation.
+  const onStartGroupCall = (kind: 'voice' | 'video') => {
+    if (groupCallPhase !== 'idle') return; // already on a group call
+    const others = group.memberIds.filter((mid) => mid !== me);
+    if (others.length === 0) return;
+    const capped = others.length > GROUP_CALL_CAP - 1;
+    if (capped) {
+      appAlert(
+        'Group calls are limited to 4 people',
+        `This group has ${others.length + 1} members — only the first ${GROUP_CALL_CAP - 1} will be rung for this call.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Call anyway', onPress: () => startGroupCall(id ?? '', kind) },
+        ]
+      );
+    } else {
+      startGroupCall(id ?? '', kind);
+    }
+  };
+
   const onLongPressMessage = (messageId: string) => {
     appAlert('Message', undefined, [
       { text: '👍 React', onPress: () => react(id ?? '', true, messageId, '👍') },
@@ -206,6 +234,22 @@ export default function GroupChatScreen() {
                 {group.memberIds.length} members{group.isBroadcast ? ' · broadcast' : ''}
               </Text>
             </View>
+            {/* Nested Pressables inside the header's own Pressable (which
+                navigates to group-info) — RN gives the innermost Pressable
+                the touch, same as the back-arrow above, so tapping these
+                doesn't also trigger that navigation. See
+                docs/GROUP_CALLING.md / groupCallStore.ts. */}
+            <Pressable onPress={() => onStartGroupCall('voice')} style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center' }}>
+              <Svg width={19} height={19} viewBox="0 0 24 24" fill="none" stroke={tokens.text} strokeWidth={1.9}>
+                <Path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3.1-8.7A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2Z" />
+              </Svg>
+            </Pressable>
+            <Pressable onPress={() => onStartGroupCall('video')} style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center' }}>
+              <Svg width={19} height={19} viewBox="0 0 24 24" fill="none" stroke={tokens.text} strokeWidth={1.9}>
+                <Path d="M23 7l-7 5 7 5V7Z" />
+                <Path d="M1 5h15v14H1z" />
+              </Svg>
+            </Pressable>
           </Glass>
         </Pressable>
 

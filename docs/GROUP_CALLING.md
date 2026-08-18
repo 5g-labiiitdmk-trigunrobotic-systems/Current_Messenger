@@ -1,8 +1,14 @@
 # Group calling — architecture
 
-Status as of this doc: **signaling foundation shipped (server + wire
-protocol only); client-side calling UI/logic not started.** See "What's
-built" / "What's not built" at the bottom for the precise split.
+Status as of this doc: **client-side calling built** (mesh peer
+connections, ring/accept/decline/hangup flow, grid UI, entry points from
+group chat) **on top of the signaling foundation from the prior round.**
+Verified: type-checks, a real Metro bundle export, and a live Playwright
+load of the new routes with zero runtime errors. **Not verified**: actual
+multi-device mesh connectivity, audio/video quality with 3-4 real
+participants, or real TURN bandwidth behavior — none of that is
+testable outside a real multi-device environment. See "What's built" /
+"What's not built" at the bottom for the precise, updated split.
 
 ## Topology decision: mesh, not SFU
 
@@ -129,44 +135,70 @@ with which group it belongs to, distinct from a 1:1 call to that same
 person. It does **not** yet mean group calling works end-to-end — see
 below.
 
-## What's NOT built (the actual client-side calling feature)
+## What's built this round (client-side calling)
 
-None of this exists yet. In rough dependency order:
+Built as a fully **parallel, independent store** — `app/src/state/groupCallStore.ts`
+— rather than a restructuring of `callStore.ts`. The earlier plan above
+(items 1-2) assumed extending `callStore.ts`'s single-`RTCPeerConnection`
+shape in place; in practice, keeping 1:1 calling's file completely
+unmodified turned out to be both safer and not meaningfully harder than
+threading group support through it, since the two call types share no
+runtime state (a device is never on a 1:1 and group call simultaneously)
+and only need to *coordinate* busy-detection, not share connection logic.
 
-1. **Client-side multi-peer connection management.** `callStore.ts`
-   today has exactly one module-scope `RTCPeerConnection`, one
-   `peerId: string`, one `remoteStream`. Group calling needs a
-   `Map<peerId, RTCPeerConnection>` plus per-peer ICE-candidate-queue and
-   remote-description state — essentially the same offer/answer/ICE
-   choreography already proven for 1:1, run N-1 times per client and
-   kept independent per peer.
-2. **Call state redesign.** `phase`/`peerId`/`remoteStream` need to
-   become call-level status plus a `participants` map/array (each with
-   its own connection state, mute state, stream). This is the highest-
-   risk piece to get wrong, since it's a restructuring of the file that
-   *also* runs every existing 1:1 call — it should be built and tested
-   very deliberately, ideally with 1:1 calling's existing behavior
-   covered by regression checks before merging any change to this file.
-3. **A client-side "ring the group" flow**: enumerate up to 4 members via
-   `groupStore`, send one `call:signal` with `groupId` set to each,
-   collect accept/decline/timeout per person (reusing the group-invite
-   consent pattern's shape).
-4. **New UI**: a group call screen with a participant grid (not the
-   current full-bleed-remote + PIP-local layout, which assumes one
-   remote party), a group-aware incoming-call screen, and an update to
-   `ActiveCallBanner` (currently derives its label/route from a single
-   `peerId`).
-5. **New routing**: `/call/[id]` currently assumes `id` is one peer's
-   userId; group calls need their own route shape (e.g.
-   `/call/group/[groupId]`).
-6. **The 4-participant cap enforced in the UI** (and ideally the relay
-   rejecting an over-cap group-ring attempt too, once the client-side
-   ring flow above exists to send one).
+- **`groupCallStore.ts`**: `Map<peerId, RTCPeerConnection>` (module-scope,
+  mirroring `callStore.ts`'s single `pc` but N-1 of them), per-peer
+  ICE-candidate queues and remote-description flags, a `participants`
+  record keyed by userId with per-participant status/stream. Mesh
+  bootstrap protocol (no central call-session coordinator — see below):
+  the initiator rings each target individually with the full roster
+  attached to the ring payload; whoever joins (initiator immediately, a
+  callee on accept) broadcasts an accept to every other roster member;
+  a pairwise connection is created once both sides are known-joined, with
+  the lexicographically-lower userId always offering (deterministic,
+  glare-free, no join-order coordination needed). Full reasoning in that
+  file's own top-of-file comment.
+- **Ring/accept/decline/busy/timeout/hangup flow**, per-participant, with
+  the same 45s ring timeout and 30s connecting-timeout backstops 1:1
+  calling has — but per-peer, not call-wide, so one participant timing
+  out or failing doesn't end the call for everyone else already connected.
+- **Grid UI**: `app/app/call/group/[groupId].tsx` (in-call, dynamic
+  columns/rows sized to participant count) and
+  `app/app/incoming-group-call.tsx` (group-aware incoming screen) — both
+  new, parallel files, not branches of the 1:1 `call/[id].tsx` /
+  `incoming-call.tsx`. `GroupActiveCallBanner.tsx` is the group
+  counterpart to `ActiveCallBanner.tsx`, same reasoning.
+- **Entry point**: voice/video call buttons in `group-chat/[id].tsx`'s
+  header, capped client-side at `GROUP_CALL_CAP` (4) — a group larger
+  than that only rings the first 3 other members, with an explicit
+  confirmation prompt before doing so.
+- **The one necessary touch to `callStore.ts`**: a single early-return
+  guard (`if (event.groupId) return;`) in its signal listener — without
+  it, a group call's signaling (which rides the identical `call:signal`
+  wire message) would also match 1:1's switch statement and get
+  misinterpreted as a direct call from that sender. This is the only line
+  changed in that file; every other 1:1 code path is byte-identical to
+  before.
 
-Steps 1-2 in particular touch the same file that all existing 1:1
-calling depends on — given how much of this round already went into
-other changes, and given the real risk of a half-finished touch to that
-file regressing calling that already works, the deliberate choice this
-round was to stop at the signaling foundation and not start restructuring
-`callStore.ts` without the time to do it carefully and verify it doesn't
-regress 1:1 calls.
+**Known, deliberate limitations, not oversights:**
+
+- No true "discover and join a call in progress" for a group member who
+  wasn't in the original up-to-4 ring set — there's no server-side
+  "who's currently in this group's call" roster to query, and adding one
+  would mean extending the relay beyond the signaling-only contract this
+  document already described as sufficient. "Joining in progress" here
+  means accepting a ring you already received, whenever you get to it.
+- No remote mute/camera-state signaling — a participant's own mute/camera
+  toggle only affects their own track locally (`.enabled = false`, same
+  mechanism 1:1 calling already uses); other participants have no way to
+  see "they're muted" without an additional signal type, not added this
+  round to keep scope contained.
+- No CallKit/ConnectionService-equivalent background handling for group
+  calls, same limitation `callStore.ts` already documents for 1:1.
+- **Entirely unverified beyond type-checking, a real Metro bundle export,
+  and a live Playwright load with zero runtime errors**: actual mesh
+  WebRTC connectivity between real devices, audio/video quality with 3-4
+  live participants, and real TURN bandwidth behavior under the mesh
+  multiplication described above. None of that is testable outside a
+  real multi-device environment — no amount of sandbox verification
+  substitutes for it.

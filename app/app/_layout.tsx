@@ -17,10 +17,12 @@ import { usePresenceStore } from '../src/state/presenceStore';
 import { useContactStore } from '../src/state/contactStore';
 import { useGroupStore } from '../src/state/groupStore';
 import { useCallStore } from '../src/state/callStore';
+import { useGroupCallStore } from '../src/state/groupCallStore';
 import { useChatSessionStore } from '../src/state/chatSessionStore';
 import { AppLockGate } from '../src/components/AppLockGate';
 import { AppAlertHost } from '../src/components/AppAlertHost';
 import { ActiveCallBanner } from '../src/components/ActiveCallBanner';
+import { GroupActiveCallBanner } from '../src/components/GroupActiveCallBanner';
 import { appAlert } from '../src/state/alertStore';
 import { initNotificationRouting } from '../src/lib/push';
 import { setupCallNotificationChannel, registerCallBackgroundTask, subscribeToCallNotificationEvents } from '../src/lib/callNotifications';
@@ -63,6 +65,7 @@ export default function RootLayout() {
     useContactStore.getState().wire();
     useGroupStore.getState().wire();
     useCallStore.getState().wire();
+    useGroupCallStore.getState().wire();
     useChatSessionStore.getState().wire();
     initNotificationRouting();
     setupCallNotificationChannel().catch(() => {});
@@ -89,7 +92,29 @@ export default function RootLayout() {
       // own back button doesn't return to the now-gone incoming-call screen.
       if (s.phase === 'connecting' && prev.phase === 'ringing-in' && s.peerId) router.replace(`/call/${s.peerId}`);
     });
-    return unsub;
+
+    // Group-call counterpart to the catch-up + subscribe block above —
+    // same reasoning, same shape, just routing to the group screens
+    // (incoming-group-call / call/group/[groupId]) instead. Kept as its
+    // own separate block rather than merged into the 1:1 one above, so
+    // that block's logic is untouched.
+    const existingGroupCall = useGroupCallStore.getState();
+    if (existingGroupCall.incoming) {
+      router.push('/incoming-group-call');
+    } else if (existingGroupCall.groupId && (existingGroupCall.phase === 'ringing-out' || existingGroupCall.phase === 'connecting' || existingGroupCall.phase === 'active')) {
+      router.push(`/call/group/${existingGroupCall.groupId}`);
+    }
+
+    const unsubGroup = useGroupCallStore.subscribe((s, prev) => {
+      if (s.incoming && !prev.incoming) router.push('/incoming-group-call');
+      if (s.phase === 'ringing-out' && prev.phase === 'idle' && s.groupId) router.push(`/call/group/${s.groupId}`);
+      if (s.phase === 'connecting' && prev.phase === 'ringing-in' && s.groupId) router.replace(`/call/group/${s.groupId}`);
+    });
+
+    return () => {
+      unsub();
+      unsubGroup();
+    };
   }, []);
 
   useEffect(() => {
@@ -125,6 +150,8 @@ export default function RootLayout() {
               <Stack.Screen name="group-info/[id]" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="incoming-call" options={{ presentation: 'fullScreenModal' }} />
               <Stack.Screen name="call/[id]" options={{ presentation: 'fullScreenModal', gestureEnabled: false }} />
+              <Stack.Screen name="incoming-group-call" options={{ presentation: 'fullScreenModal' }} />
+              <Stack.Screen name="call/group/[groupId]" options={{ presentation: 'fullScreenModal', gestureEnabled: false }} />
               <Stack.Screen name="new-group" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="privacy" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
@@ -137,6 +164,7 @@ export default function RootLayout() {
             </Stack>
           </AppLockGate>
           <ActiveCallBanner />
+          <GroupActiveCallBanner />
           <AppAlertHost />
         </View>
       </SafeAreaProvider>
