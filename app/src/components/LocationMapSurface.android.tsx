@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text } from 'react-native';
 import { Map as MapLibreMap, Camera, Marker } from '@maplibre/maplibre-react-native';
 import { LocationPinIcon } from './LocationPinIcon';
@@ -87,8 +87,25 @@ const LOAD_TIMEOUT_MS = 8000;
 // Fabric integration has genuinely had rough edges here.
 const LOG_TAG = '[LocationMapSurface]';
 
+// TEMPORARY diagnostic scaffolding — not a permanent UI element. Console
+// output turned out to be unable to confirm or rule out anything: a real-
+// device capture showed zero ReactNativeJS output at all, including for
+// background app activity unrelated to this component, which is stronger
+// evidence of a broken/mismatched logcat capture than of a truly silent
+// app (RCTLog.js's own source confirms console.* pipes to native logging
+// via the always-installed `nativeLoggingHook` JSI binding regardless of
+// dev/release mode, and nothing in this project's babel/metro/terser
+// config strips console calls — so on paper this should have worked).
+// Rather than debate logcat further, DEBUG_STATUS is rendered directly
+// into the visible UI — no adb, no logcat, no build config assumptions,
+// just look at the screen. Remove this whole block (state, effect writes,
+// and the badge View below) once the underlying rendering issue is
+// confirmed fixed.
+type DebugStatus = 'render-only' | 'mounted' | 'loaded' | 'failed-style' | 'failed-timeout';
+
 export function LocationMapSurface({ lat, lng, width, height, interactive, onLoadFailed }: LocationMapSurfaceProps) {
   const finishedRef = useRef(false);
+  const [debugStatus, setDebugStatus] = useState<DebugStatus>('render-only');
 
   // eslint-disable-next-line no-console
   console.log(LOG_TAG, 'render — this fires on every render regardless of MapLibre; if this never appears in logcat, the component itself is never reached (a JS/import/routing problem upstream, not MapLibre). lat/lng:', lat, lng);
@@ -96,9 +113,11 @@ export function LocationMapSurface({ lat, lng, width, height, interactive, onLoa
   useEffect(() => {
     // eslint-disable-next-line no-console
     console.log(LOG_TAG, 'mount effect ran — MapLibreMap was constructed and the timer armed.');
+    setDebugStatus('mounted');
     finishedRef.current = false;
     const timer = setTimeout(() => {
       if (!finishedRef.current) {
+        setDebugStatus('failed-timeout');
         onLoadFailed?.(
           `Map did not finish loading within ${LOAD_TIMEOUT_MS / 1000}s — onDidFinishLoadingMap never fired, and no explicit onDidFailLoadingMap error was reported either. This is the "silently renders nothing" failure mode, not a reported one (see LOAD_TIMEOUT_MS's comment above).`
         );
@@ -128,10 +147,14 @@ export function LocationMapSurface({ lat, lng, width, height, interactive, onLoa
         touchPitch={interactive}
         doubleTapZoom={interactive}
         doubleTapHoldZoom={interactive}
-        onDidFailLoadingMap={() => onLoadFailed?.('MapLibre onDidFailLoadingMap fired — the style or its tiles failed to load.')}
+        onDidFailLoadingMap={() => {
+          setDebugStatus('failed-style');
+          onLoadFailed?.('MapLibre onDidFailLoadingMap fired — the style or its tiles failed to load.');
+        }}
         onDidFinishLoadingMap={() => {
           // eslint-disable-next-line no-console
           console.log(LOG_TAG, 'onDidFinishLoadingMap fired — native core reports the map genuinely finished loading.');
+          setDebugStatus('loaded');
           finishedRef.current = true;
         }}
       >
@@ -151,6 +174,14 @@ export function LocationMapSurface({ lat, lng, width, height, interactive, onLoa
           <Text style={{ fontSize: 8, color: '#333' }}>{ATTRIBUTION_TEXT}</Text>
         </View>
       )}
+      {/* TEMPORARY diagnostic badge — see DebugStatus's comment above. Own
+          opaque background so it's visible even if this whole surface is
+          rendering invisibly (the exact failure mode under investigation) —
+          a top-left position keeps it clear of the attribution text and
+          the pin marker (bottom-anchored, roughly centered). */}
+      <View style={{ position: 'absolute', top: 4, left: 4, backgroundColor: 'rgba(220,0,0,0.85)', paddingHorizontal: 4, paddingVertical: 1, borderRadius: 3 }}>
+        <Text style={{ fontSize: 8, color: '#fff', fontFamily: 'monospace' }}>{debugStatus}</Text>
+      </View>
     </View>
   );
 }
