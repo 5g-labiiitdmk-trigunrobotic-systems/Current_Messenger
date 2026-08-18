@@ -46,10 +46,56 @@ const ATTRIBUTION_TEXT = 'OpenFreeMap © OpenMapTiles Data from OpenStreetMap';
 // explicit error.
 const LOAD_TIMEOUT_MS = 8000;
 
+// Real-device evidence this round: zero `mbgl`-tagged logcat output at all
+// (MapLibre Native's own C++ core logger — inherited from its Mapbox GL
+// Native fork lineage), and the 8s timeout above never fired either (no
+// [LocationMapSurface] warning), on top of no onDidFailLoadingMap and no JS
+// error caught by LocationErrorBoundary. That full silence is consistent
+// with two different explanations that look identical from the JS side:
+// (a) this component never actually mounts far enough to construct
+// MapLibreMap at all, or (b) it mounts and genuinely finishes loading
+// (silencing the timeout, since a native core has no reason to log
+// anything on success), but the rendered output never reaches the screen.
+// LOG_TAG below (a synchronous, unconditional log at the very top of every
+// render, independent of anything MapLibre-specific) is what actually
+// distinguishes these two — check for it in the same logcat capture.
+//
+// (b) has a concrete, well-evidenced candidate: this component's default
+// rendering surface. The installed package's own type definitions
+// (Map.d.ts) say `androidView` defaults to `"surface"` — i.e. a
+// SurfaceView/GLSurfaceView-backed native layer, which Android composites
+// via a hardware "hole punch" outside the normal view-drawing pipeline
+// rather than through it. The preview card that wraps this component
+// (MessageBubble.tsx:346, `overflow: 'hidden'` + `borderRadius: 20`, to
+// get the rounded-corner clipped thumbnail visible in the screenshot) is
+// exactly the kind of clipping that a hole-punched SurfaceView is known
+// not to respect correctly on Android — the surface can end up composited
+// incorrectly relative to that clip and simply never becomes visible,
+// while still rendering "successfully" as far as the native core and its
+// own logger are concerned. This library ships an explicit way around
+// that: `androidView="texture"` renders through a TextureView instead,
+// which is a normal GPU-backed bitmap that participates in the standard
+// view hierarchy (clipping, rounded corners, opacity — all of it) instead
+// of bypassing it. Set below for exactly that reason. This library has
+// also had real, confirmed Fabric/Android-specific event-delivery bugs
+// before (maplibre/maplibre-react-native#1165, fixed in 11.0.0 stable —
+// this project is on 11.3.6, past that fix, but it's evidence this
+// category of bug is real for this library on this platform, not
+// hypothetical) and a historical native-registration issue under RN's
+// bridgeless mode (maplibre/maplibre-react-native#436, closed via #483) —
+// neither is confirmed as *this* bug, but both corroborate that Android
+// Fabric integration has genuinely had rough edges here.
+const LOG_TAG = '[LocationMapSurface]';
+
 export function LocationMapSurface({ lat, lng, width, height, interactive, onLoadFailed }: LocationMapSurfaceProps) {
   const finishedRef = useRef(false);
 
+  // eslint-disable-next-line no-console
+  console.log(LOG_TAG, 'render — this fires on every render regardless of MapLibre; if this never appears in logcat, the component itself is never reached (a JS/import/routing problem upstream, not MapLibre). lat/lng:', lat, lng);
+
   useEffect(() => {
+    // eslint-disable-next-line no-console
+    console.log(LOG_TAG, 'mount effect ran — MapLibreMap was constructed and the timer armed.');
     finishedRef.current = false;
     const timer = setTimeout(() => {
       if (!finishedRef.current) {
@@ -70,6 +116,11 @@ export function LocationMapSurface({ lat, lng, width, height, interactive, onLoa
       <MapLibreMap
         style={{ flex: 1 }}
         mapStyle={OPENFREEMAP_STYLE_URL}
+        // See LOG_TAG's comment above — this is the primary suspected fix,
+        // not just a diagnostic. Switches off the default SurfaceView-based
+        // rendering path that doesn't reliably composite under this card's
+        // overflow:hidden/rounded-corner clipping.
+        androidView="texture"
         attribution={interactive}
         dragPan={interactive}
         touchZoom={interactive}
@@ -79,6 +130,8 @@ export function LocationMapSurface({ lat, lng, width, height, interactive, onLoa
         doubleTapHoldZoom={interactive}
         onDidFailLoadingMap={() => onLoadFailed?.('MapLibre onDidFailLoadingMap fired — the style or its tiles failed to load.')}
         onDidFinishLoadingMap={() => {
+          // eslint-disable-next-line no-console
+          console.log(LOG_TAG, 'onDidFinishLoadingMap fired — native core reports the map genuinely finished loading.');
           finishedRef.current = true;
         }}
       >
