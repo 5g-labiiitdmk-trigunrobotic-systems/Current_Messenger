@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { View, Text } from 'react-native';
 import { Map as MapLibreMap, Camera, Marker } from '@maplibre/maplibre-react-native';
 import { LocationPinIcon } from './LocationPinIcon';
@@ -29,7 +29,42 @@ const OPENFREEMAP_STYLE_URL = 'https://tiles.openfreemap.org/styles/liberty';
 // is a belt-and-suspenders guarantee rather than the sole mechanism.
 const ATTRIBUTION_TEXT = 'OpenFreeMap © OpenMapTiles Data from OpenStreetMap';
 
+// onDidFailLoadingMap (below) only fires for style-load failures — not for
+// individual vector-tile fetch failures once the style itself has loaded,
+// and not for a native view that mounts but silently never paints for some
+// other reason. Confirmed via a real-device screenshot: a location bubble
+// that never called onLoadFailed, never threw a JS error caught by
+// LocationErrorBoundary, and still showed no map — just an invisible
+// 220x140 gap above a caption that read plain "Location" (proving it was
+// on the happy-path return, not any fallback state; see this round's
+// conversation for the full code-path elimination). onDidFailLoadingMap
+// alone can never catch that class of failure, since by definition nothing
+// ever told it something was wrong. This timeout closes that gap: if
+// onDidFinishLoadingMap hasn't fired within LOAD_TIMEOUT_MS of mount,
+// "still not loaded" is itself treated as a failure, so the diagnostic
+// fallback becomes reachable even when nothing native ever reports an
+// explicit error.
+const LOAD_TIMEOUT_MS = 8000;
+
 export function LocationMapSurface({ lat, lng, width, height, interactive, onLoadFailed }: LocationMapSurfaceProps) {
+  const finishedRef = useRef(false);
+
+  useEffect(() => {
+    finishedRef.current = false;
+    const timer = setTimeout(() => {
+      if (!finishedRef.current) {
+        onLoadFailed?.(
+          `Map did not finish loading within ${LOAD_TIMEOUT_MS / 1000}s — onDidFinishLoadingMap never fired, and no explicit onDidFailLoadingMap error was reported either. This is the "silently renders nothing" failure mode, not a reported one (see LOAD_TIMEOUT_MS's comment above).`
+        );
+      }
+    }, LOAD_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+    // A new location message is a new component instance (same reasoning
+    // as the .web.tsx variant's identical comment) — this only needs to
+    // arm once per mount, not re-run on every prop change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <View style={{ width, height }}>
       <MapLibreMap
@@ -43,6 +78,9 @@ export function LocationMapSurface({ lat, lng, width, height, interactive, onLoa
         doubleTapZoom={interactive}
         doubleTapHoldZoom={interactive}
         onDidFailLoadingMap={() => onLoadFailed?.('MapLibre onDidFailLoadingMap fired — the style or its tiles failed to load.')}
+        onDidFinishLoadingMap={() => {
+          finishedRef.current = true;
+        }}
       >
         <Camera initialViewState={{ center: [lng, lat], zoom: 15 }} />
         <Marker lngLat={[lng, lat]} anchor="bottom">
