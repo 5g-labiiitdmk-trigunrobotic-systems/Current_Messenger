@@ -3,6 +3,25 @@ plugins {
   id 'expo-module-gradle-plugin'
 }
 
+// This module is local-only (app/modules/pip-controller, not an npm
+// package) and is never meant to be published to Maven. The
+// expo-module-gradle-plugin's ExpoModuleExtension defaults
+// `canBePublished = true` (correct for real published Expo packages,
+// which get their versionName from their own package.json elsewhere in
+// that plugin's pipeline) — for a module with no such pipeline, that
+// default instead configures AGP's publishing { singleVariant(...) }
+// DSL, which requires android.defaultConfig.versionName to exist, which
+// this module never set because it was never meant to publish anything.
+// Setting this to false (traced directly from
+// expo-module-gradle-plugin's ProjectConfiguration.kt: canBePublished
+// == false short-circuits to empty no-op publish tasks and skips
+// applyPublishingVariant() entirely) removes the versionName requirement
+// at its actual source instead of adding a meaningless fake version
+// number just to satisfy it.
+expoModule {
+  canBePublished = false
+}
+
 android {
   namespace "expo.modules.pipcontroller"
 }
