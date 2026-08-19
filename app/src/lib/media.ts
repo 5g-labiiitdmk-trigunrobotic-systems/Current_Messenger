@@ -6,14 +6,32 @@ import * as VideoThumbnails from 'expo-video-thumbnails';
 import type { AudioRecorder } from 'expo-audio';
 import { createAudioPlayer, requestRecordingPermissionsAsync, setAudioModeAsync } from 'expo-audio';
 
-export async function pickImageBase64(): Promise<{ base64: string; mime: string } | null> {
-  const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+/**
+ * source: 'library' (default, unchanged for every existing call site —
+ * none of them pass this) opens the photo gallery; 'camera' launches a
+ * live capture instead, added for the in-app "Camera" attach option (see
+ * chat/[id].tsx and group-chat/[id].tsx). Both now pass allowsEditing:
+ * true — expo-image-picker's own built-in crop step (already used
+ * elsewhere in this file by pickAvatarImage, not a new dependency),
+ * shown after the photo is selected/captured and before this function
+ * returns, satisfying "crop before it enters the pipeline" for both
+ * sources at once. Known platform limitation of this built-in editor
+ * (confirmed from expo-image-picker's own type definitions, not
+ * assumed): the crop rectangle is locked to a square on iOS — `aspect`
+ * (free-form/non-square cropping) is Android-only. Left unset here
+ * deliberately (Android gets a free-form crop; iOS gets expo-image-
+ * picker's square-only editor) rather than forcing every photo to
+ * square everywhere, since this app's current phase is Android-first.
+ */
+export async function pickImageBase64(source: 'camera' | 'library' = 'library'): Promise<{ base64: string; mime: string } | null> {
+  const perm = source === 'camera' ? await ImagePicker.requestCameraPermissionsAsync() : await ImagePicker.requestMediaLibraryPermissionsAsync();
   if (!perm.granted) return null;
-  const result = await ImagePicker.launchImageLibraryAsync({
+  const launch = source === 'camera' ? ImagePicker.launchCameraAsync : ImagePicker.launchImageLibraryAsync;
+  const result = await launch({
     mediaTypes: ['images'],
     base64: true,
     quality: 0.5,
-    allowsEditing: false,
+    allowsEditing: true,
   });
   if (result.canceled || !result.assets[0]?.base64) return null;
   const asset = result.assets[0];
@@ -77,7 +95,54 @@ function formatDuration(totalSeconds: number): string {
 }
 
 /**
- * Video picker, mirroring pickImageBase64's shape and error handling.
+ * Duration/size checks, base64 read, and thumbnail generation — identical
+ * regardless of whether the asset came from the gallery or a live camera
+ * recording, so both pickVideoBase64 sources (below) share this one
+ * implementation rather than duplicating it. Extracted from what used to
+ * be pickVideoBase64's own inline tail; behavior is unchanged from
+ * before for the library path.
+ */
+async function processVideoAsset(asset: ImagePicker.ImagePickerAsset): Promise<PickVideoResult> {
+  const durationSeconds = asset.duration ? Math.round(asset.duration / 1000) : 0;
+  if (durationSeconds > MAX_VIDEO_DURATION_SECONDS) return { ok: false, reason: 'too_long' };
+
+  // Fast-path rejection when the picker reports a size, before ever
+  // reading the file into memory — not all platforms populate
+  // fileSize, so this is a best-effort early check, not the only one.
+  if (asset.fileSize && asset.fileSize > MAX_VIDEO_FILE_BYTES) return { ok: false, reason: 'too_large' };
+
+  const base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 });
+  const approxBytes = (base64.length * 3) / 4;
+  if (approxBytes > MAX_VIDEO_FILE_BYTES) return { ok: false, reason: 'too_large' };
+
+  let thumbnailBase64: string | null = null;
+  try {
+    const { uri: rawThumbUri } = await VideoThumbnails.getThumbnailAsync(asset.uri, { time: 0 });
+    const context = ImageManipulator.manipulate(rawThumbUri);
+    context.resize({ width: THUMBNAIL_MAX_WIDTH });
+    const rendered = await context.renderAsync();
+    const saved = await rendered.saveAsync({ compress: 0.6, format: SaveFormat.JPEG, base64: true });
+    thumbnailBase64 = saved.base64 ?? null;
+  } catch (e: any) {
+    // eslint-disable-next-line no-console
+    console.error('[media] video thumbnail generation failed, sending without one:', e?.message ?? e);
+    thumbnailBase64 = null;
+  }
+
+  return { ok: true, base64, mime: asset.mimeType ?? 'video/mp4', durationLabel: formatDuration(durationSeconds), thumbnailBase64 };
+}
+
+/**
+ * Video picker, mirroring pickImageBase64's shape/error handling and its
+ * new source parameter (same default, same reasoning — every existing
+ * call site passes nothing and keeps picking from the gallery
+ * unchanged). videoMaxDuration is a recording-time cap that only applies
+ * to the camera path (irrelevant to picking an existing gallery video,
+ * where the file's length is already fixed) — processVideoAsset's own
+ * post-hoc duration check remains the authoritative enforcement either
+ * way, so this is a nicer-to-hit UX limit for camera, not a new source
+ * of truth.
+ *
  * Unlike images, expo-image-picker never returns base64 for video assets
  * (only a file uri) — read separately via FileSystem, same technique
  * already proven in stopVoiceRecording below. Thumbnail generation is a
@@ -89,42 +154,16 @@ function formatDuration(totalSeconds: number): string {
  * device here), same disclosed limitation as every other native-module
  * change this project has made.
  */
-export async function pickVideoBase64(): Promise<PickVideoResult> {
+export async function pickVideoBase64(source: 'camera' | 'library' = 'library'): Promise<PickVideoResult> {
   try {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    const perm = source === 'camera' ? await ImagePicker.requestCameraPermissionsAsync() : await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) return { ok: false, reason: 'permission_denied' };
 
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['videos'], quality: 0.6 });
+    const launch = source === 'camera' ? ImagePicker.launchCameraAsync : ImagePicker.launchImageLibraryAsync;
+    const result = await launch({ mediaTypes: ['videos'], quality: 0.6, videoMaxDuration: MAX_VIDEO_DURATION_SECONDS });
     if (result.canceled || !result.assets[0]) return { ok: false, reason: 'canceled' };
-    const asset = result.assets[0];
 
-    const durationSeconds = asset.duration ? Math.round(asset.duration / 1000) : 0;
-    if (durationSeconds > MAX_VIDEO_DURATION_SECONDS) return { ok: false, reason: 'too_long' };
-
-    // Fast-path rejection when the picker reports a size, before ever
-    // reading the file into memory — not all platforms populate
-    // fileSize, so this is a best-effort early check, not the only one.
-    if (asset.fileSize && asset.fileSize > MAX_VIDEO_FILE_BYTES) return { ok: false, reason: 'too_large' };
-
-    const base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 });
-    const approxBytes = (base64.length * 3) / 4;
-    if (approxBytes > MAX_VIDEO_FILE_BYTES) return { ok: false, reason: 'too_large' };
-
-    let thumbnailBase64: string | null = null;
-    try {
-      const { uri: rawThumbUri } = await VideoThumbnails.getThumbnailAsync(asset.uri, { time: 0 });
-      const context = ImageManipulator.manipulate(rawThumbUri);
-      context.resize({ width: THUMBNAIL_MAX_WIDTH });
-      const rendered = await context.renderAsync();
-      const saved = await rendered.saveAsync({ compress: 0.6, format: SaveFormat.JPEG, base64: true });
-      thumbnailBase64 = saved.base64 ?? null;
-    } catch (e: any) {
-      // eslint-disable-next-line no-console
-      console.error('[media] video thumbnail generation failed, sending without one:', e?.message ?? e);
-      thumbnailBase64 = null;
-    }
-
-    return { ok: true, base64, mime: asset.mimeType ?? 'video/mp4', durationLabel: formatDuration(durationSeconds), thumbnailBase64 };
+    return await processVideoAsset(result.assets[0]);
   } catch (e: any) {
     // eslint-disable-next-line no-console
     console.error('[media] pickVideoBase64 failed:', e?.message ?? e);

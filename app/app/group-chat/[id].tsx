@@ -136,6 +136,43 @@ export default function GroupChatScreen() {
   const onAttach = async () => {
     appAlert('Share', undefined, [
       {
+        text: 'Camera',
+        onPress: () => {
+          // Same nested-menu shape as chat/[id].tsx's identical addition —
+          // both branches share pickImageBase64/pickVideoBase64 with the
+          // rest of this menu, only the capture source differs ('camera'
+          // vs the default 'library'); see media.ts.
+          appAlert('Camera', undefined, [
+            {
+              text: 'Take Photo',
+              onPress: async () => {
+                const img = await pickImageBase64('camera');
+                if (img) sendRich(id ?? '', true, 'media', img);
+              },
+            },
+            {
+              text: 'Record Video',
+              onPress: async () => {
+                const result = await pickVideoBase64('camera');
+                if (result.ok) {
+                  sendRich(id ?? '', true, 'media', { base64: result.base64, mime: result.mime, mediaType: 'video', durationLabel: result.durationLabel, thumbnailBase64: result.thumbnailBase64 });
+                } else if (result.reason === 'permission_denied') {
+                  appAlert('Camera permission needed', 'Enable camera access to record a video.');
+                } else if (result.reason === 'too_long') {
+                  appAlert('Video too long', `Shared videos are limited to ${MAX_VIDEO_DURATION_SECONDS} seconds.`);
+                } else if (result.reason === 'too_large') {
+                  appAlert('Video too large', `Shared videos are limited to ${Math.round(MAX_VIDEO_FILE_BYTES / (1024 * 1024))}MB.`);
+                } else if (result.reason === 'failed') {
+                  appAlert('Could not record this video', 'Something went wrong saving that recording — try again.');
+                }
+                // 'canceled': user backed out of the camera, nothing to show.
+              },
+            },
+            { text: 'Cancel', style: 'cancel' },
+          ]);
+        },
+      },
+      {
         text: 'Photo',
         onPress: async () => {
           const img = await pickImageBase64();
