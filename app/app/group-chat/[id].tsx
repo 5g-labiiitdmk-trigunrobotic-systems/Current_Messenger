@@ -366,9 +366,12 @@ export default function GroupChatScreen() {
         )}
 
         {canPost ? (
-          <Glass
-            radius={0}
-            bordered={false}
+          // Third direction change on this row's outer wrapper tonight —
+          // noted explicitly, not a bug fix: reverted from a bounded
+          // card+border back to transparent/floating (matching
+          // chat/[id].tsx's identical reversal) per explicit re-request.
+          // Plain View, no background/border of its own.
+          <View
             style={{
               paddingHorizontal: 14,
               paddingTop: 10,
@@ -376,8 +379,6 @@ export default function GroupChatScreen() {
               flexDirection: 'row',
               alignItems: 'center',
               gap: 9,
-              borderTopWidth: 1,
-              borderTopColor: tokens.glassBorder,
             }}
           >
             {/* Photo attach — directly reuses chat/[id].tsx's pickImageBase64
@@ -418,7 +419,7 @@ export default function GroupChatScreen() {
                 )}
               </View>
             </Pressable>
-          </Glass>
+          </View>
         ) : (
           <View style={{ padding: 16, paddingBottom: insets.bottom + 16 }}>
             <Text style={{ textAlign: 'center', color: tokens.text3, fontFamily: fontFamilies.semibold, fontSize: 12.5 }}>Only the channel owner can post here.</Text>

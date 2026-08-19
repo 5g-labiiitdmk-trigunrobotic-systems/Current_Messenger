@@ -653,9 +653,15 @@ export default function ChatScreen() {
           </View>
         )}
 
-        <Glass
-          radius={0}
-          bordered={false}
+        {/* Third direction change on this row's outer wrapper tonight —
+            noted explicitly, not a bug fix: card+border (6d067bb) reverted
+            back to transparent/floating (86d810a's original approach) per
+            explicit re-request. Plain View, no background/border of its
+            own — the message list's background shows through underneath,
+            same as above it. The inner pieces (attach circle, pill text
+            field, mic/send circle below) are untouched and already read as
+            separate floating elements; only this outer wrapper changes. */}
+        <View
           style={{
             paddingHorizontal: 14,
             paddingTop: 10,
@@ -664,8 +670,6 @@ export default function ChatScreen() {
             alignItems: 'center',
             gap: 9,
             opacity: canSend ? 1 : 0.5,
-            borderTopWidth: 1,
-            borderTopColor: tokens.glassBorder,
           }}
         >
           <Pressable onPress={onAttach} disabled={!canSend} style={{ width: 42, height: 42, alignItems: 'center', justifyContent: 'center' }}>
@@ -699,7 +703,7 @@ export default function ChatScreen() {
               )}
             </View>
           </Pressable>
-        </Glass>
+        </View>
       </KeyboardAvoidingView>
     </View>
   );
