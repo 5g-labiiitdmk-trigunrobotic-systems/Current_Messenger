@@ -5,6 +5,7 @@ import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import type { AudioRecorder } from 'expo-audio';
 import { createAudioPlayer, requestRecordingPermissionsAsync, setAudioModeAsync } from 'expo-audio';
+import { VideoTrimNative, showVideoTrimEditorNative, compressVideoNative, type VideoTrimSpec } from './videoTrim';
 
 /**
  * source: 'library' (default, unchanged for every existing call site —
@@ -67,17 +68,34 @@ export async function pickAvatarImage(source: 'camera' | 'library'): Promise<{ b
   return { base64: saved.base64, mime: 'image/jpeg' };
 }
 
+// Duration cap raised from 60s to 5 minutes now that oversized videos are
+// compressed rather than flatly rejected (see compressIfNeeded below) —
+// the hard duration cap is no longer the only thing standing between "a
+// short clip" and "a mistakenly-shared movie", so it can be meaningfully
+// more generous. It's still a genuine ceiling, not just a formality:
+// compression reduces bitrate/resolution, not length, so a 20-minute
+// video is still a bad fit for a pairwise-encrypted, relay-forwarded
+// chat message regardless of how aggressively it's compressed. Also
+// enforced natively inside the trim editor itself (EditorConfig.maxDuration
+// below) — the user physically cannot select a range longer than this in
+// the trim UI — with this constant used again afterward as a defense-in-
+// depth check on the actual trimmed result, same as everywhere else in
+// this file that doesn't trust a single check.
+export const MAX_VIDEO_DURATION_SECONDS = 300;
 // The relay has zero persistence and just forwards messages as-is — a
 // video's base64 encoding (~4/3 the raw byte size) travels in a single
-// WebSocket frame, and in a group chat gets fanned out pairwise, once
-// per member (see sendRich in chatStore.ts). A 15MB cap keeps a single
-// group send's total relay traffic bounded (15MB * ~4/3 * N members,
-// not unbounded), while still covering a genuinely short compressed
-// clip from a phone camera. Duration is capped first and separately
-// (60s) since that's the more meaningful abuse limit from a user's
-// perspective — "not a huge file" vs "not a mistakenly-shared movie".
-export const MAX_VIDEO_DURATION_SECONDS = 60;
-export const MAX_VIDEO_FILE_BYTES = 15 * 1024 * 1024;
+// WebSocket frame, and in a group chat gets fanned out pairwise, once per
+// member (see sendRich in chatStore.ts). Raised from 15MB to 20MB along
+// with the 5x duration increase above — NOT a proportional 5x increase,
+// deliberately: the group fan-out multiplication this cap exists to bound
+// (bytes * ~4/3 * N members) gets worse, not better, as N grows, so this
+// stays a modest bump rather than tracking the duration increase
+// linearly. At 20MB over a full 300s clip, that's roughly ~533kbps
+// average — genuinely low-bitrate "chat video" quality, not "cap that's
+// never actually the limiting factor once compression is available."
+// This is now the ceiling AFTER compression is attempted, not a same-day
+// rejection threshold — see compressIfNeeded.
+export const MAX_VIDEO_FILE_BYTES = 20 * 1024 * 1024;
 // Matches pickAvatarImage's downsizing reasoning below — a video frame
 // grabbed at the source video's native resolution (e.g. 1080p+) would
 // make the thumbnail itself bigger than most photo messages this app
@@ -94,30 +112,127 @@ function formatDuration(totalSeconds: number): string {
   return `${mins}:${String(secs).padStart(2, '0')}`;
 }
 
+function approxBase64Bytes(base64Length: number): number {
+  return (base64Length * 3) / 4;
+}
+
 /**
- * Duration/size checks, base64 read, and thumbnail generation — identical
- * regardless of whether the asset came from the gallery or a live camera
- * recording, so both pickVideoBase64 sources (below) share this one
- * implementation rather than duplicating it. Extracted from what used to
- * be pickVideoBase64's own inline tail; behavior is unchanged from
- * before for the library path.
+ * Wraps react-native-video-trim's event-driven showEditor() (it has no
+ * Promise-returning form — trimming completion, cancellation, and errors
+ * all arrive as separate native events) into the Promise-based shape the
+ * rest of this file uses. New-Architecture event subscription pattern
+ * (`(VideoTrimNative as Spec).onX(...)`), confirmed directly from the
+ * library's own README example — this project has newArchEnabled: true
+ * (app.json), so this is the correct form for it, not the legacy
+ * NativeEventEmitter(NativeModules.VideoTrim) pattern the same README
+ * documents as the Old Architecture fallback.
+ *
+ * Resolves null for both "user canceled" and "editor reported an error"
+ * — pickVideoBase64 below treats those the same way pickImageBase64
+ * already treats a canceled picker (silently do nothing), except a
+ * genuine editor error is also console.error'd for diagnosability,
+ * matching this project's established "don't silently swallow a real
+ * failure" convention elsewhere in this file.
  */
-async function processVideoAsset(asset: ImagePicker.ImagePickerAsset): Promise<PickVideoResult> {
-  const durationSeconds = asset.duration ? Math.round(asset.duration / 1000) : 0;
+function showVideoTrimEditor(filePath: string, config: Parameters<typeof showVideoTrimEditorNative>[1]): Promise<{ outputPath: string; durationMs: number } | null> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const spec = VideoTrimNative as VideoTrimSpec;
+    const finishSub = spec.onFinishTrimming(({ outputPath, duration }) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve({ outputPath, durationMs: duration });
+    });
+    const cancelSub = spec.onCancel(() => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(null);
+    });
+    const errorSub = spec.onError(({ message, errorCode }) => {
+      if (settled) return;
+      settled = true;
+      // eslint-disable-next-line no-console
+      console.error('[media] video trim editor error:', errorCode, message);
+      cleanup();
+      resolve(null);
+    });
+    function cleanup() {
+      finishSub.remove();
+      cancelSub.remove();
+      errorSub.remove();
+    }
+    showVideoTrimEditorNative(filePath, config);
+  });
+}
+
+/**
+ * Compresses a video only if it's actually over the size cap — not run
+ * unconditionally, to avoid burning processing time/battery on clips
+ * that already fit. Tries 'medium' quality first (CRF 23, per the
+ * library's own type docs — a reasonable balance), then falls back to
+ * the more aggressive 'low' (CRF 28) if the first pass still isn't
+ * enough. Returns the original path unchanged if compression was never
+ * attempted (already under the cap) or if the library itself throws
+ * (native compression failure) — the caller's own post-hoc size check
+ * is what actually decides pass/fail either way, so a compression
+ * failure here degrades to "send rejected as too_large" rather than
+ * "silently send an oversized/corrupt file" or "crash."
+ */
+async function compressIfNeeded(filePath: string, currentBytes: number): Promise<{ path: string; bytes: number }> {
+  if (currentBytes <= MAX_VIDEO_FILE_BYTES) return { path: filePath, bytes: currentBytes };
+
+  for (const quality of ['medium', 'low'] as const) {
+    try {
+      const { outputPath } = await compressVideoNative(filePath, { quality });
+      const info = await FileSystem.getInfoAsync(outputPath);
+      const bytes = info.exists ? info.size : currentBytes;
+      if (bytes <= MAX_VIDEO_FILE_BYTES) return { path: outputPath, bytes };
+      filePath = outputPath; // feed the already-compressed file into the next, more aggressive pass
+      currentBytes = bytes;
+    } catch (e: any) {
+      // eslint-disable-next-line no-console
+      console.error(`[media] video compression (${quality}) failed:`, e?.message ?? e);
+      break;
+    }
+  }
+  return { path: filePath, bytes: currentBytes };
+}
+
+/**
+ * Post-trim pipeline: duration check, compress-if-needed, base64 read,
+ * thumbnail generation. Shared by both pickVideoBase64 sources. Takes
+ * the file path/duration already returned by the trim editor (every
+ * video now goes through it — see pickVideoBase64 below) rather than an
+ * ImagePicker asset directly, since the trim step may have replaced both
+ * the file and its duration.
+ */
+async function processTrimmedVideo(filePath: string, durationMs: number, mimeType: string | null | undefined): Promise<PickVideoResult> {
+  const durationSeconds = Math.round(durationMs / 1000);
+  // Defense-in-depth — the trim editor's own maxDuration (set by the
+  // caller) should already prevent this, but that's a UI constraint, not
+  // a guarantee, same reasoning as every other "check it again after"
+  // pattern in this file.
   if (durationSeconds > MAX_VIDEO_DURATION_SECONDS) return { ok: false, reason: 'too_long' };
 
-  // Fast-path rejection when the picker reports a size, before ever
-  // reading the file into memory — not all platforms populate
-  // fileSize, so this is a best-effort early check, not the only one.
-  if (asset.fileSize && asset.fileSize > MAX_VIDEO_FILE_BYTES) return { ok: false, reason: 'too_large' };
+  const info = await FileSystem.getInfoAsync(filePath);
+  if (!info.exists) return { ok: false, reason: 'failed' };
+  const initialBytes = info.size;
 
-  const base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 });
-  const approxBytes = (base64.length * 3) / 4;
-  if (approxBytes > MAX_VIDEO_FILE_BYTES) return { ok: false, reason: 'too_large' };
+  const { path: finalPath, bytes: finalBytes } = await compressIfNeeded(filePath, initialBytes);
+  if (finalBytes > MAX_VIDEO_FILE_BYTES) return { ok: false, reason: 'too_large' };
+
+  const base64 = await FileSystem.readAsStringAsync(finalPath, { encoding: FileSystem.EncodingType.Base64 });
+  // Real, not estimated, now that a precise on-disk size is already known
+  // from compressIfNeeded/getInfoAsync above — kept as a second guard
+  // anyway since base64 inflation (~4/3) is exactly what actually rides
+  // the wire, not the raw file size.
+  if (approxBase64Bytes(base64.length) > MAX_VIDEO_FILE_BYTES) return { ok: false, reason: 'too_large' };
 
   let thumbnailBase64: string | null = null;
   try {
-    const { uri: rawThumbUri } = await VideoThumbnails.getThumbnailAsync(asset.uri, { time: 0 });
+    const { uri: rawThumbUri } = await VideoThumbnails.getThumbnailAsync(finalPath, { time: 0 });
     const context = ImageManipulator.manipulate(rawThumbUri);
     context.resize({ width: THUMBNAIL_MAX_WIDTH });
     const rendered = await context.renderAsync();
@@ -129,30 +244,33 @@ async function processVideoAsset(asset: ImagePicker.ImagePickerAsset): Promise<P
     thumbnailBase64 = null;
   }
 
-  return { ok: true, base64, mime: asset.mimeType ?? 'video/mp4', durationLabel: formatDuration(durationSeconds), thumbnailBase64 };
+  return { ok: true, base64, mime: mimeType ?? 'video/mp4', durationLabel: formatDuration(durationSeconds), thumbnailBase64 };
 }
 
 /**
  * Video picker, mirroring pickImageBase64's shape/error handling and its
- * new source parameter (same default, same reasoning — every existing
- * call site passes nothing and keeps picking from the gallery
- * unchanged). videoMaxDuration is a recording-time cap that only applies
- * to the camera path (irrelevant to picking an existing gallery video,
- * where the file's length is already fixed) — processVideoAsset's own
- * post-hoc duration check remains the authoritative enforcement either
- * way, so this is a nicer-to-hit UX limit for camera, not a new source
- * of truth.
+ * source parameter (same default, same reasoning — every existing call
+ * site passes nothing and keeps picking from the gallery unchanged).
+ *
+ * Every picked/captured video now goes through react-native-video-trim's
+ * native trim editor before it can be sent — matching standard
+ * messaging-app video-send UX (select/capture, then trim, then send),
+ * not just an escape hatch for oversized clips. EditorConfig.maxDuration
+ * enforces the length cap at the UI level (the user cannot select a
+ * range longer than MAX_VIDEO_DURATION_SECONDS in the first place);
+ * processTrimmedVideo's own duration check is the defense-in-depth
+ * backstop, same pattern as everywhere else in this file.
  *
  * Unlike images, expo-image-picker never returns base64 for video assets
  * (only a file uri) — read separately via FileSystem, same technique
- * already proven in stopVoiceRecording below. Thumbnail generation is a
- * new native dependency (expo-video-thumbnails, official Expo SDK,
- * version-aligned with the rest of this project's ^57.0.x packages) —
- * wrapped in its own try/catch so a thumbnail failure degrades to "send
- * the video without a preview frame" rather than failing the whole send;
- * its on-device native behavior is unverified in this sandbox (no real
- * device here), same disclosed limitation as every other native-module
- * change this project has made.
+ * already proven in stopVoiceRecording below. Thumbnail generation
+ * (expo-video-thumbnails) and the trim/compress step
+ * (react-native-video-trim) are both wrapped so a failure in either
+ * degrades gracefully (no thumbnail / no compression / outright
+ * too_large) rather than crashing the whole send. All of this is a new
+ * native module whose on-device behavior is unverified in this sandbox
+ * (no real device here) — same disclosed limitation as every other
+ * native-module change this project has made.
  */
 export async function pickVideoBase64(source: 'camera' | 'library' = 'library'): Promise<PickVideoResult> {
   try {
@@ -162,8 +280,23 @@ export async function pickVideoBase64(source: 'camera' | 'library' = 'library'):
     const launch = source === 'camera' ? ImagePicker.launchCameraAsync : ImagePicker.launchImageLibraryAsync;
     const result = await launch({ mediaTypes: ['videos'], quality: 0.6, videoMaxDuration: MAX_VIDEO_DURATION_SECONDS });
     if (result.canceled || !result.assets[0]) return { ok: false, reason: 'canceled' };
+    const asset = result.assets[0];
 
-    return await processVideoAsset(result.assets[0]);
+    const trimmed = await showVideoTrimEditor(asset.uri, {
+      maxDuration: MAX_VIDEO_DURATION_SECONDS * 1000,
+      saveToPhoto: false,
+      openShareSheetOnFinish: false,
+      closeWhenFinish: true,
+      headerText: 'Trim video',
+      // Matches this app's dark, purple-accented theme (theme/tokens.ts's
+      // accent palette) rather than the library's own default yellow —
+      // a small polish touch, not load-bearing for functionality.
+      theme: 'dark',
+      trimmerColor: '#7c5cff',
+    });
+    if (!trimmed) return { ok: false, reason: 'canceled' };
+
+    return await processTrimmedVideo(trimmed.outputPath, trimmed.durationMs, asset.mimeType);
   } catch (e: any) {
     // eslint-disable-next-line no-console
     console.error('[media] pickVideoBase64 failed:', e?.message ?? e);

@@ -161,7 +161,7 @@ export default function GroupChatScreen() {
                 } else if (result.reason === 'too_long') {
                   appAlert('Video too long', `Shared videos are limited to ${MAX_VIDEO_DURATION_SECONDS} seconds.`);
                 } else if (result.reason === 'too_large') {
-                  appAlert('Video too large', `Shared videos are limited to ${Math.round(MAX_VIDEO_FILE_BYTES / (1024 * 1024))}MB.`);
+                  appAlert('Video too large', `This video is still over ${Math.round(MAX_VIDEO_FILE_BYTES / (1024 * 1024))}MB even after compression — try trimming it shorter.`);
                 } else if (result.reason === 'failed') {
                   appAlert('Could not record this video', 'Something went wrong saving that recording — try again.');
                 }
@@ -190,7 +190,7 @@ export default function GroupChatScreen() {
           } else if (result.reason === 'too_long') {
             appAlert('Video too long', `Shared videos are limited to ${MAX_VIDEO_DURATION_SECONDS} seconds.`);
           } else if (result.reason === 'too_large') {
-            appAlert('Video too large', `Shared videos are limited to ${Math.round(MAX_VIDEO_FILE_BYTES / (1024 * 1024))}MB.`);
+            appAlert('Video too large', `This video is still over ${Math.round(MAX_VIDEO_FILE_BYTES / (1024 * 1024))}MB even after compression — try trimming it shorter.`);
           } else if (result.reason === 'failed') {
             appAlert('Could not share this video', 'Something went wrong reading that video — try a different one.');
           }
