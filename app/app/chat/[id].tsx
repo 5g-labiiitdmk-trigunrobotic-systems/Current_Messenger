@@ -416,12 +416,32 @@ export default function ChatScreen() {
   return (
     <View style={{ flex: 1 }}>
       <BokehBackground />
-      {/* behavior={undefined} on Android meant this component did nothing
-          at all there — the message input sat behind the keyboard with no
-          avoidance whatsoever. 'height' shrinks the container instead of
-          padding it, which is the correct mode for Android (padding mode
-          double-offsets when combined with the OS's own resize behavior). */}
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      {/* Revisits the note this comment used to carry ("behavior={undefined}
+          on Android meant this component did nothing at all — the input
+          sat behind the keyboard"). Real-device evidence this round (a
+          gap appearing immediately and consistently the instant the
+          keyboard opens, not a delayed/animating settle) points at a
+          different, better-documented cause than that note assumed:
+          windowSoftInputMode="adjustResize" (confirmed set in a real
+          generated AndroidManifest.xml) already shrinks this whole
+          screen's window the moment the keyboard opens — normal flex
+          layout then naturally reflows the composer to sit right above
+          it, no JS help needed. KeyboardAvoidingView's 'height' behavior
+          (traced directly in its own source,
+          node_modules/react-native/.../KeyboardAvoidingView.js) computes
+          ITS OWN, separate height reduction from keyboard-frame events on
+          top of that already-resized window — a double compensation, not
+          a race, which is exactly why it shows up instantly and doesn't
+          flicker/settle. This is a well-documented RN/Android interaction
+          (facebook/react-native#36019), not specific to this app.
+          behavior={undefined} below makes this component an inert
+          pass-through on Android, letting adjustResize do 100% of the
+          work — untested on real hardware yet, since that's the only way
+          to actually confirm it, and the one thing this can't rule out is
+          that this exact device somehow needs the old behavior for a
+          reason unrelated to adjustResize. iOS is untouched — it has no
+          adjustResize equivalent and still needs 'padding' here. */}
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <Glass radius={0} bordered={false} style={{ paddingTop: insets.top + 6, paddingBottom: 12, paddingHorizontal: 14 }}>
           <Text style={{ fontSize: 10, fontFamily: fontFamilies.heavy, color: tokens.text3, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 4 }}>Current</Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 11 }}>
