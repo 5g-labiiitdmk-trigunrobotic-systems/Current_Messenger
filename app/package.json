@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "expo-router/entry",
   "dependencies": {
-    "@config-plugins/react-native-webrtc": "^15.0.1",
+    "@config-plugins/react-native-webrtc": "^15.0.2",
     "@expo-google-fonts/inter": "^0.4.2",
     "@maplibre/maplibre-react-native": "^11.3.6",
     "@notifee/react-native": "^9.1.8",
@@ -75,10 +75,5 @@
     "ios": "expo start --ios",
     "web": "expo start --web"
   },
-  "private": true,
-  "overrides": {
-    "@config-plugins/react-native-webrtc": {
-      "expo": "$expo"
-    }
-  }
+  "private": true
 }
