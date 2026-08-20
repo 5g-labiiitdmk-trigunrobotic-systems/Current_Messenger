@@ -251,11 +251,12 @@ export default function GroupChatScreen() {
       <BokehBackground />
       {/* Same reasoning and evidence as the identical change in
           chat/[id].tsx — see that file's comment above its own
-          KeyboardAvoidingView for the full explanation (windowSoftInputMode
-          "adjustResize" + this component's 'height' behavior double-
-          compensating, confirmed via source tracing and
-          facebook/react-native#36019, not a race condition). */}
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          KeyboardAvoidingView for the full explanation (adjustResize +
+          edge-to-edge's documented "unexpected keyboard behavior"
+          interaction, fixed by setting android.softwareKeyboardLayoutMode
+          to "pan" in app.json so KeyboardAvoidingView's own 'height'
+          measurement is the sole source of compensation again). */}
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <Pressable onPress={() => router.push(`/group-info/${id}`)}>
           <Glass radius={0} bordered={false} style={{ paddingTop: insets.top + 8, paddingBottom: 12, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 11 }}>
             <Pressable onPress={() => router.back()} style={{ width: 38, height: 38, alignItems: 'center', justifyContent: 'center' }}>

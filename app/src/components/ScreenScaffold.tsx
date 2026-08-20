@@ -57,15 +57,19 @@ export function ScreenScaffold({ children, scroll = true, padded = true, tabBar 
           settings, new-group, contacts search, ...) individually had the
           same "input hidden behind the open keyboard" bug the chat screens
           had before their own fix. 'height' on Android, not 'padding'.
-          CORRECTED: this used to additionally claim 'height' mode avoids
-          double-offsetting against the OS's own resize — it doesn't; both
-          modes compute their own compensation regardless of what the OS
-          does. What actually avoids the double-count is app.json's
-          android.softwareKeyboardLayoutMode: "pan" (windowSoftInputMode=
-          "adjustPan"), which stops Android from resizing the window on its
-          own, leaving KeyboardAvoidingView's live per-device keyboard-
-          height measurement as the only thing driving this. See the fuller
-          explanation in chat/[id].tsx. */}
+          CORRECTED (again): this comment used to claim
+          android.softwareKeyboardLayoutMode: "pan" was already set in
+          app.json, avoiding double-compensation against Android's own
+          adjustResize — it was NOT actually set (app.json had no
+          android.softwareKeyboardLayoutMode key at all), so every
+          ScreenScaffold screen had been silently double-compensating this
+          whole time; it just never got flagged because no one hit an
+          immediately-obvious symptom on those specific screens the way
+          chat/[id].tsx's real-device testing did. That's now actually
+          fixed in app.json (softwareKeyboardLayoutMode: "pan"), which is
+          what makes this comment's original claim true rather than
+          aspirational. See chat/[id].tsx's KeyboardAvoidingView comment
+          for the fuller incident history. */}
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <Animated.View entering={FadeIn.duration(350)} style={{ flex: 1 }}>
           <Container

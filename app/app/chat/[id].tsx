@@ -416,32 +416,33 @@ export default function ChatScreen() {
   return (
     <View style={{ flex: 1 }}>
       <BokehBackground />
-      {/* Revisits the note this comment used to carry ("behavior={undefined}
-          on Android meant this component did nothing at all — the input
-          sat behind the keyboard"). Real-device evidence this round (a
-          gap appearing immediately and consistently the instant the
-          keyboard opens, not a delayed/animating settle) points at a
-          different, better-documented cause than that note assumed:
-          windowSoftInputMode="adjustResize" (confirmed set in a real
-          generated AndroidManifest.xml) already shrinks this whole
-          screen's window the moment the keyboard opens — normal flex
-          layout then naturally reflows the composer to sit right above
-          it, no JS help needed. KeyboardAvoidingView's 'height' behavior
-          (traced directly in its own source,
-          node_modules/react-native/.../KeyboardAvoidingView.js) computes
-          ITS OWN, separate height reduction from keyboard-frame events on
-          top of that already-resized window — a double compensation, not
-          a race, which is exactly why it shows up instantly and doesn't
-          flicker/settle. This is a well-documented RN/Android interaction
-          (facebook/react-native#36019), not specific to this app.
-          behavior={undefined} below makes this component an inert
-          pass-through on Android, letting adjustResize do 100% of the
-          work — untested on real hardware yet, since that's the only way
-          to actually confirm it, and the one thing this can't rule out is
-          that this exact device somehow needs the old behavior for a
-          reason unrelated to adjustResize. iOS is untouched — it has no
-          adjustResize equivalent and still needs 'padding' here. */}
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      {/* History of this line, corrected against real-device evidence each
+          time: earlier it was 'height', which produced a gap that appeared
+          immediately when the keyboard opened. That was attributed to
+          windowSoftInputMode="adjustResize" (the actual default — confirmed
+          in a real generated AndroidManifest.xml, since app.json never set
+          android.softwareKeyboardLayoutMode at the time) double-compensating
+          against KeyboardAvoidingView's own 'height' measurement, so
+          behavior={undefined} was tried next to let adjustResize do the
+          work alone. That made it WORSE on real hardware — the composer sat
+          behind the keyboard, not rising at all — because this app runs
+          edge-to-edge (BokehBackground/translucent status bar; see
+          ScreenScaffold.tsx), and Expo's own config docs for
+          android.softwareKeyboardLayoutMode explicitly warn that a
+          translucent status bar combined with "resize" mode causes
+          "unexpected keyboard behavior" and says to fall back to
+          KeyboardAvoidingView — which is exactly what disabling it here
+          did the opposite of. The actual fix is in app.json:
+          android.softwareKeyboardLayoutMode is now explicitly "pan"
+          (windowSoftInputMode="adjustPan"), which stops the OS from
+          resizing the window at all, so KeyboardAvoidingView's own
+          measurement below is the only thing driving this — no more
+          double-compensation, and no more nothing-happens-at-all. Matches
+          ScreenScaffold.tsx's already-existing approach, now finally
+          correct for the reason its own comment always claimed. iOS is
+          untouched — it has no adjustResize/adjustPan equivalent and still
+          needs 'padding' here. */}
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <Glass radius={0} bordered={false} style={{ paddingTop: insets.top + 6, paddingBottom: 12, paddingHorizontal: 14 }}>
           <Text style={{ fontSize: 10, fontFamily: fontFamilies.heavy, color: tokens.text3, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 4 }}>Current</Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 11 }}>
