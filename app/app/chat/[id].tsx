@@ -416,32 +416,37 @@ export default function ChatScreen() {
   return (
     <View style={{ flex: 1 }}>
       <BokehBackground />
-      {/* History of this line, corrected against real-device evidence each
-          time: earlier it was 'height', which produced a gap that appeared
-          immediately when the keyboard opened. That was attributed to
-          windowSoftInputMode="adjustResize" (the actual default — confirmed
-          in a real generated AndroidManifest.xml, since app.json never set
-          android.softwareKeyboardLayoutMode at the time) double-compensating
-          against KeyboardAvoidingView's own 'height' measurement, so
-          behavior={undefined} was tried next to let adjustResize do the
-          work alone. That made it WORSE on real hardware — the composer sat
-          behind the keyboard, not rising at all — because this app runs
-          edge-to-edge (BokehBackground/translucent status bar; see
-          ScreenScaffold.tsx), and Expo's own config docs for
-          android.softwareKeyboardLayoutMode explicitly warn that a
-          translucent status bar combined with "resize" mode causes
-          "unexpected keyboard behavior" and says to fall back to
-          KeyboardAvoidingView — which is exactly what disabling it here
-          did the opposite of. The actual fix is in app.json:
-          android.softwareKeyboardLayoutMode is now explicitly "pan"
-          (windowSoftInputMode="adjustPan"), which stops the OS from
-          resizing the window at all, so KeyboardAvoidingView's own
-          measurement below is the only thing driving this — no more
-          double-compensation, and no more nothing-happens-at-all. Matches
-          ScreenScaffold.tsx's already-existing approach, now finally
-          correct for the reason its own comment always claimed. iOS is
-          untouched — it has no adjustResize/adjustPan equivalent and still
-          needs 'padding' here. */}
+      {/* History of this line, corrected against real-device evidence three
+          times over: 'height' under the (unconfigured, default)
+          adjustResize produced an immediate gap — adjustResize resizes the
+          window natively, and KeyboardAvoidingView's own 'height' calc
+          shrinks it AGAIN on top. behavior={undefined} under adjustResize
+          was tried next, which was WORSE — the composer sat fully behind
+          the keyboard, not rising at all (edge-to-edge + "resize" mode is
+          documented by Expo's own config-plugin types as causing
+          "unexpected keyboard behavior"). Switching to adjustPan while
+          keeping 'height' was ALSO wrong, in the opposite direction: the
+          composer ended up rendered near the top of the screen with a huge
+          gap down to the keyboard. Traced directly in
+          KeyboardAvoidingView's own source (node_modules/react-native/
+          Libraries/Components/Keyboard/KeyboardAvoidingView.js): its
+          'height' behavior computes `frame.y + frame.height - keyboardY`
+          from RN's own onLayout-measured frame, which adjustPan's native,
+          JS-invisible window pan never updates — so KeyboardAvoidingView
+          applied a full extra keyboard-height shift on top of the pan the
+          OS had already done, additively.
+          Root cause: adjustResize AND adjustPan are both active native
+          compensation — neither is a neutral baseline for
+          KeyboardAvoidingView to layer on top of. The actual fix is
+          plugins/withAdjustNothingSoftInput.js, which sets
+          windowSoftInputMode="adjustNothing" directly (not expressible via
+          Expo's app.json android.softwareKeyboardLayoutMode, which only
+          offers resize|pan) — under adjustNothing the OS does no automatic
+          repositioning at all, so KeyboardAvoidingView's own event-driven
+          measurement below is the *only* thing moving this composer,
+          exactly as it already behaves unopposed on iOS. iOS is untouched
+          — it has no windowSoftInputMode equivalent and still needs
+          'padding' here. */}
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <Glass radius={0} bordered={false} style={{ paddingTop: insets.top + 6, paddingBottom: 12, paddingHorizontal: 14 }}>
           <Text style={{ fontSize: 10, fontFamily: fontFamilies.heavy, color: tokens.text3, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 4 }}>Current</Text>

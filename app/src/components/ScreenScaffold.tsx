@@ -57,19 +57,22 @@ export function ScreenScaffold({ children, scroll = true, padded = true, tabBar 
           settings, new-group, contacts search, ...) individually had the
           same "input hidden behind the open keyboard" bug the chat screens
           had before their own fix. 'height' on Android, not 'padding'.
-          CORRECTED (again): this comment used to claim
-          android.softwareKeyboardLayoutMode: "pan" was already set in
-          app.json, avoiding double-compensation against Android's own
-          adjustResize — it was NOT actually set (app.json had no
-          android.softwareKeyboardLayoutMode key at all), so every
-          ScreenScaffold screen had been silently double-compensating this
-          whole time; it just never got flagged because no one hit an
-          immediately-obvious symptom on those specific screens the way
-          chat/[id].tsx's real-device testing did. That's now actually
-          fixed in app.json (softwareKeyboardLayoutMode: "pan"), which is
-          what makes this comment's original claim true rather than
-          aspirational. See chat/[id].tsx's KeyboardAvoidingView comment
-          for the fuller incident history. */}
+          CORRECTED (again): this comment went through two more wrong
+          claims about what avoids double-compensation on Android — first
+          that android.softwareKeyboardLayoutMode: "pan" was already set
+          (it wasn't), then that setting it to "pan" was itself the fix
+          (real-device testing showed it wasn't: adjustPan is its own
+          active native compensation, and layers with KeyboardAvoidingView
+          just as badly as adjustResize did, in the opposite direction —
+          see chat/[id].tsx's KeyboardAvoidingView comment for the full
+          incident history and the source-level trace of why). The actual
+          fix is plugins/withAdjustNothingSoftInput.js, which sets
+          windowSoftInputMode="adjustNothing" directly on the manifest —
+          not expressible via app.json's android.softwareKeyboardLayoutMode
+          at all, which only offers resize|pan, neither of which is a true
+          no-op. Under adjustNothing, Android does no automatic
+          repositioning of its own, so this 'height' behavior is finally
+          the sole thing driving keyboard avoidance app-wide. */}
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <Animated.View entering={FadeIn.duration(350)} style={{ flex: 1 }}>
           <Container

@@ -25,7 +25,6 @@
       "package": "com.trigunrobotics.current",
       "backgroundColor": "#141416",
       "googleServicesFile": "./google-services.json",
-      "softwareKeyboardLayoutMode": "pan",
       "adaptiveIcon": {
         "backgroundColor": "#141416",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -128,7 +127,8 @@
       "@maplibre/maplibre-react-native",
       "./plugins/withLockScreenCallActivity",
       "./plugins/withPictureInPicture",
-      "./plugins/withLargeScreenSupport"
+      "./plugins/withLargeScreenSupport",
+      "./plugins/withAdjustNothingSoftInput"
     ],
     "experiments": {
       "typedRoutes": true
