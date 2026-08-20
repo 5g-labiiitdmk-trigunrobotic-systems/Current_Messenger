@@ -117,6 +117,29 @@ function approxBase64Bytes(base64Length: number): number {
 }
 
 /**
+ * react-native-video-trim's Android native module returns output paths as
+ * bare absolute filesystem paths (Kotlin File.absolutePath, e.g.
+ * "/data/user/0/.../files/VIDEO_TRIM_x.mp4"), not file:// URIs — confirmed
+ * directly from its Android source: StorageUtil.kt's getOutputPath/
+ * getCacheOutputPath both return File(...).absolutePath, no scheme, and
+ * every showEditor()/compress() result is built the same way. But
+ * expo-file-system's legacy API expects a file:// URI: its own Android
+ * module (FileSystemLegacyModule.kt) only rewrites strings that already
+ * start with "file:" (slashifyFilePath) — a schemeless path falls through
+ * untouched, Uri.parse() then gives it scheme == null, and getInfoAsync
+ * takes a branch that never reports the file as existing. That was the
+ * direct cause of "Could not share this video / Something went wrong
+ * reading that video" on real-device testing: the trimmed/compressed file
+ * genuinely exists on disk, but every downstream expo-file-system call
+ * was being handed a path format it can't resolve. Idempotent — a string
+ * that already has a scheme (iOS, or if the library ever changes) is
+ * returned unchanged.
+ */
+function toFileUri(path: string): string {
+  return /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(path) ? path : `file://${path}`;
+}
+
+/**
  * Wraps react-native-video-trim's event-driven showEditor() (it has no
  * Promise-returning form — trimming completion, cancellation, and errors
  * all arrive as separate native events) into the Promise-based shape the
@@ -142,6 +165,13 @@ function showVideoTrimEditor(filePath: string, config: Parameters<typeof showVid
       if (settled) return;
       settled = true;
       cleanup();
+      // Deliberately NOT toFileUri()'d here — this bare path is fed
+      // straight back into compressVideoNative() below (via
+      // compressIfNeeded), whose native Android compress() uses it
+      // directly as an ffmpeg -i argument and expects the same bare-path
+      // shape react-native-video-trim itself produces, not a URI. It's
+      // normalized to a proper file:// URI only at the points that
+      // actually need one — see toFileUri's own comment.
       resolve({ outputPath, durationMs: duration });
     });
     const cancelSub = spec.onCancel(() => {
@@ -181,15 +211,24 @@ function showVideoTrimEditor(filePath: string, config: Parameters<typeof showVid
  * "silently send an oversized/corrupt file" or "crash."
  */
 async function compressIfNeeded(filePath: string, currentBytes: number): Promise<{ path: string; bytes: number }> {
-  if (currentBytes <= MAX_VIDEO_FILE_BYTES) return { path: filePath, bytes: currentBytes };
+  if (currentBytes <= MAX_VIDEO_FILE_BYTES) return { path: toFileUri(filePath), bytes: currentBytes };
 
+  // filePath is kept bare (not toFileUri()'d) throughout this loop — it's
+  // fed straight back into compressVideoNative() on the next iteration,
+  // which expects the same bare-path shape the library's own output
+  // already is (see the comment on showVideoTrimEditor's resolve() call
+  // above). Only toFileUri() at the two points that actually need a URI:
+  // the getInfoAsync() existence/size check, and the final returned path
+  // (both callers downstream — readAsStringAsync, VideoThumbnails — are
+  // expo/JS libraries that expect a URI, not another native trim/compress
+  // call).
   for (const quality of ['medium', 'low'] as const) {
     try {
       const { outputPath } = await compressVideoNative(filePath, { quality });
-      const info = await FileSystem.getInfoAsync(outputPath);
+      const info = await FileSystem.getInfoAsync(toFileUri(outputPath));
       const bytes = info.exists ? info.size : currentBytes;
-      if (bytes <= MAX_VIDEO_FILE_BYTES) return { path: outputPath, bytes };
-      filePath = outputPath; // feed the already-compressed file into the next, more aggressive pass
+      if (bytes <= MAX_VIDEO_FILE_BYTES) return { path: toFileUri(outputPath), bytes };
+      filePath = outputPath; // feed the already-compressed (bare-path) file into the next, more aggressive pass
       currentBytes = bytes;
     } catch (e: any) {
       // eslint-disable-next-line no-console
@@ -197,7 +236,7 @@ async function compressIfNeeded(filePath: string, currentBytes: number): Promise
       break;
     }
   }
-  return { path: filePath, bytes: currentBytes };
+  return { path: toFileUri(filePath), bytes: currentBytes };
 }
 
 /**
@@ -216,7 +255,11 @@ async function processTrimmedVideo(filePath: string, durationMs: number, mimeTyp
   // pattern in this file.
   if (durationSeconds > MAX_VIDEO_DURATION_SECONDS) return { ok: false, reason: 'too_long' };
 
-  const info = await FileSystem.getInfoAsync(filePath);
+  // filePath itself stays bare here (see toFileUri's comment) since it's
+  // passed to compressIfNeeded below, which may feed it straight into
+  // another native compress() call — only this existence/size check needs
+  // the file:// form.
+  const info = await FileSystem.getInfoAsync(toFileUri(filePath));
   if (!info.exists) return { ok: false, reason: 'failed' };
   const initialBytes = info.size;
 
