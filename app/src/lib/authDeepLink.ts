@@ -20,6 +20,18 @@ import { supabase } from './supabase';
  */
 export const AUTH_REDIRECT_URL = 'current://auth-redirect';
 
+/**
+ * Same fixed-literal-string requirement as AUTH_REDIRECT_URL above, and
+ * also must be added to Supabase's Auth -> URL Configuration -> Redirect
+ * URLs allow-list. Kept as a separate URL (not reusing AUTH_REDIRECT_URL)
+ * so the two flows can be told apart in app/_layout.tsx before a session
+ * exists to inspect: a "Confirm signup" link should land on finish-setup,
+ * a "Reset password" link must land on the set-new-password screen
+ * instead, and by the time handleAuthDeepLink() resolves we only have the
+ * original URL (not a `type` field) to distinguish them by.
+ */
+export const PASSWORD_RESET_REDIRECT_URL = 'current://reset-password';
+
 export interface AuthDeepLinkResult {
   status: 'session' | 'error' | 'ignored';
   message?: string;

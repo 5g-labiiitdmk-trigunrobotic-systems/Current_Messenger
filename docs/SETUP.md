@@ -44,10 +44,15 @@ the confirmation email opens the app already signed in, no manual step.
 add exactly:
 ```
 current://auth-redirect
+current://reset-password
 ```
-Supabase rejects redirects to any URL not on this allow-list. This is a
-fixed literal string (see the comment in `src/lib/authDeepLink.ts` for why
-it's hardcoded rather than computed) — copy it exactly, no trailing slash.
+Supabase rejects redirects to any URL not on this allow-list. These are
+fixed literal strings (see the comment in `src/lib/authDeepLink.ts` for why
+they're hardcoded rather than computed) — copy them exactly, no trailing
+slash. The second one is for `login.tsx`'s "Forgot password?" flow —
+`resetPasswordForEmail()` passes it as `redirectTo`, and `app/_layout.tsx`
+routes it to `reset-password.tsx` (a "set new password" screen) instead of
+`finish-setup.tsx`.
 
 This sandbox can't reach `*.supabase.co` (network egress is allowlisted and
 Supabase isn't on it), so none of this has been verified live from within a

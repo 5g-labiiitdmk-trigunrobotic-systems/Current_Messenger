@@ -11,6 +11,7 @@ import { fontFamilies } from '../../src/theme/tokens';
 import { supabase } from '../../src/lib/supabase';
 import { useAuthStore } from '../../src/state/authStore';
 import { appAlert } from '../../src/state/alertStore';
+import { PASSWORD_RESET_REDIRECT_URL } from '../../src/lib/authDeepLink';
 
 export default function LoginScreen() {
   const { tokens, a1, a2 } = useTheme();
@@ -52,7 +53,7 @@ export default function LoginScreen() {
       appAlert('Enter your email', 'Type your email address above first, then tap "Forgot password?" again.');
       return;
     }
-    const { error } = await supabase.auth.resetPasswordForEmail(identifier.trim());
+    const { error } = await supabase.auth.resetPasswordForEmail(identifier.trim(), { redirectTo: PASSWORD_RESET_REDIRECT_URL });
     appAlert(error ? 'Could not send reset email' : 'Check your inbox', error ? error.message : `Password reset instructions sent to ${identifier}.`);
   };
 

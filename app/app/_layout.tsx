@@ -10,7 +10,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as SplashScreen from 'expo-splash-screen';
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold, Inter_900Black } from '@expo-google-fonts/inter';
 import { useAuthStore } from '../src/state/authStore';
-import { handleAuthDeepLink } from '../src/lib/authDeepLink';
+import { handleAuthDeepLink, PASSWORD_RESET_REDIRECT_URL } from '../src/lib/authDeepLink';
 import { useThemeStore } from '../src/state/themeStore';
 import { useChatStore } from '../src/state/chatStore';
 import { usePresenceStore } from '../src/state/presenceStore';
@@ -43,17 +43,25 @@ export default function RootLayout() {
   const mode = useThemeStore((s) => s.mode);
   const incomingUrl = Linking.useURL();
 
-  // Handles the Supabase "Confirm signup" email link, which opens this app
-  // via current://auth-redirect#access_token=...&refresh_token=... — see
-  // src/lib/authDeepLink.ts. Global (not tied to a specific route) so it
-  // works regardless of which screen Expo Router lands the deep link on.
+  // Handles both Supabase auth email links, which open this app via a
+  // fixed current:// deep link with session tokens appended after a `#`
+  // — see src/lib/authDeepLink.ts. Global (not tied to a specific route)
+  // so it works regardless of which screen Expo Router lands the deep
+  // link on. The two flows share the same token-parsing/session-setting
+  // logic but need different post-session destinations, so the raw URL
+  // (checked before it's stripped down to just its params) is what tells
+  // "Confirm signup" and "Reset password" apart.
   useEffect(() => {
     if (!incomingUrl) return;
+    const isPasswordReset = incomingUrl.startsWith(PASSWORD_RESET_REDIRECT_URL);
     handleAuthDeepLink(incomingUrl).then((result) => {
       if (result.status === 'session') {
-        router.replace('/(auth)/finish-setup');
+        router.replace(isPasswordReset ? '/(auth)/reset-password' : '/(auth)/finish-setup');
       } else if (result.status === 'error') {
-        appAlert('Could not confirm email', result.message ?? 'The confirmation link may have expired — try resending it.');
+        appAlert(
+          isPasswordReset ? 'Could not verify reset link' : 'Could not confirm email',
+          result.message ?? (isPasswordReset ? 'The reset link may have expired — request a new one.' : 'The confirmation link may have expired — try resending it.')
+        );
       }
     });
   }, [incomingUrl]);
