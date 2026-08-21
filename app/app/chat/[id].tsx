@@ -8,6 +8,7 @@ import { Avatar } from '../../src/components/Avatar';
 import { MessageBubble } from '../../src/components/MessageBubble';
 import { TypingDots } from '../../src/components/TypingDots';
 import { BokehBackground } from '../../src/components/BokehBackground';
+import { PhotoSendPreview } from '../../src/components/PhotoSendPreview';
 import { useTheme } from '../../src/theme/useTheme';
 import { fontFamilies } from '../../src/theme/tokens';
 import { useChatStore, getThreadKey } from '../../src/state/chatStore';
@@ -76,6 +77,7 @@ export default function ChatScreen() {
   const allMessages = threads[key] ?? [];
   const isTyping = !!typingMap[key];
   const [draft, setDraft] = useState('');
+  const [pendingPhoto, setPendingPhoto] = useState<{ base64: string; mime: string } | null>(null);
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
@@ -183,7 +185,7 @@ export default function ChatScreen() {
               text: 'Take Photo',
               onPress: async () => {
                 const img = await pickImageBase64('camera');
-                if (img) sendRich(id ?? '', false, 'media', img);
+                if (img) setPendingPhoto(img);
               },
             },
             {
@@ -212,7 +214,7 @@ export default function ChatScreen() {
         text: 'Photo',
         onPress: async () => {
           const img = await pickImageBase64();
-          if (img) sendRich(id ?? '', false, 'media', img);
+          if (img) setPendingPhoto(img);
         },
       },
       {
@@ -720,6 +722,16 @@ export default function ChatScreen() {
           </Pressable>
         </View>
       </KeyboardAvoidingView>
+      <PhotoSendPreview
+        visible={!!pendingPhoto}
+        base64={pendingPhoto?.base64 ?? null}
+        mime={pendingPhoto?.mime ?? 'image/jpeg'}
+        onSend={() => {
+          if (pendingPhoto) sendRich(id ?? '', false, 'media', pendingPhoto);
+          setPendingPhoto(null);
+        }}
+        onCancel={() => setPendingPhoto(null)}
+      />
     </View>
   );
 }
