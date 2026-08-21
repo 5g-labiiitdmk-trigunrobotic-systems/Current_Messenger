@@ -377,7 +377,13 @@ export default function GroupChatScreen() {
             style={{
               paddingHorizontal: 14,
               paddingTop: 10,
-              paddingBottom: 12,
+              // Android runs edge-to-edge — the system nav bar overlays
+              // content rather than reserving space, so a flat
+              // paddingBottom left this composer's bottom edge sitting
+              // partially behind it on gesture-nav devices. Same fix as
+              // chat/[id].tsx's identical composer wrapper; see that
+              // file's comment for the fuller edge-to-edge reasoning.
+              paddingBottom: 12 + insets.bottom,
               flexDirection: 'row',
               alignItems: 'center',
               gap: 9,
