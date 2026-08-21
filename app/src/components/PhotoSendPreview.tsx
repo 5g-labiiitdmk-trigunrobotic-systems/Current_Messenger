@@ -32,11 +32,18 @@ interface PhotoSendPreviewProps {
 export function PhotoSendPreview({ visible, base64, mime, onSend, onCancel }: PhotoSendPreviewProps) {
   const { a1 } = useTheme();
   const { width, height } = useWindowDimensions();
-  if (!base64) return null;
+  // Deliberately NOT an early `if (!base64) return null` — the caller
+  // renders this component unconditionally and only toggles `visible`,
+  // exactly like MessageBubble.tsx's expand modal does with its own
+  // `expanded` boolean. Returning null here whenever base64 is momentarily
+  // null (which happens on the very same render where the caller sets
+  // visible to false, right after Send/Cancel) would unmount the Modal
+  // instead of just hiding it, skipping the fade-out animation entirely —
+  // this way the fade-out plays like every other modal in this app.
   return (
     <Modal visible={visible} animationType="fade" onRequestClose={onCancel} statusBarTranslucent>
       <View style={{ flex: 1, backgroundColor: '#000' }}>
-        <Image source={{ uri: `data:${mime};base64,${base64}` }} style={{ width, height }} resizeMode="contain" />
+        {base64 && <Image source={{ uri: `data:${mime};base64,${base64}` }} style={{ width, height }} resizeMode="contain" />}
         <Pressable
           onPress={onCancel}
           style={{ position: 'absolute', top: 56, right: 20, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' }}
