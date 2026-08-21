@@ -671,7 +671,16 @@ export default function ChatScreen() {
           style={{
             paddingHorizontal: 14,
             paddingTop: 10,
-            paddingBottom: 12,
+            // Android runs edge-to-edge (see ScreenScaffold.tsx's own
+            // comment on this) — the system nav bar is a translucent
+            // overlay drawn on top of app content, not reserved space, so
+            // a flat paddingBottom left this composer's bottom edge
+            // sitting partially behind it on gesture-nav devices. +insets.bottom
+            // clears it; iOS's home indicator is the same kind of overlay
+            // and gets the same treatment for free (insets.bottom is 0 on
+            // devices with a physical home button, so this is a no-op
+            // there).
+            paddingBottom: 12 + insets.bottom,
             flexDirection: 'row',
             alignItems: 'center',
             gap: 9,
