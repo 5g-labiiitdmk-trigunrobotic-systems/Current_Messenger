@@ -54,6 +54,21 @@ slash. The second one is for `login.tsx`'s "Forgot password?" flow —
 routes it to `reset-password.tsx` (a "set new password" screen) instead of
 `finish-setup.tsx`.
 
+**Expected behavior, not a bug — a password-reset link only works once.**
+Supabase's recovery tokens are single-use: the first genuine tap on a
+freshly-requested link works, but tapping that *same* link again (or an
+email client/security scanner silently pre-fetching it before your real
+tap — common with Gmail and some corporate mail scanners) consumes the
+token. On a reused/expired token, Supabase's server never reaches our
+`redirectTo` at all — it falls back to the project's **Site URL** (Auth →
+URL Configuration → Site URL) instead, which shows as a browser dead-end
+if that's still set to the default `http://localhost:3000`. Each retry
+needs a fresh "Forgot password?" tap in the app to get a new link — a
+stale one erroring out is correct, not something the app can override.
+Set Site URL to something that actually resolves (even just a plain
+placeholder page) so a reused/expired link degrades to a real error page
+instead of `ERR_CONNECTION_REFUSED`.
+
 This sandbox can't reach `*.supabase.co` (network egress is allowlisted and
 Supabase isn't on it), so none of this has been verified live from within a
 session — verify from your own machine/device, or add the host to this
