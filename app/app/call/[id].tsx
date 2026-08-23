@@ -34,12 +34,16 @@ const ROUTE_LABEL: Record<AudioRoute, string> = {
   WIRED_HEADSET: 'Headset',
 };
 
+// Formats a duration in whole seconds as "m:ss" for the in-call timer.
 function formatDuration(sec: number): string {
   const m = Math.floor(sec / 60);
   const s = sec % 60;
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+// Shared circular control button (mute/camera/speaker/hangup) — filled
+// with the theme's text color when `active`, red when `danger` (hangup),
+// translucent white otherwise, with a small press-scale animation.
 function ControlButton({ onPress, active, danger, children }: { onPress: () => void; active?: boolean; danger?: boolean; children: React.ReactNode }) {
   const { tokens } = useTheme();
   return (
@@ -60,6 +64,11 @@ function ControlButton({ onPress, active, danger, children }: { onPress: () => v
   );
 }
 
+// FILE PURPOSE: The full-screen 1:1 call UI — ringing/connecting/active/
+// ended states, remote + local video (for video calls), mute/camera/
+// audio-route/hangup controls, a minimize-without-hanging-up button, and
+// a reduced Picture-in-Picture layout when backgrounded during an active
+// video call.
 export default function CallScreen() {
   const phase = useCallStore((s) => s.phase);
   const peerId = useCallStore((s) => s.peerId);
@@ -81,12 +90,16 @@ export default function CallScreen() {
   const insets = useSafeAreaInsets();
   const [elapsed, setElapsed] = useState(0);
 
+  // One-second ticker driving the "m:ss" call-duration display, active
+  // only once the call is actually connected.
   useEffect(() => {
     if (phase !== 'active' || !connectedAt) return;
     const t = setInterval(() => setElapsed(Math.floor((Date.now() - connectedAt) / 1000)), 1000);
     return () => clearInterval(t);
   }, [phase, connectedAt]);
 
+  // Once the call ends, show the end-reason text briefly, then clear the
+  // store's ended state and navigate back automatically.
   useEffect(() => {
     if (phase === 'ended') {
       const t = setTimeout(() => {
@@ -97,6 +110,8 @@ export default function CallScreen() {
     }
   }, [phase]);
 
+  // Defensive: if the store's phase resets to 'idle' while this screen is
+  // still mounted (e.g. the call was torn down elsewhere), leave.
   useEffect(() => {
     if (phase === 'idle') {
       if (router.canGoBack()) router.back();
@@ -345,6 +360,7 @@ export default function CallScreen() {
   );
 }
 
+// Shared label style under each control button.
 const styles = StyleSheet.create({
   label: { fontSize: 12, fontFamily: fontFamilies.semibold, color: 'rgba(255,255,255,0.85)' },
 });

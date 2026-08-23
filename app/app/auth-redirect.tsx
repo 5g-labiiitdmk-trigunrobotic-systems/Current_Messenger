@@ -5,7 +5,7 @@ import { useTheme } from '../src/theme/useTheme';
 import { fontFamilies } from '../src/theme/tokens';
 
 /**
- * Purely a landing pad for the Supabase confirmation-email link
+ * FILE PURPOSE: Purely a landing pad for the Supabase confirmation-email link
  * (current://auth-redirect#access_token=...). The actual token handling
  * lives in app/_layout.tsx (global, via Linking.useURL()) so it works
  * regardless of exact route-matching behavior around the URL fragment —

@@ -1,3 +1,15 @@
+// FILE PURPOSE: The app's root Expo Router layout — mounted once for the
+// entire app lifetime. Loads fonts, wires up every global zustand store
+// (chat, presence, contacts, groups, calls, notifications), handles
+// incoming Supabase auth deep links globally, and declares the top-level
+// Stack navigator (every route in the app is registered here with its
+// own transition/presentation options) plus the always-mounted overlay
+// UI (active-call banners, the alert host).
+//
+// The two side-effect-only imports below (react-native-get-random-values,
+// react-native-url-polyfill/auto) must run before anything else in the
+// app does — they polyfill crypto.getRandomValues and the URL API that
+// several dependencies (tweetnacl, supabase-js) assume exist natively.
 import 'react-native-get-random-values';
 import 'react-native-url-polyfill/auto';
 import React, { useEffect } from 'react';
@@ -27,6 +39,9 @@ import { appAlert } from '../src/state/alertStore';
 import { initNotificationRouting } from '../src/lib/push';
 import { setupCallNotificationChannel, registerCallBackgroundTask, subscribeToCallNotificationEvents } from '../src/lib/callNotifications';
 
+// Keep the native splash screen up until fonts have actually loaded
+// (hidden explicitly below, once fontsLoaded flips true) — otherwise
+// there'd be a flash of unstyled text before the custom font swaps in.
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function RootLayout() {
@@ -66,6 +81,12 @@ export default function RootLayout() {
     });
   }, [incomingUrl]);
 
+  // Mount-once effect: initializes auth, wires every global store's own
+  // realtime/background subscriptions, and sets up call-related
+  // navigation — both catching up on any call already in progress at
+  // mount time, and subscribing to future call-state transitions so an
+  // incoming/outgoing call always pushes the right screen regardless of
+  // where in the app the user currently is.
   useEffect(() => {
     initialize();
     useChatStore.getState().wire();
@@ -129,6 +150,9 @@ export default function RootLayout() {
     if (fontsLoaded) SplashScreen.hideAsync().catch(() => {});
   }, [fontsLoaded]);
 
+  // Renders a blank matching-color View instead of null while fonts are
+  // still loading, so there's no flash of the OS's default background
+  // color before the splash screen hides.
   if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: '#141416' }} />;
 
   return (
