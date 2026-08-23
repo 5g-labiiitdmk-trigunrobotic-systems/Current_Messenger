@@ -9,6 +9,14 @@ import { useTheme } from '../src/theme/useTheme';
 import { fontFamilies } from '../src/theme/tokens';
 import { LEGAL_TEXT } from '../src/data/legalText';
 
+// FILE PURPOSE: The "Terms & Privacy Policy" screen. Rather than storing
+// legal text as pre-styled React, it lives as a single markdown-like
+// string (src/data/legalText.ts) and gets parsed + rendered here — see
+// parseLegalText's own comment for why this is a small purpose-built
+// parser, not a general markdown library.
+//
+// The block-kind union this screen's tiny parser produces, one entry per
+// paragraph/heading/list-item/etc. in the source document.
 type LegalBlock =
   | { kind: 'h1'; text: string }
   | { kind: 'h2'; text: string }
@@ -20,6 +28,9 @@ type LegalBlock =
   | { kind: 'hr' }
   | { kind: 'table'; rows: string[][] };
 
+// Matches a markdown table's own separator row (e.g. "|---|---|---|"),
+// which carries no actual cell content and should be skipped rather than
+// parsed as a data row.
 const TABLE_SEPARATOR_RE = /^\|[\s:|-]+\|$/;
 
 /**
@@ -132,6 +143,8 @@ function InlineText({ text, style, boldColor }: { text: string; style: any; bold
   );
 }
 
+// Parses LEGAL_TEXT once (memoized — this document never changes at
+// runtime) and renders each block with styling matched to its kind.
 export default function LegalScreen() {
   const { tokens, a1 } = useTheme();
   const blocks = useMemo(() => parseLegalText(LEGAL_TEXT), []);

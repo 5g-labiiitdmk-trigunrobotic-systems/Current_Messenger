@@ -7,8 +7,17 @@ import { TypingDots } from '../src/components/TypingDots';
 import { useTheme } from '../src/theme/useTheme';
 import { useAuthStore } from '../src/state/authStore';
 
+// Minimum time the splash screen stays up, regardless of how fast auth
+// initialization actually finishes — long enough for the logo/halo/
+// footer animations below to play out, so the splash never flashes by
+// too quickly to be seen.
 const SPLASH_HOLD_MS = 3000;
 
+// FILE PURPOSE: The app's very first route — an animated splash screen
+// (logo scale-in, halo pulse, gentle float, footer fade-in) that also
+// doubles as the auth-routing decision point: once initialization
+// finishes and the hold time elapses, routes to onboarding (no
+// session), finish-setup (incomplete profile), or the main chat list.
 export default function SplashRoute() {
   const { tokens, a1 } = useTheme();
   const initializing = useAuthStore((s) => s.initializing);
@@ -20,6 +29,9 @@ export default function SplashRoute() {
   const halo = useSharedValue(0);
   const float = useSharedValue(0);
 
+  // Mount-once entrance animation: logo fades/scales in with a slight
+  // overshoot-then-settle, the halo behind it pulses in, and after a
+  // delay the logo starts a slow, continuous up-down float.
   useEffect(() => {
     opacity.value = withTiming(1, { duration: 500 });
     scale.value = withSequence(
@@ -30,6 +42,9 @@ export default function SplashRoute() {
     float.value = withDelay(900, withRepeat(withSequence(withTiming(-6, { duration: 1600 }), withTiming(0, { duration: 1600 })), -1, false));
   }, []);
 
+  // The actual routing decision — waits for both SPLASH_HOLD_MS to
+  // elapse AND auth initialization to finish (whichever takes longer),
+  // then routes based on session/profile state.
   useEffect(() => {
     const t = setTimeout(() => {
       if (initializing) return;
@@ -75,6 +90,8 @@ export default function SplashRoute() {
   );
 }
 
+// Static (non-animated) layout/sizing for the splash's logo card, halo,
+// and footer text.
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   logoWrap: { alignItems: 'center', justifyContent: 'center' },

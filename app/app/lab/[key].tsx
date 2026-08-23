@@ -9,6 +9,9 @@ import { useTheme } from '../../src/theme/useTheme';
 import { fontFamilies } from '../../src/theme/tokens';
 import { LAB_FEATURES } from '../../src/data/labFeatures';
 
+// FILE PURPOSE: The "Lab" detail screen — a placeholder "coming soon"
+// card for one experimental feature, looked up by its `key` route param
+// from the static LAB_FEATURES list (src/data/labFeatures.ts).
 export default function LabFeatureScreen() {
   const { key } = useLocalSearchParams<{ key: string }>();
   const { tokens, a1 } = useTheme();

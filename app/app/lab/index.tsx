@@ -9,6 +9,9 @@ import { useTheme } from '../../src/theme/useTheme';
 import { fontFamilies } from '../../src/theme/tokens';
 import { LAB_FEATURES } from '../../src/data/labFeatures';
 
+// FILE PURPOSE: The "Lab" list screen — every experimental/coming-soon
+// feature from LAB_FEATURES, each tapping through to its own detail
+// screen (lab/[key].tsx).
 export default function LabScreen() {
   const { tokens, a1 } = useTheme();
   return (
