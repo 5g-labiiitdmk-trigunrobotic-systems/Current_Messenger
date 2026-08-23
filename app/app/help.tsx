@@ -11,15 +11,22 @@ import { appAlert } from '../src/state/alertStore';
 
 const SUPPORT_EMAIL = 'trigunroboticsystems@gmail.com';
 
+// Static FAQ entries shown on this screen — plain question/answer pairs,
+// no CMS/remote fetch.
 const FAQ = [
   { q: 'Is anything I send ever stored?', a: 'No. Messages relay live between devices and are never written to a database — not encrypted, not temporarily, not anywhere. If both people aren’t online at once, the message fails to send rather than queuing.' },
   { q: 'Why do I need to approve contact requests?', a: 'Nobody can message you until you approve their request. This is enforced by the relay server itself, not just hidden in the app UI.' },
   { q: 'What does the Privacy Dashboard’s "Active devices" list show?', a: 'Each row is a device that has published an encryption key for your account. It only grows when you actually sign in from a new device.' },
 ];
 
+// FILE PURPOSE: The "Help & Support" screen — a mailto contact link, a
+// static FAQ list, and app/company attribution footer.
 export default function HelpScreen() {
   const { tokens, a1 } = useTheme();
 
+  // onContact(): opens the device's mail app pre-addressed to support,
+  // falling back to just displaying the address if no mail app can
+  // handle the mailto: link at all.
   const onContact = async () => {
     const url = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Current app support')}`;
     const can = await Linking.canOpenURL(url);

@@ -11,10 +11,13 @@ import { useGroupCallStore } from '../src/state/groupCallStore';
 import { useGroupStore } from '../src/state/groupStore';
 import { useContactStore } from '../src/state/contactStore';
 
-// Parallel to app/incoming-call.tsx (1:1) — deliberately a separate screen
+// FILE PURPOSE: The full-screen incoming-group-call UI — parallel to
+// app/incoming-call.tsx (1:1) — deliberately a separate screen
 // rather than branching that one, since the two have different data shapes
 // (one caller vs. a roster) and this whole feature is meant to be an
 // additive path alongside 1:1 calling, not a modification of it.
+// Ring: same pulsing-ring avatar-border animation as incoming-call.tsx's
+// own Ring (duplicated intentionally, same reasoning as above).
 function Ring({ delay }: { delay: number }) {
   const { a1 } = useTheme();
   const t = useSharedValue(0);
@@ -25,6 +28,8 @@ function Ring({ delay }: { delay: number }) {
   return <Animated.View style={[{ position: 'absolute', width: 160, height: 160, borderRadius: 80, borderWidth: 2, borderColor: a1 }, style]} />;
 }
 
+// Renders the caller/roster info and accept/decline controls for an
+// incoming group call.
 export default function IncomingGroupCallScreen() {
   const { tokens } = useTheme();
   const incoming = useGroupCallStore((s) => s.incoming);
@@ -34,6 +39,7 @@ export default function IncomingGroupCallScreen() {
   const group = useGroupStore((s) => (incoming ? s.groups[incoming.groupId] : undefined));
   const approved = useContactStore((s) => s.approved);
 
+  // Resolves a userId to a display name for the "X is calling" text.
   const nameFor = (uid: string) => approved.find((c) => c.id === uid)?.display_name || approved.find((c) => c.id === uid)?.username || 'Someone';
   const callerName = incoming ? nameFor(incoming.from) : '';
   const otherCount = incoming ? incoming.participantIds.length - 1 : 0; // everyone but self

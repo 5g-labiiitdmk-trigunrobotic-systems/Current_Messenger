@@ -10,6 +10,10 @@ import { fontFamilies } from '../src/theme/tokens';
 import { useCallStore } from '../src/state/callStore';
 import { useContactStore } from '../src/state/contactStore';
 
+// One expanding, fading ring around the caller's avatar — an infinitely
+// repeating scale+fade animation, offset by `delay` so two staggered
+// instances (see render below) produce a continuous "pulse" effect
+// rather than both rings animating in lockstep.
 function Ring({ delay }: { delay: number }) {
   const { a1 } = useTheme();
   const t = useSharedValue(0);
@@ -20,6 +24,11 @@ function Ring({ delay }: { delay: number }) {
   return <Animated.View style={[{ position: 'absolute', width: 160, height: 160, borderRadius: 80, borderWidth: 2, borderColor: a1 }, style]} />;
 }
 
+// FILE PURPOSE: The full-screen incoming-1:1-call UI — caller avatar
+// with a pulsing ring animation, name, call kind, and accept/decline
+// buttons. Auto-dismisses itself once the call is no longer 'incoming'
+// (declined, timed out, caller hung up) — see the effect below for the
+// one case that needs special handling (accepted).
 export default function IncomingCallScreen() {
   const { tokens } = useTheme();
   const incoming = useCallStore((s) => s.incoming);

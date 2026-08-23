@@ -14,6 +14,9 @@ import { useContactStore } from '../../src/state/contactStore';
 import { useAuthStore } from '../../src/state/authStore';
 import { appAlert } from '../../src/state/alertStore';
 
+// FILE PURPOSE: The group-info screen (reached from group-chat's header)
+// — group name/member count, the member list with an admin badge for
+// the owner, an "Add member" invite flow, and a "Leave group" action.
 export default function GroupInfoScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { tokens, a1, a2 } = useTheme();
@@ -24,6 +27,7 @@ export default function GroupInfoScreen() {
   const me = useAuthStore((s) => s.session?.user.id);
   const myProfile = useAuthStore((s) => s.profile);
 
+  // Defensive: same "group may have ended" case as group-chat/[id].tsx.
   if (!group) {
     return (
       <ScreenScaffold>
@@ -32,6 +36,9 @@ export default function GroupInfoScreen() {
     );
   }
 
+  // Builds the display roster from memberIds — resolves each id to a
+  // name/avatar (falling back to the current user's own profile for
+  // "You"), and flags whoever owns the group as admin.
   const members = group.memberIds.map((uid) => {
     if (uid === me) return { id: uid, name: 'You', hue: 265, photoUrl: myProfile?.avatar_url ?? null, isAdmin: uid === group.ownerId };
     const c = approved.find((c) => c.id === uid);
@@ -68,6 +75,8 @@ export default function GroupInfoScreen() {
     );
   };
 
+  // onLeave(): confirms, then removes the current user from the group
+  // and returns to the chat list.
   const onLeave = () => {
     appAlert('Leave group', `Leave ${group.name}?`, [
       { text: 'Cancel', style: 'cancel' },
