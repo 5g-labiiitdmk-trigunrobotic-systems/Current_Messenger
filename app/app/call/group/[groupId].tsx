@@ -13,7 +13,7 @@ import { useContactStore } from '../../../src/state/contactStore';
 import { useAuthStore } from '../../../src/state/authStore';
 import { RTCView } from '../../../src/lib/webrtc';
 
-// Parallel screen to app/call/[id].tsx (1:1) — a grid layout instead of
+// FILE PURPOSE: Parallel screen to app/call/[id].tsx (1:1) — a grid layout instead of
 // full-bleed-remote + PIP-local, since group calls have no single "the
 // other party" to fill the screen. Deliberately its own file/route
 // (/call/group/[groupId], per docs/GROUP_CALLING.md's suggested shape)
@@ -39,12 +39,17 @@ const STATUS_LABEL: Record<ParticipantStatus, string> = {
   failed: 'Connection failed',
 };
 
+// Formats a duration in whole seconds as "m:ss" for the in-call timer.
 function formatDuration(sec: number): string {
   const m = Math.floor(sec / 60);
   const s = sec % 60;
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+// Shared circular control button — same component/styling as
+// call/[id].tsx's own ControlButton (duplicated rather than shared,
+// since these are two intentionally-separate screens; see the file-level
+// comment above for why).
 function ControlButton({ onPress, active, danger, children }: { onPress: () => void; active?: boolean; danger?: boolean; children: React.ReactNode }) {
   const { tokens } = useTheme();
   return (
@@ -65,6 +70,9 @@ function ControlButton({ onPress, active, danger, children }: { onPress: () => v
   );
 }
 
+// One grid tile per participant — their video (if the call is video and
+// they haven't turned their camera off) or an avatar fallback, plus a
+// name/status overlay at the bottom of the tile.
 function ParticipantTile({
   participant,
   name,
@@ -126,12 +134,15 @@ export default function GroupCallScreen() {
   const insets = useSafeAreaInsets();
   const [elapsed, setElapsed] = useState(0);
 
+  // One-second ticker driving the "m:ss" call-duration display.
   useEffect(() => {
     if (phase !== 'active' || !connectedAt) return;
     const t = setInterval(() => setElapsed(Math.floor((Date.now() - connectedAt) / 1000)), 1000);
     return () => clearInterval(t);
   }, [phase, connectedAt]);
 
+  // Once the call ends, show the end-reason text briefly, then clear the
+  // store's ended state and navigate back automatically.
   useEffect(() => {
     if (phase === 'ended') {
       const t = setTimeout(() => {
@@ -142,6 +153,8 @@ export default function GroupCallScreen() {
     }
   }, [phase]);
 
+  // Defensive: if the store's phase resets to 'idle' while this screen is
+  // still mounted, leave.
   useEffect(() => {
     if (phase === 'idle') {
       if (router.canGoBack()) router.back();
@@ -157,11 +170,16 @@ export default function GroupCallScreen() {
     }
   }, [phase]);
 
+  // Resolves a participant's userId to a display name ("You" for self,
+  // otherwise their approved-contact display name/username) or contact
+  // record (for avatar hue/photo).
   const nameFor = (uid: string) => (uid === self ? 'You' : approved.find((c) => c.id === uid)?.display_name || approved.find((c) => c.id === uid)?.username || 'Member');
   const contactFor = (uid: string) => approved.find((c) => c.id === uid);
 
   const statusText = phase === 'ringing-out' ? 'Calling…' : phase === 'connecting' ? 'Connecting…' : phase === 'active' ? formatDuration(elapsed) : phase === 'ended' ? (endReason ? END_REASON_LABEL[endReason] ?? 'Call ended' : 'Call ended') : '';
 
+  // Simple grid sizing: 1 participant fills the screen, 2+ go 2-per-row,
+  // with row count derived from however many participants that leaves.
   const list = Object.values(participants);
   const columns = list.length <= 1 ? 1 : 2;
   const rows = Math.max(1, Math.ceil(list.length / columns));
@@ -257,6 +275,7 @@ export default function GroupCallScreen() {
   );
 }
 
+// Shared label style under each control button.
 const styles = StyleSheet.create({
   label: { fontSize: 12, fontFamily: fontFamilies.semibold, color: 'rgba(255,255,255,0.85)' },
 });

@@ -25,6 +25,9 @@ import { withDateSeparators } from '../../src/lib/dateSeparators';
 import { useAudioRecorder, RecordingPresets } from 'expo-audio';
 import type { RejectReason } from '../../src/state/chatSessionStore';
 
+// User-facing copy for each reason a chat session request can be
+// rejected/unavailable (see chatSessionStore.ts) — shown in the banner
+// above the composer when sessionState isn't 'accepted'.
 const SESSION_REJECT_LABEL: Record<RejectReason, string> = {
   declined: "They haven't accepted this chat request.",
   timeout: 'No response yet.',
@@ -33,6 +36,15 @@ const SESSION_REJECT_LABEL: Record<RejectReason, string> = {
   not_contact: "You're not connected as contacts.",
 };
 
+// FILE PURPOSE: The 1:1 chat screen — header (contact info, call/search/
+// menu buttons), the per-session accept/pending/rejected banner, the
+// inverted message list (with date separators, typing indicator, and the
+// E2E-encryption footer), an inline poll-composer panel, the reply/edit
+// banner, and the message composer itself (text input, attach menu,
+// voice recording, send). Every send action funnels through
+// chatStore.ts's sendText/sendRich, and every attachment type
+// (photo/video/location/sticker/poll) is offered from the single
+// onAttach action-sheet menu below.
 export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { tokens, a1 } = useTheme();
@@ -124,11 +136,18 @@ export default function ChatScreen() {
   // whether the list has 0 messages or hydrates to hundreds in one frame,
   // so there's no scroll call to race against layout in the first place.
 
+  // Marks the newest message read (and notifies the other party) whenever
+  // it's from them and not already read — runs on every message-count
+  // change, so a newly-arrived message gets marked read while this
+  // screen stays open.
   useEffect(() => {
     const last = allMessages[allMessages.length - 1];
     if (last && last.from !== me && last.status !== 'read') markRead(id ?? '', false, last.id);
   }, [allMessages.length]);
 
+  // onChangeDraft(): updates the draft text and pings "typing" for the
+  // other party, auto-clearing back to "not typing" 1.5s after the last
+  // keystroke (debounced via typingTimeout, reset on every call).
   const onChangeDraft = (t: string) => {
     setDraft(t);
     setTyping(id ?? '', false, true);
@@ -136,6 +155,9 @@ export default function ChatScreen() {
     typingTimeout.current = setTimeout(() => setTyping(id ?? '', false, false), 1500);
   };
 
+  // onSend(): sends the draft as a new message, or — if editingId is set —
+  // applies it as an edit to that existing message instead. Clears the
+  // draft/reply/typing state afterward either way.
   const onSend = () => {
     if (!draft.trim()) return;
     if (editingId) {
@@ -149,6 +171,9 @@ export default function ChatScreen() {
     setTyping(id ?? '', false, false);
   };
 
+  // onMic(): toggles voice recording — starts on the first tap (surfacing
+  // a permission/start-failure alert if that fails), stops and sends the
+  // recording as a voice message on the second tap.
   const onMic = async () => {
     if (!recording) {
       const result = await startVoiceRecording(recorder);
@@ -169,6 +194,11 @@ export default function ChatScreen() {
     }
   };
 
+  // onAttach(): the "+" button's action sheet — every attachment type
+  // this chat can send (Camera photo/video, library Photo/Video,
+  // Location, Sticker, Poll) lives in this one menu, each option handling
+  // its own permission/size/failure cases and calling sendRich() or
+  // setPendingPhoto() (for the extra preview-before-send step) directly.
   const onAttach = async () => {
     appAlert('Share', undefined, [
       {
@@ -259,6 +289,8 @@ export default function ChatScreen() {
     ]);
   };
 
+  // onPickSticker(): a fixed small emoji set shown as an action-sheet
+  // list — sends the chosen emoji as a 'sticker'-kind rich message.
   const onPickSticker = () => {
     const stickers = ['😀', '😂', '❤️', '🔥', '👍', '🎉', '🙌', '😢'];
     appAlert(
@@ -268,6 +300,9 @@ export default function ChatScreen() {
     );
   };
 
+  // onSendPoll(): validates the inline poll-composer's three fields
+  // (question, option A, option B), sends it as a 'poll'-kind rich
+  // message with empty initial votes, then closes and resets the panel.
   const onSendPoll = () => {
     if (!pollQuestion.trim() || !pollOptA.trim() || !pollOptB.trim()) {
       appAlert('Fill in the poll', 'A question and both options are required.');
@@ -280,6 +315,8 @@ export default function ChatScreen() {
     setPollOptB('');
   };
 
+  // onForward(): offers up to the first 6 approved contacts as forward
+  // targets for the given message (chosen from a long-press menu).
   const onForward = (message: (typeof messages)[number]) => {
     if (approved.length === 0) {
       appAlert('No contacts', 'Add a contact to forward messages to.');
@@ -295,6 +332,10 @@ export default function ChatScreen() {
     );
   };
 
+  // onLongPressMessage(): the per-message action sheet — react, reply,
+  // forward, pin/unpin always offered; edit only for your own text
+  // messages; delete-for-everyone only for your own messages (see the
+  // comment below on why); delete-for-me always available.
   const onLongPressMessage = (messageId: string, isMine: boolean, text?: string) => {
     const message = allMessages.find((m) => m.id === messageId);
     const options: any[] = [
@@ -332,6 +373,10 @@ export default function ChatScreen() {
     appAlert('Message', undefined, options);
   };
 
+  // Defensive: this screen is only ever reachable for an approved
+  // contact's id, but that contact could vanish mid-session (e.g.
+  // removed on another device) — render a simple fallback rather than
+  // crash on undefined contact fields below.
   if (!contact) {
     return (
       <View style={{ flex: 1 }}>
@@ -405,6 +450,9 @@ export default function ChatScreen() {
     ]);
   };
 
+  // Derives the header's online/last-seen status text — respects this
+  // contact's own presence-visibility setting (isPresenceVisible), so a
+  // contact who's hidden their presence just shows a blank status here.
   const presenceVisible = isPresenceVisible(contact);
   const isOnline = presenceVisible && presence?.status === 'online';
   const statusLabel = !presenceVisible

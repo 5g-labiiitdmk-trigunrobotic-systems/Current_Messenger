@@ -22,6 +22,13 @@ import { appAlert } from '../../src/state/alertStore';
 import { pickImageBase64, pickVideoBase64, startVoiceRecording, stopVoiceRecording, MAX_VIDEO_DURATION_SECONDS, MAX_VIDEO_FILE_BYTES } from '../../src/lib/media';
 import { useAudioRecorder, RecordingPresets } from 'expo-audio';
 
+// FILE PURPOSE: The group chat screen — parallel to (and structurally
+// mirroring) chat/[id].tsx's 1:1 screen, but for a group's pairwise-
+// encrypted-fan-out messages: header (group name/member count, group
+// call buttons), the inverted message list (grouping consecutive
+// messages from the same sender by hiding repeated name labels), and the
+// composer (text, photo attach, voice recording). Broadcast-mode groups
+// additionally gate the composer behind canPost (owner-only).
 export default function GroupChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { tokens, a1, a2 } = useTheme();
@@ -80,11 +87,16 @@ export default function GroupChatScreen() {
     if (last && last.from !== me && last.status !== 'read') markRead(id ?? '', true, last.id);
   }, [messages.length]);
 
+  // Resolves a member's userId to a display name — "You" for self,
+  // otherwise their approved-contact display name/username.
   const nameFor = (uid: string) => {
     if (uid === me) return 'You';
     return approved.find((c) => c.id === uid)?.display_name ?? approved.find((c) => c.id === uid)?.username ?? 'Member';
   };
 
+  // Non-broadcast groups: everyone can post. Broadcast groups: only the
+  // owner can — everyone else gets the read-only footer text instead of
+  // a composer (see the render below).
   const canPost = !group?.isBroadcast || group?.ownerId === me;
 
   const onChangeDraft = (t: string) => {
@@ -94,6 +106,8 @@ export default function GroupChatScreen() {
     typingTimeout.current = setTimeout(() => setTyping(id ?? '', true, false), 1500);
   };
 
+  // onSend(): sends the draft as a new group message (with optional
+  // reply), then clears draft/reply/typing state.
   const onSend = () => {
     if (!draft.trim()) return;
     sendText(id ?? '', true, draft.trim(), { replyToId: replyTo ?? undefined });
@@ -228,6 +242,8 @@ export default function GroupChatScreen() {
     }
   };
 
+  // onLongPressMessage(): a smaller action sheet than the 1:1 screen's —
+  // react and reply only (no edit/delete/forward/pin in group chat yet).
   const onLongPressMessage = (messageId: string) => {
     appAlert('Message', undefined, [
       { text: '👍 React', onPress: () => react(id ?? '', true, messageId, '👍') },
@@ -237,6 +253,9 @@ export default function GroupChatScreen() {
     ]);
   };
 
+  // Defensive: groups only exist while at least one member has an active
+  // session (see server/src/state.ts) — if this group has since ended,
+  // render an explanatory fallback rather than crash on undefined fields.
   if (!group) {
     return (
       <View style={{ flex: 1 }}>
