@@ -13,6 +13,10 @@ import { useContactStore } from '../src/state/contactStore';
 import { useGroupStore } from '../src/state/groupStore';
 import { appAlert } from '../src/state/alertStore';
 
+// FILE PURPOSE: The group-creation screen — name, a broadcast-channel
+// toggle (owner-only posting), and a checklist of approved contacts to
+// invite. Create builds the group locally and navigates straight into
+// its chat.
 export default function NewGroupScreen() {
   const { tokens, a1 } = useTheme();
   const approved = useContactStore((s) => s.approved);
@@ -22,10 +26,13 @@ export default function NewGroupScreen() {
   const [isBroadcast, setIsBroadcast] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
+  // Pull the latest approved contacts on mount, so the invite list
+  // reflects any recent additions/removals.
   useEffect(() => {
     refresh();
   }, []);
 
+  // Adds or removes a contact id from the selected-invitees set.
   const toggle = (id: string) => {
     setSelected((s) => {
       const next = new Set(s);
@@ -34,6 +41,8 @@ export default function NewGroupScreen() {
     });
   };
 
+  // onCreate(): validates name + at least one invitee, creates the group
+  // locally, and navigates straight into its chat.
   const onCreate = () => {
     if (!name.trim()) {
       appAlert('Name your group', 'Give the group a name before creating it.');

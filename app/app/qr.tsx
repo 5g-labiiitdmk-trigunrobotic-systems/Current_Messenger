@@ -13,8 +13,14 @@ import { useAuthStore } from '../src/state/authStore';
 import { useContactStore } from '../src/state/contactStore';
 import { appAlert } from '../src/state/alertStore';
 
+// Namespace prefix embedded in every QR code this app generates/scans —
+// lets onScan below cheaply reject any non-Current QR code (a URL, a
+// wifi code, etc.) before trying to parse it as a user id.
 const QR_PREFIX = 'current-user:';
 
+// FILE PURPOSE: The QR code screen — two tabs: "My code" (this user's
+// own scannable QR, encoding their user id) and "Scan" (camera-based
+// scanner that turns a recognized code into a contact-request prompt).
 export default function QrScreen() {
   const { tokens, a1 } = useTheme();
   const profile = useAuthStore((s) => s.profile);
@@ -23,6 +29,9 @@ export default function QrScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
 
+  // onScan(): ignores anything already handled/not a Current QR code,
+  // otherwise extracts the encoded user id and confirms before actually
+  // sending a contact request.
   const onScan = (result: { data: string }) => {
     if (scanned) return;
     if (!result.data.startsWith(QR_PREFIX)) return;

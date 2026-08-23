@@ -15,6 +15,10 @@ import { useAuthStore } from '../src/state/authStore';
 import { supabase } from '../src/lib/supabase';
 import type { DeviceKeyRow } from '../src/types/database';
 
+// FILE PURPOSE: The "Privacy Dashboard" screen — an encryption
+// reassurance card, a simple security-score ring, active-device-key and
+// blocked-user counts, an email-verification/biometric-lock settings
+// panel, and the full active-devices and blocked-users lists.
 export default function PrivacyScreen() {
   const { tokens, a1, a2 } = useTheme();
   const biometricLock = useSettingsStore((s) => s.biometricLock);
@@ -24,6 +28,9 @@ export default function PrivacyScreen() {
   const [devices, setDevices] = useState<DeviceKeyRow[]>([]);
   const [blockedProfiles, setBlockedProfiles] = useState<Record<string, string>>({});
 
+  // Loads this user's own active (not revoked) device keys — each row is
+  // one device that's published an E2E key, shown in the "Active
+  // devices" list below.
   useEffect(() => {
     if (!me) return;
     supabase
@@ -35,6 +42,9 @@ export default function PrivacyScreen() {
       .then(({ data }) => setDevices((data as DeviceKeyRow[]) ?? []));
   }, [me]);
 
+  // Resolves each blocked user's id to their username for display —
+  // contactStore's `blocked` list is ids only, so this fetches the
+  // usernames separately (falling back to the raw id if a lookup fails).
   useEffect(() => {
     (async () => {
       const entries: Record<string, string> = {};
@@ -46,6 +56,9 @@ export default function PrivacyScreen() {
     })();
   }, [blocked]);
 
+  // Simple illustrative security score — starts at 100 (E2E encryption
+  // is always on for this app, so that's not itself a toggle), docked
+  // 10 points if biometric lock isn't enabled.
   const score = 100 - (biometricLock ? 0 : 10);
 
   return (

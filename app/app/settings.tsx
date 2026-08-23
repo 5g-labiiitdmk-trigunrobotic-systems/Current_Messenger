@@ -16,6 +16,8 @@ import { useAuthStore } from '../src/state/authStore';
 import { appAlert } from '../src/state/alertStore';
 import Constants from 'expo-constants';
 
+// The accent-color swatches offered in the "Accent color" section —
+// keys must match accentPalettes in theme/tokens.ts.
 const ACCENTS: { key: keyof typeof accentPalettes; label: string }[] = [
   { key: 'purple', label: 'Purple' },
   { key: 'blue', label: 'Blue' },
@@ -23,12 +25,21 @@ const ACCENTS: { key: keyof typeof accentPalettes; label: string }[] = [
   { key: 'green', label: 'Green' },
 ];
 
+// Options for the online-status visibility setting, saved on the user's
+// profile row (status_visibility) and read by isPresenceVisible()
+// elsewhere in the app.
 const VISIBILITY: { key: 'everyone' | 'contacts' | 'nobody'; label: string }[] = [
   { key: 'everyone', label: 'Everyone' },
   { key: 'contacts', label: 'Contacts only' },
   { key: 'nobody', label: 'Nobody' },
 ];
 
+// FILE PURPOSE: The main settings screen — account (display name,
+// username editors below), appearance (dark mode, accent color,
+// wallpaper), notifications, presence visibility, legal link, log out,
+// and a build-provenance footer. Also defines this screen's own small
+// reusable pieces (DisplayNameEditor, UsernameEditor, SectionLabel, Row)
+// below, since they're only ever used here.
 export default function SettingsScreen() {
   const { tokens, a1, mode } = useTheme();
   const toggleMode = useThemeStore((s) => s.toggleMode);
@@ -42,6 +53,9 @@ export default function SettingsScreen() {
   const updateProfile = useAuthStore((s) => s.updateProfile);
   const statusVisibility = profile?.status_visibility ?? 'everyone';
 
+  // onLogOut(): signs out, then explicitly dismisses the whole
+  // authenticated stack and routes to login — see the comment below on
+  // why this can't just rely on session-change reactivity.
   const onLogOut = async () => {
     try {
       await storeSignOut();
@@ -196,6 +210,9 @@ function DisplayNameEditor() {
   const current = profile?.display_name ?? '';
   const dirty = draft.trim() !== '' && draft.trim() !== current;
 
+  // onSave(): persists the new display name, then clears the draft field
+  // back to empty (so the field's placeholder falls back to showing the
+  // now-current name) and confirms.
   const onSave = async () => {
     setSaving(true);
     await updateProfile({ display_name: draft.trim() });
@@ -226,6 +243,9 @@ function UsernameEditor() {
   const current = profile?.username ?? '';
   const dirty = draft.trim().toLowerCase() !== '' && draft.trim().toLowerCase() !== current;
 
+  // onSave(): delegates format/uniqueness validation to authStore's
+  // changeUsername() (shared with the signup flow's own checks), surfaces
+  // any error, or clears the draft and confirms on success.
   const onSave = async () => {
     setSaving(true);
     const error = await changeUsername(draft);
@@ -250,11 +270,15 @@ function UsernameEditor() {
   );
 }
 
+// A small uppercase section-header label, used between settings groups.
 function SectionLabel({ children }: { children: string }) {
   const { tokens } = useTheme();
   return <Text style={{ fontSize: 12, fontFamily: fontFamilies.heavy, color: tokens.text3, textTransform: 'uppercase', letterSpacing: 0.8, margin: 4, marginTop: 20, marginBottom: 10 }}>{children}</Text>;
 }
 
+// One settings row: icon, label (+ optional sub-label), and a trailing
+// control (a SwitchToggle, a chevron, etc., passed as children). `last`
+// omits the bottom divider for the final row in a Glass group.
 function Row({ icon, label, sub, last, children }: { icon: string; label: string; sub?: string; last?: boolean; children: React.ReactNode }) {
   const { tokens, a1 } = useTheme();
   return (
