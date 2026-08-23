@@ -14,6 +14,9 @@ import { useContactStore } from '../../src/state/contactStore';
 import { supabase } from '../../src/lib/supabase';
 import type { UserRow } from '../../src/types/database';
 
+// FILE PURPOSE: The "Calls" tab — a locally-persisted call history list
+// (see callStore.ts's `log`), each entry showing the other party, call
+// direction/kind/duration, and a tap-to-redial button.
 export default function CallsScreen() {
   const { tokens, a1, a2 } = useTheme();
   const log = useCallStore((s) => s.log);
@@ -87,6 +90,8 @@ export default function CallsScreen() {
                     </Text>
                   </View>
                 </View>
+                {/* Tapping a log entry redials that same person with the
+                    same call kind (audio/video) it was originally. */}
                 <Pressable onPress={() => ring(c.peerId, c.kind)}>
                   <Glass radius={20} style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center' }}>
                     <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={a1} strokeWidth={1.9}>

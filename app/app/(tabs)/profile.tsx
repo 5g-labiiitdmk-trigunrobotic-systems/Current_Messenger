@@ -14,6 +14,9 @@ import { useAuthStore } from '../../src/state/authStore';
 import { pickAvatarImage } from '../../src/lib/media';
 import { appAlert } from '../../src/state/alertStore';
 
+// The settings-shortcut list rendered near the bottom of this screen —
+// each entry's icon is an inline SVG path string, and `route` is where
+// tapping it navigates (several share the same /settings destination).
 const SETTINGS = [
   { key: 'account', label: 'Account', sub: 'Username, email', icon: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM4 21c0-4 3.6-7 8-7s8 3 8 7', route: '/settings' as const },
   { key: 'privacy', label: 'Privacy & Security', sub: 'Encryption, verification, blocked', icon: 'M12 2l8 4v6c0 5-3.4 8.5-8 10-4.6-1.5-8-5-8-10V6l8-4ZM9 12l2 2 4-4', route: '/privacy' as const },
@@ -24,6 +27,10 @@ const SETTINGS = [
   { key: 'help', label: 'Help & Support', sub: 'FAQ, contact, about', icon: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20ZM9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.8.4-1 .9-1 1.7M12 17h.01', route: '/help' as const },
 ];
 
+// FILE PURPOSE: The "Profile" tab — the current user's own avatar/name/
+// username, a zero-server-storage reassurance card, and the settings
+// shortcut list (Account, Privacy, Notifications, Appearance, Devices,
+// Lab, Help).
 export default function ProfileScreen() {
   const { tokens, a1 } = useTheme();
   const profile = useAuthStore((s) => s.profile);
@@ -32,6 +39,9 @@ export default function ProfileScreen() {
   const uploadAvatar = useAuthStore((s) => s.uploadAvatar);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
+  // onPickAvatar(): picks/captures a photo, uploads it, and surfaces any
+  // upload error — pickAvatarImage() itself already handles cropping and
+  // downsizing before this ever sees the bytes.
   const onPickAvatar = async (source: 'camera' | 'library') => {
     const picked = await pickAvatarImage(source);
     if (!picked) return;
@@ -41,6 +51,8 @@ export default function ProfileScreen() {
     if (err) appAlert('Could not update photo', err);
   };
 
+  // onAvatarPress(): tapping the avatar offers camera vs. library, same
+  // choice pattern used for chat attachments elsewhere in this app.
   const onAvatarPress = () => {
     appAlert('Profile photo', 'Optional — visible to your contacts, same as your username.', [
       { text: 'Take photo', onPress: () => onPickAvatar('camera') },

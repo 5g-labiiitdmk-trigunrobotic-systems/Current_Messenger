@@ -16,6 +16,10 @@ import { isPresenceVisible } from '../../src/lib/presencePolicy';
 import { appAlert } from '../../src/state/alertStore';
 import type { UserRow } from '../../src/types/database';
 
+// FILE PURPOSE: The "Contacts" tab — username search + send request,
+// incoming request accept/decline, a "New group" shortcut, an "Online
+// now" strip, and the full approved-contacts list (tap to open chat,
+// long-press to remove).
 export default function ContactsScreen() {
   const { tokens, a1, a2 } = useTheme();
   const { approved, incoming, outgoing, refresh, searchByUsername, sendRequest, respond, removeContact } = useContactStore();
@@ -23,10 +27,14 @@ export default function ContactsScreen() {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<UserRow[]>([]);
 
+  // Pull the latest contacts/requests from the server on mount.
   useEffect(() => {
     refresh();
   }, []);
 
+  // Debounced username search — waits 250ms after typing stops (and
+  // requires at least 2 characters) before actually querying, so every
+  // keystroke doesn't trigger its own request.
   useEffect(() => {
     const t = setTimeout(async () => {
       if (query.trim().length >= 2) setResults(await searchByUsername(query));

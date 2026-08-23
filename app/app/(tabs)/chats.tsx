@@ -14,12 +14,19 @@ import { useContactStore } from '../../src/state/contactStore';
 
 const FILTERS = ['All', 'Unread', 'Groups', 'Channels'] as const;
 
+// FILE PURPOSE: The "Chats" tab (also this app's home/landing screen for
+// signed-in users) — theme toggle + add-contact shortcut, a row of
+// recent-contact avatars, a filter chip row, and the actual conversation
+// list (1:1 chats, groups, and broadcast channels combined, via
+// useConversationRows()).
 export default function ChatsScreen() {
   const { tokens, a1, a2, toggleMode, mode } = useTheme();
   const rows = useConversationRows();
   const approved = useContactStore((s) => s.approved);
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>('All');
 
+  // Applies the currently-selected filter chip to the full conversation
+  // list — 'All' passes everything through unchanged.
   const filtered = rows.filter((r) => {
     if (filter === 'Unread') return r.unread > 0;
     if (filter === 'Groups') return r.isGroup && !r.isBroadcast;
