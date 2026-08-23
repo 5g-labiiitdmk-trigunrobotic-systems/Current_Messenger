@@ -16,8 +16,16 @@ import { normalizeUsername, usernameFormatError, isUsernameTaken } from '../../s
 
 const CHECK_DEBOUNCE_MS = 450;
 
+// The username-availability check's possible states, driving both the
+// helper text shown under the username field and whether submit is
+// allowed (only 'available' passes).
 type AvailabilityState = 'idle' | 'checking' | 'available' | 'taken' | 'invalid';
 
+// FILE PURPOSE: The account-creation screen — username (with live
+// availability checking), email, password + confirm, and a terms
+// agreement checkbox. On success, stashes the chosen credentials in
+// signupStore and pushes to verify-email.tsx to wait for the
+// confirmation link.
 export default function SignupScreen() {
   const { tokens, a1 } = useTheme();
   const set = useSignupStore((s) => s.set);
@@ -54,6 +62,10 @@ export default function SignupScreen() {
     };
   }, [username]);
 
+  // onSubmit(): validates every field, re-checks username availability
+  // one last time right before signup (closing the race window between
+  // the debounced check above and the actual submit), then calls
+  // Supabase signUp() and hands off to verify-email.tsx.
   const onSubmit = async () => {
     const uname = normalizeUsername(username);
     const formatError = usernameFormatError(uname);
@@ -110,6 +122,9 @@ export default function SignupScreen() {
     router.push('/(auth)/verify-email');
   };
 
+  // Maps each AvailabilityState to what the helper text under the
+  // username field should say (and its color) — null for 'idle', where
+  // the static hint text below is shown instead.
   const availabilityLabel: Record<AvailabilityState, { text: string; color: string } | null> = {
     idle: null,
     checking: { text: 'Checking availability…', color: tokens.text3 },

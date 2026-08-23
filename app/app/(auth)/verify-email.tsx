@@ -38,18 +38,26 @@ export default function VerifyEmailScreen() {
   const [resending, setResending] = useState(false);
   const [cooldown, setCooldown] = useState(0);
 
+  // Reactively leaves this screen the moment `session` (updated globally
+  // by app/_layout.tsx's deep-link handler) shows the email as confirmed —
+  // no polling, no manual "I've verified" button.
   useEffect(() => {
     if (session?.user.email_confirmed_at) {
       router.replace('/(auth)/finish-setup');
     }
   }, [session]);
 
+  // One-second countdown ticker for the resend cooldown, active only
+  // while cooldown > 0.
   useEffect(() => {
     if (cooldown <= 0) return;
     const t = setInterval(() => setCooldown((s) => Math.max(0, s - 1)), 1000);
     return () => clearInterval(t);
   }, [cooldown > 0]);
 
+  // onResend(): re-sends the signup confirmation email, then starts the
+  // cooldown regardless of success (see RESEND_COOLDOWN_SEC's comment
+  // for why a failed attempt still needs one).
   const onResend = async () => {
     setResending(true);
     const { error } = await supabase.auth.resend({ type: 'signup', email });

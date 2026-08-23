@@ -29,6 +29,10 @@ export default function ResetPasswordScreen() {
 
   const canSubmit = !loading && password.length >= 8 && password === confirm;
 
+  // onSubmit(): validates the two password fields, then applies the new
+  // password to the recovery session already established by the time
+  // this form is reachable, and routes onward exactly like a normal
+  // login (finish-setup if the profile is incomplete, otherwise the app).
   const onSubmit = async () => {
     if (password.length < 8) {
       appAlert('Weak password', 'Use at least 8 characters.');

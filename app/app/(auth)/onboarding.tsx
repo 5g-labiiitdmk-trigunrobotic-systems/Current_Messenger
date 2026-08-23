@@ -9,6 +9,9 @@ import { PrimaryButton, GlassButton } from '../../src/components/Buttons';
 import { useTheme } from '../../src/theme/useTheme';
 import { fontFamilies } from '../../src/theme/tokens';
 
+// FILE PURPOSE: The very first screen a new/signed-out user sees — app
+// branding, a one-line pitch for E2E encryption, and the two entry
+// points into the (auth) flow (create account / log in).
 export default function OnboardingScreen() {
   const { tokens } = useTheme();
   return (

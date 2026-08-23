@@ -13,6 +13,10 @@ import { useAuthStore } from '../../src/state/authStore';
 import { appAlert } from '../../src/state/alertStore';
 import { PASSWORD_RESET_REDIRECT_URL } from '../../src/lib/authDeepLink';
 
+// FILE PURPOSE: The login screen — email/username + password sign-in,
+// plus the "Forgot password?" entry point into the password-reset flow
+// (see reset-password.tsx and src/lib/authDeepLink.ts for the rest of
+// that flow).
 export default function LoginScreen() {
   const { tokens, a1, a2 } = useTheme();
   const [identifier, setIdentifier] = useState('');
@@ -20,6 +24,10 @@ export default function LoginScreen() {
   const [remember, setRemember] = useState(true);
   const [loading, setLoading] = useState(false);
 
+  // onSubmit(): validates input, resolves a typed username to its email
+  // (Supabase auth only signs in by email, not username, so a username
+  // needs one extra lookup first), then signs in and routes to either
+  // finish-setup (profile incomplete) or the main app.
   const onSubmit = async () => {
     if (!identifier.trim() || !password) {
       appAlert('Missing info', 'Enter your email/username and password.');
@@ -28,6 +36,7 @@ export default function LoginScreen() {
     setLoading(true);
     let email = identifier.trim();
     if (!email.includes('@')) {
+      // Typed a username, not an email — look up the matching email first.
       const { data } = await supabase.from('users').select('email').eq('username', email.toLowerCase()).maybeSingle();
       if (!data) {
         setLoading(false);
@@ -48,6 +57,10 @@ export default function LoginScreen() {
     router.replace(needsSetup ? '/(auth)/finish-setup' : '/(tabs)/chats');
   };
 
+  // onForgot(): requires an email (not username) already typed into the
+  // identifier field, then asks Supabase to send a password-reset email
+  // whose link redirects back into this app at PASSWORD_RESET_REDIRECT_URL
+  // (handled globally in app/_layout.tsx).
   const onForgot = async () => {
     if (!identifier.includes('@')) {
       appAlert('Enter your email', 'Type your email address above first, then tap "Forgot password?" again.');
@@ -66,6 +79,9 @@ export default function LoginScreen() {
         <GlassField label="Password" placeholder="••••••••" secureTextEntry value={password} onChangeText={setPassword} />
       </View>
 
+      {/* "Remember me" checkbox — a custom-drawn square (border + optional
+          checkmark SVG) rather than a platform Switch/Checkbox, to match
+          this app's own design language. */}
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 18 }}>
         <Pressable onPress={() => setRemember((r) => !r)} style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
           <View

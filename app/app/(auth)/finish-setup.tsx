@@ -12,12 +12,16 @@ import { generateFriendlyUsername } from '../../src/lib/usernameGen';
 import { appAlert } from '../../src/state/alertStore';
 
 /**
- * Landing spot for a resumed session (e.g. the app was killed mid-signup, or
- * the user just tapped the email confirmation link). Once email is verified,
- * this is also the single place that creates the public.users row — the
+ * FILE PURPOSE / component doc: FinishSetupScreen is the landing spot for
+ * a resumed session (e.g. the app was killed mid-signup, or the user just
+ * tapped the email confirmation link). Once email is verified, this is
+ * also the single place that creates the public.users row — the
  * in-memory signup wizard's username can't survive a restart, so a cold-start
  * resume falls back to a randomly generated one (never derived from the
- * email address — that would leak it into a public field).
+ * email address — that would leak it into a public field). Renders only a
+ * loading spinner; all of the real work happens in the effect below,
+ * which routes away as soon as it determines where the user actually
+ * belongs.
  */
 export default function FinishSetupScreen() {
   const { tokens } = useTheme();
@@ -26,6 +30,11 @@ export default function FinishSetupScreen() {
   const set = useSignupStore((s) => s.set);
   const finalizing = useRef(false);
 
+  // Effect body: on every session/profile change, decide the single next
+  // step for this account — bounce to onboarding if there's no session,
+  // to email verification if unconfirmed, finalize account creation if
+  // confirmed but no public.users row exists yet, or otherwise publish
+  // this device's E2E key (if not already done) and enter the app.
   useEffect(() => {
     if (!session) {
       router.replace('/(auth)/onboarding');
