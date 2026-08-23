@@ -1,3 +1,8 @@
+// FILE PURPOSE: A local Expo config plugin (referenced from app.json's
+// "plugins" array) that forces Android's windowSoftInputMode to
+// "adjustNothing" on MainActivity — see the detailed function-level
+// comment below for why this exact value, and why Expo's own
+// android.softwareKeyboardLayoutMode config option can't express it.
 const { withAndroidManifest, AndroidConfig } = require('@expo/config-plugins');
 
 /**
@@ -53,4 +58,6 @@ function withAdjustNothingSoftInput(config) {
   });
 }
 
+// Exported as the plugin function itself (Expo config plugins are
+// referenced by module, not by named export).
 module.exports = withAdjustNothingSoftInput;

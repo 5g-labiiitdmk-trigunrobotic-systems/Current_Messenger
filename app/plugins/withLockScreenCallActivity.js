@@ -1,3 +1,8 @@
+// FILE PURPOSE: A local Expo config plugin (referenced from app.json's
+// "plugins" array) that sets android:showWhenLocked + android:turnScreenOn
+// on MainActivity, so an incoming-call full-screen notification can show
+// its accept/decline UI over the lock screen — see the detailed
+// function-level comment below.
 const { withAndroidManifest, AndroidConfig } = require('@expo/config-plugins');
 
 /**
@@ -29,4 +34,5 @@ function withLockScreenCallActivity(config) {
   });
 }
 
+// Exported as the plugin function itself.
 module.exports = withLockScreenCallActivity;

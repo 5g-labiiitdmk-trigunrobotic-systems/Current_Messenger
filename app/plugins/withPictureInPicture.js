@@ -1,3 +1,8 @@
+// FILE PURPOSE: A local Expo config plugin (referenced from app.json's
+// "plugins" array) that makes MainActivity eligible for Android's
+// Picture-in-Picture mode — sets android:supportsPictureInPicture, and
+// merges in the configChanges values PiP transitions need so the
+// Activity survives them without being destroyed/recreated.
 const { withAndroidManifest, AndroidConfig } = require('@expo/config-plugins');
 
 // PiP-relevant configChanges values Android needs so the Activity isn't
@@ -24,6 +29,10 @@ function withPictureInPicture(config) {
     const mainActivity = AndroidConfig.Manifest.getMainActivityOrThrow(manifest);
     mainActivity.$['android:supportsPictureInPicture'] = 'true';
 
+    // Parse whatever configChanges the manifest already declares (a
+    // pipe-separated attribute string) into a list, then union in the
+    // PiP-required values via a Set so nothing already present gets
+    // duplicated, and re-join back into the same attribute format.
     const existing = (mainActivity.$['android:configChanges'] ?? '').split('|').filter(Boolean);
     const merged = new Set(existing);
     for (const value of PIP_CONFIG_CHANGES) merged.add(value);
@@ -33,4 +42,5 @@ function withPictureInPicture(config) {
   });
 }
 
+// Exported as the plugin function itself.
 module.exports = withPictureInPicture;

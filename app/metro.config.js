@@ -1,3 +1,6 @@
+// FILE PURPOSE: Metro (React Native's bundler) config. Starts from
+// Expo's own default config, then extends it with one project-specific
+// tweak (see below) needed to keep the web build working.
 const { getDefaultConfig } = require('expo/metro-config');
 
 const config = getDefaultConfig(__dirname);

@@ -1,3 +1,8 @@
+// FILE PURPOSE: A local Expo config plugin (referenced from app.json's
+// "plugins" array) that sets android:resizeableActivity="true" on
+// MainActivity to satisfy a Play Console large-screen/foldable quality
+// check — see the detailed function-level comment below for the full
+// reasoning and what this deliberately does NOT attempt to fix.
 const { withAndroidManifest, AndroidConfig } = require('@expo/config-plugins');
 
 /**
@@ -30,4 +35,5 @@ function withLargeScreenSupport(config) {
   });
 }
 
+// Exported as the plugin function itself.
 module.exports = withLargeScreenSupport;
