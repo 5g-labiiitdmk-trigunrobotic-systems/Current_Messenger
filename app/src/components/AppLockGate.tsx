@@ -7,11 +7,22 @@ import { useTheme } from '../theme/useTheme';
 import { fontFamilies } from '../theme/tokens';
 import { useSettingsStore } from '../state/settingsStore';
 
+/**
+ * FILE PURPOSE: Wraps the whole app (see _layout.tsx) and gates
+ * rendering `children` behind a biometric prompt whenever the
+ * biometricLock setting is on — shows a "Current is locked" screen with
+ * a manual "Unlock" retry until authentication succeeds. A no-op pass-
+ * through when the setting is off, or when this device has no
+ * biometrics configured at all (rather than locking the user out with
+ * no way to unlock).
+ */
 export function AppLockGate({ children }: { children: React.ReactNode }) {
   const enabled = useSettingsStore((s) => s.biometricLock);
   const { tokens, a1 } = useTheme();
   const [unlocked, setUnlocked] = useState(!enabled);
 
+  // tryUnlock(): checks hardware/enrollment first (bailing open if
+  // biometrics genuinely aren't available), then prompts.
   const tryUnlock = async () => {
     const hasHardware = await LocalAuthentication.hasHardwareAsync();
     const enrolled = await LocalAuthentication.isEnrolledAsync();
@@ -23,6 +34,8 @@ export function AppLockGate({ children }: { children: React.ReactNode }) {
     if (result.success) setUnlocked(true);
   };
 
+  // Prompts automatically as soon as the lock becomes active (rather
+  // than waiting for the user to tap "Unlock" themselves).
   useEffect(() => {
     if (enabled && !unlocked) tryUnlock();
   }, [enabled]);

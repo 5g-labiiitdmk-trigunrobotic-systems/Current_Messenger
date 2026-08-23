@@ -6,6 +6,12 @@ import { IconCircle } from './Buttons';
 import { useTheme } from '../theme/useTheme';
 import { fontFamilies } from '../theme/tokens';
 
+/**
+ * FILE PURPOSE: Shared header for every (auth) screen — an optional back
+ * button (falls back to onboarding if there's no history to go back
+ * into, e.g. this is the very first screen after a cold start), a large
+ * title, and an optional subtitle.
+ */
 export function AuthHeader({ title, subtitle, showBack = true }: { title: string; subtitle?: string; showBack?: boolean }) {
   const { tokens } = useTheme();
   return (

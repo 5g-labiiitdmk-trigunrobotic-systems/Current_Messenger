@@ -8,7 +8,7 @@ import { useContactStore } from '../state/contactStore';
 import { fontFamilies } from '../theme/tokens';
 
 /**
- * Persistent "return to call" indicator — mounted once at the app root
+ * FILE PURPOSE / component doc: Persistent "return to call" indicator — mounted once at the app root
  * (see _layout.tsx), same pattern as AppAlertHost, so it floats over
  * whatever screen the user navigates to (a chat, contacts, settings...)
  * while a call is in progress but not the thing currently on screen.

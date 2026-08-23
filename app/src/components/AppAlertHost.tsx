@@ -5,7 +5,16 @@ import { useTheme } from '../theme/useTheme';
 import { fontFamilies } from '../theme/tokens';
 import { Glass } from './Glass';
 
-/** Mounted once at the app root — renders whatever appAlert() last set. */
+/**
+ * FILE PURPOSE: The app's single custom alert/action-sheet UI. Mounted
+ * once at the app root (_layout.tsx) — renders whatever appAlert() (see
+ * state/alertStore.ts) last set, as a themed modal card with a title,
+ * optional message, and a scrollable stack of buttons (styled per
+ * button's style: 'destructive' | 'cancel' | default). Every alert/menu
+ * in this app goes through this one component rather than React
+ * Native's own Alert.alert, so styling stays consistent with the rest
+ * of the UI.
+ */
 export function AppAlertHost() {
   const alert = useAlertStore((s) => s.alert);
   const dismiss = useAlertStore((s) => s.dismiss);
@@ -13,6 +22,9 @@ export function AppAlertHost() {
 
   if (!alert) return null;
 
+  // Dismisses the alert, then runs the tapped button's own handler (if
+  // any) — dismiss-first so a handler that shows another alert doesn't
+  // have this one's dismiss() clobber it a moment later.
   const onPressButton = (btn: (typeof alert.buttons)[number]) => {
     dismiss();
     btn.onPress?.();

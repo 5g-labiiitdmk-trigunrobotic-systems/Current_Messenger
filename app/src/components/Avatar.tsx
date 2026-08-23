@@ -19,6 +19,8 @@ interface AvatarProps {
   label?: string;
 }
 
+// Derives a 1-2 letter initials string from a name — first two chars of
+// a single word, or first letter of each of the first two words.
 function initialsFor(label: string): string {
   const parts = label.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return '';
@@ -26,6 +28,13 @@ function initialsFor(label: string): string {
   return (parts[0][0] + parts[1][0]).toUpperCase();
 }
 
+/**
+ * FILE PURPOSE: The app-wide avatar component — a real photo if
+ * photoUrl is set, otherwise a gradient circle (derived deterministically
+ * from `hue`) showing either initials (from `label`) or a generic
+ * silhouette icon as a last resort. Optionally shows an online-status
+ * dot in the bottom-right corner.
+ */
 export function Avatar({ hue, size = 54, online, photoUrl, ringWidth = 2, label }: AvatarProps) {
   const { tokens } = useTheme();
   const [c1, c2] = avatarGradient(hue);
@@ -93,6 +102,7 @@ export function Avatar({ hue, size = 54, online, photoUrl, ringWidth = 2, label 
   );
 }
 
+// The online-status dot's shared (non-size-dependent) styling.
 const styles = StyleSheet.create({
   dot: {
     position: 'absolute',
