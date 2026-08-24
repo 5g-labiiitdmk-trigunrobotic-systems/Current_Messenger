@@ -1,6 +1,10 @@
 import type { WebSocket } from 'ws';
 
 /**
+ * FILE PURPOSE: RelayState — every piece of live, in-memory server state
+ * (connections, groups, chat sessions, group invites, call rings) and the
+ * operations index.ts's WebSocket handlers perform on them.
+ *
  * ALL state in this file lives in process memory only. Nothing here is ever
  * written to disk or a database. A server restart/deploy wipes everything —
  * that is intentional, not a bug: it's the zero-persistence guarantee.
@@ -105,10 +109,13 @@ class RelayState {
    */
   private pendingGroupInvites = new Map<string, PendingGroupInvite>();
 
+  // Order-independent key for a two-user relationship (session or ring
+  // pairing) — same key regardless of which side calls it.
   private pairKey(a: string, b: string): string {
     return [a, b].sort().join(':');
   }
 
+  // Registers a user's live socket, replacing any prior one for that user.
   addConnection(userId: string, socket: WebSocket) {
     this.connections.set(userId, { userId, socket, lastSeenAt: Date.now() });
   }
@@ -131,6 +138,7 @@ class RelayState {
     return true;
   }
 
+  // The live socket to forward a message/signal to, if this user is online.
   getSocket(userId: string): WebSocket | undefined {
     return this.connections.get(userId)?.socket;
   }
@@ -139,10 +147,13 @@ class RelayState {
     return this.connections.has(userId);
   }
 
+  // Every currently-connected userId — used to build presence:snapshot.
   onlineUserIds(): string[] {
     return [...this.connections.keys()];
   }
 
+  // Updates lastSeenAt — called on every authenticated message this user
+  // sends, not just heartbeats.
   touch(userId: string) {
     const c = this.connections.get(userId);
     if (c) c.lastSeenAt = Date.now();
@@ -156,6 +167,7 @@ class RelayState {
     return this.pendingSessions.get(this.pairKey(a, b));
   }
 
+  // Records a new outgoing chat-session request, awaiting the target's response.
   requestSession(requesterId: string, targetId: string) {
     this.pendingSessions.set(this.pairKey(requesterId, targetId), { requesterId, targetId, requestedAt: Date.now() });
   }
@@ -172,6 +184,8 @@ class RelayState {
     this.pendingSessions.delete(this.pairKey(a, b));
   }
 
+  // Records a fresh ring so a not-yet-connected/reconnecting callee can
+  // still learn about it — see activeRings' own doc comment above.
   recordRing(callerId: string, calleeId: string, callKind: 'voice' | 'video', groupId?: string) {
     this.activeRings.set(calleeId, { callerId, callKind, ringSentAt: Date.now(), groupId });
   }
@@ -253,10 +267,13 @@ class RelayState {
     return [...this.groups.values()].filter((g) => g.memberIds.has(userId));
   }
 
+  // Adds one more member to an existing group (used once an invite is accepted).
   addGroupMember(groupId: string, userId: string) {
     this.groups.get(groupId)?.memberIds.add(userId);
   }
 
+  // Removes a member (leave, or an owner/admin removal) — deletes the
+  // group entirely once it has no members left.
   removeGroupMember(groupId: string, userId: string) {
     const g = this.groups.get(groupId);
     if (!g) return;
@@ -269,10 +286,13 @@ class RelayState {
     return this.groups.get(groupId)?.memberIds.has(userId) ?? false;
   }
 
+  // One-directional key (unlike pairKey) — an invite is "this group inviting
+  // this person," not a symmetric relationship between two peers.
   private groupInviteKey(groupId: string, inviteeId: string): string {
     return `${groupId}:${inviteeId}`;
   }
 
+  // Records a pending group-membership invite, awaiting the invitee's response.
   requestGroupInvite(groupId: string, inviterId: string, inviteeId: string) {
     this.pendingGroupInvites.set(this.groupInviteKey(groupId, inviteeId), { groupId, inviterId, inviteeId, requestedAt: Date.now() });
   }

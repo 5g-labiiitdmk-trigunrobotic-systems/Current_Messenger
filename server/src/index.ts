@@ -6,6 +6,11 @@ import { relayState } from './state.js';
 import { verifyUserToken, areApprovedContacts, isBlocked, getUsername, logTransfer } from './supabaseAdmin.js';
 import { pingOfflineRecipient, pingIncomingCall, pingContactRequest, pingSessionRequest } from './pushPing.js';
 
+// FILE PURPOSE: The relay server itself — HTTP health/ICE endpoints, the
+// WebSocket connection lifecycle (auth, heartbeat, disconnect cleanup),
+// and every ClientEvent handler (message send/forward, calls, groups,
+// contacts, chat sessions). See state.ts for the in-memory state this
+// file operates on, and protocol.ts for the wire message shapes.
 const PORT = Number(process.env.PORT) || 8787;
 const AUTH_TIMEOUT_MS = 10_000;
 
@@ -58,6 +63,9 @@ interface RTCIceServerConfig {
   credential?: string;
 }
 
+// Plain HTTP server for two small non-WebSocket endpoints (health check,
+// ICE server config) — the WebSocketServer below attaches to this same
+// server rather than listening on its own port.
 const server = http.createServer((req, res) => {
   if (req.url === '/health') {
     res.writeHead(200, { 'content-type': 'application/json' });
@@ -75,10 +83,13 @@ const server = http.createServer((req, res) => {
 
 const wss = new WebSocketServer({ server });
 
+// The one place every outgoing ServerEvent is actually serialized and
+// written to a socket — guards against sending to an already-closed one.
 function send(socket: WebSocket, event: ServerEvent) {
   if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(event));
 }
 
+// Tells every other online user this user's presence just changed.
 function broadcastPresence(userId: string, status: 'online' | 'offline') {
   const event: ServerEvent = { type: 'presence', userId, status, lastSeenAt: new Date().toISOString() };
   for (const id of relayState.onlineUserIds()) {
@@ -88,6 +99,9 @@ function broadcastPresence(userId: string, status: 'online' | 'offline') {
   }
 }
 
+// Per-connection lifecycle: unauthenticated sockets get AUTH_TIMEOUT_MS to
+// send an 'auth' event before being dropped; once authenticated, every
+// other ClientEvent type is dispatched via the switch below.
 wss.on('connection', (socket) => {
   let userId: string | null = null;
 
@@ -384,6 +398,9 @@ setInterval(() => {
   });
 }, HEARTBEAT_INTERVAL_MS);
 
+// Handles a message:send for both the 1:1 (event.to) and group
+// (event.groupId) cases — approval/block/session checks, hard-fail-if-
+// offline delivery (no queueing), and the metadata-only transfer log.
 async function handleMessageSend(userId: string, event: Extract<ClientEvent, { type: 'message:send' }>) {
   const socket = relayState.getSocket(userId)!;
   const messageId = crypto.randomUUID();
@@ -504,6 +521,9 @@ async function handleMessageSend(userId: string, event: Extract<ClientEvent, { t
 // at all — not a live, urgent ring.
 const SESSION_REQUEST_TIMEOUT_MS = 60_000;
 
+// Starts (or resolves via glare/already-active) a per-connection chat
+// session request — see state.ts's activeSessions doc comment for what a
+// "session" means here.
 async function handleSessionRequest(userId: string, to: string) {
   const socket = relayState.getSocket(userId)!;
   if (!(await areApprovedContacts(userId, to))) {
@@ -576,6 +596,7 @@ async function handleSessionRequest(userId: string, to: string) {
   }, SESSION_REQUEST_TIMEOUT_MS);
 }
 
+// Resolves a pending session request the other side sent to this user.
 function handleSessionRespond(userId: string, peerId: string, accept: boolean) {
   const pending = relayState.getPendingSession(peerId, userId);
   if (!pending || pending.requesterId !== peerId || pending.targetId !== userId) return; // no matching pending request — ignore
@@ -598,6 +619,8 @@ function handleSessionRespond(userId: string, peerId: string, accept: boolean) {
 // itself is intentionally untouched.
 const GROUP_INVITE_TIMEOUT_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
 
+// Sends a pending group-membership invite (subject to the same contact-
+// approval gate as everything else) and arms its GROUP_INVITE_TIMEOUT_MS timeout.
 async function handleGroupInviteRequest(userId: string, groupId: string, to: string) {
   const socket = relayState.getSocket(userId);
   const group = relayState.getGroup(groupId);
@@ -625,6 +648,8 @@ async function handleGroupInviteRequest(userId: string, groupId: string, to: str
   }, GROUP_INVITE_TIMEOUT_MS);
 }
 
+// Resolves a pending group invite the user was sent; on accept, adds them
+// as a member and broadcasts the updated roster to everyone in the group.
 function handleGroupInviteRespond(userId: string, groupId: string, accept: boolean) {
   const pending = relayState.getPendingGroupInvite(groupId, userId);
   if (!pending) return; // no matching pending invite — ignore
@@ -647,6 +672,9 @@ function handleGroupInviteRespond(userId: string, groupId: string, accept: boole
   }
 }
 
+// Shared fan-out helper for typing/read events — same 1:1-vs-group and
+// online/approval gating as handleMessageSend, but for events with no
+// content or delivery-status feedback of their own.
 async function forwardToRecipients(userId: string, to: string | undefined, groupId: string | undefined, sendFn: (targetId: string) => void) {
   if (groupId) {
     const group = relayState.getGroup(groupId);
