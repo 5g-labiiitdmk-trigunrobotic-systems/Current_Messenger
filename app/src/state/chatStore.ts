@@ -8,6 +8,11 @@ import { useAuthStore } from './authStore';
 import { useGroupStore } from './groupStore';
 import { appAlert } from './alertStore';
 
+// FILE PURPOSE: The core messaging store — in-memory + on-device-persisted
+// message threads, sending (encrypt + relay send, with optimistic local
+// state), and every relay message:*/typing/read event handler. See
+// crypto.ts/keystore.ts for the E2E primitives this file drives, and
+// localDb.ts for the persistence layer.
 export interface ChatMessage {
   id: string; // messageId once known, else tempId while pending
   tempId: string;
@@ -26,6 +31,8 @@ export interface ChatMessage {
   deleted?: boolean;
 }
 
+// Namespaces a thread key by type so a 1:1 peerId and a group id can never
+// collide in the `threads`/`pinned` maps below.
 function chatKey(peerOrGroupId: string, isGroup: boolean) {
   return isGroup ? `group:${peerOrGroupId}` : `dm:${peerOrGroupId}`;
 }
@@ -136,6 +143,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
   pinned: {},
   wired: false,
 
+  // Subscribes to every relay event this store cares about (message
+  // send/receive/typing/read) and starts local-history hydration. Call
+  // once at app startup.
   wire: () => {
     if (get().wired) return;
     set({ wired: true });
@@ -334,6 +344,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
   },
 
+  // Sends a plaintext (`text`/`edit`/`reply`-kind) message: adds an
+  // optimistic 'sending' entry immediately, then encrypts (1:1, or
+  // per-member fan-out for a group) and sends over the relay.
   sendText: async (targetId, isGroup, text, opts) => {
     const me = useAuthStore.getState().session?.user.id;
     if (!me || !text.trim()) return;
@@ -424,6 +437,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
+  // Same optimistic-then-encrypt-then-send flow as sendText, but for a rich
+  // JSON-serialized payload (photo/voice/location/sticker/poll/etc.).
   sendRich: async (targetId, isGroup, kind, content, replyToId) => {
     const me = useAuthStore.getState().session?.user.id;
     if (!me) return;
@@ -496,6 +511,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     relayClient.send({ type: 'message:send', tempId, to: targetId, kind, payload, meta: { replyToId } });
   },
 
+  // Re-sends an existing message's content to a different target, tagged
+  // `forwarded: true` — a fresh send (its own encryption/tempId), not a
+  // relay-level copy of the original.
   forwardMessage: async (message, toTargetId, toIsGroup) => {
     if (message.kind === 'text' || message.kind === 'reply') {
       if (message.text) await get().sendText(toTargetId, toIsGroup, message.text, { kind: 'text', meta: { forwarded: true } });
@@ -504,6 +522,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (message.meta) await get().sendRich(toTargetId, toIsGroup, message.kind, { ...message.meta, forwarded: true });
   },
 
+  // Broadcasts this device's typing state — session-only signaling, not a
+  // stored message.
   setTyping: (targetId, isGroup, isTyping) => {
     relayClient.send({ type: 'typing', to: isGroup ? undefined : targetId, groupId: isGroup ? targetId : undefined, isTyping });
   },
@@ -541,6 +561,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     changed.forEach((m) => saveMessage(me, key, m).catch(() => {}));
   },
 
+  // Adds/replaces this user's own reaction on a message, locally and over
+  // the wire (as a 'reaction'-kind message carrying an empty payload —
+  // reactions aren't E2E content, just routing metadata).
   react: (targetId, isGroup, messageId, emoji) => {
     const me = useAuthStore.getState().session?.user.id;
     if (!me) return;
@@ -568,6 +591,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
   },
 
+  // Records this user's poll vote locally and notifies the other
+  // participant(s), same pattern as react() above.
   votePoll: (targetId, isGroup, messageId, optionIndex) => {
     const me = useAuthStore.getState().session?.user.id;
     if (!me) return;
@@ -595,6 +620,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
   },
 
+  // Edits a previously-sent own message: applies locally first (always
+  // succeeds), then tries to sync the edit to the recipient — only wired
+  // up for 1:1 chats currently, not group (no pairwise fan-out branch
+  // below the way sendText/sendRich have).
   editMessage: (targetId, isGroup, messageId, newText) => {
     const me = useAuthStore.getState().session?.user.id;
     const key = chatKey(targetId, isGroup);
@@ -631,6 +660,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     })();
   },
 
+  // "Delete for me" — tombstones a message on this device only, no wire
+  // message sent (contrast deleteForEveryone below).
   deleteLocal: (targetId, isGroup, messageId) => {
     const me = useAuthStore.getState().session?.user.id;
     const key = chatKey(targetId, isGroup);
@@ -687,6 +718,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
   },
 
+  // Pins/unpins a message within a thread — local-only, per device (no
+  // wire message; not synced to the other party).
   togglePin: (targetId, isGroup, messageId) => {
     const me = useAuthStore.getState().session?.user.id;
     const key = chatKey(targetId, isGroup);
@@ -716,10 +749,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 }));
 
+// Public wrapper around chatKey — used by other files (e.g.
+// data/conversations.ts) that need to look up a thread by peer/group id
+// without importing the private chatKey helper directly.
 export function getThreadKey(id: string, isGroup: boolean) {
   return chatKey(id, isGroup);
 }
 
+// Applies fn to every thread's message list, rebuilding the whole
+// threads map — used by the message:sent/message:failed handlers above,
+// which need to find one message by tempId across every thread since they
+// don't know its thread key up front.
 function mapThreads(threads: Record<string, ChatMessage[]>, fn: (key: string, list: ChatMessage[]) => ChatMessage[]) {
   const next: Record<string, ChatMessage[]> = {};
   for (const [key, list] of Object.entries(threads)) next[key] = fn(key, list);

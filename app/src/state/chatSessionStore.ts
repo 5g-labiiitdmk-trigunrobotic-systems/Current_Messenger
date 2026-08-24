@@ -6,7 +6,7 @@ import { useContactStore } from './contactStore';
 import type { ServerEvent } from '../types/relay';
 
 /**
- * Per-session chat requests, layered on top of (not instead of) the
+ * FILE PURPOSE: Per-session chat requests, layered on top of (not instead of) the
  * long-term contact-approval flow in contactStore.ts. A "session" here
  * means: both people have been continuously connected to the relay since
  * it was last accepted — see the matching doc comment in
@@ -50,6 +50,7 @@ export const useChatSessionStore = create<ChatSessionState>((set, get) => ({
   incomingFrom: {},
   wired: false,
 
+  // Subscribes to every session:* relay event. Call once at app startup.
   wire: () => {
     if (get().wired) return;
     set({ wired: true });
@@ -116,11 +117,15 @@ export const useChatSessionStore = create<ChatSessionState>((set, get) => ({
     });
   },
 
+  // Asks the relay to open a session with peerId — e.g. when opening a chat
+  // screen for a contact with no currently-connected session.
   requestSession: (peerId) => {
     set((s) => ({ sessions: { ...s.sessions, [peerId]: 'pending' } }));
     relayClient.send({ type: 'session:request', to: peerId });
   },
 
+  // Accepts or declines an incoming session:request from peerId — called
+  // both from the appAlert buttons above and directly by chat screens.
   respondToRequest: (peerId, accept) => {
     set((s) => ({ incomingFrom: { ...s.incomingFrom, [peerId]: false } }));
     if (incomingAlertForPeerId === peerId) incomingAlertForPeerId = null;
@@ -132,6 +137,8 @@ export const useChatSessionStore = create<ChatSessionState>((set, get) => ({
   },
 }));
 
+// Convenience non-hook accessor for reading a peer's session state outside
+// a React component (e.g. from chatStore.ts's send logic).
 export function getSessionState(peerId: string): SessionState {
   return useChatSessionStore.getState().sessions[peerId] ?? 'none';
 }
