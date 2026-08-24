@@ -1,3 +1,8 @@
+// FILE PURPOSE: TypeScript row shapes for every Supabase Postgres table
+// this app reads/writes (users, contact_requests, blocked_users,
+// device_keys) — used instead of supabase-js's own generic client typing
+// (see supabase.ts's comment on why).
+//
 // Hand-written types mirroring supabase/migrations/0001_init.sql.
 // Regenerate with `supabase gen types typescript` once the project is linked, if preferred.
 

@@ -1,4 +1,4 @@
-// Wire protocol for the relay client. Mirrors server/src/protocol.ts — keep both in sync.
+// FILE PURPOSE: Wire protocol for the relay client. Mirrors server/src/protocol.ts — keep both in sync.
 
 export type MessageKind =
   | 'text'
@@ -26,6 +26,7 @@ export interface EncryptedPayload {
   ciphertext: string;
 }
 
+// Every message shape this client can SEND to the relay.
 export type ClientEvent =
   | { type: 'auth'; token: string }
   | {
@@ -63,6 +64,7 @@ export type ClientEvent =
   | { type: 'ping' }
   | { type: 'pong' }; // reply to a server-initiated heartbeat ping — see relayClient.ts
 
+// Every message shape this client can RECEIVE from the relay.
 export type ServerEvent =
   | { type: 'auth:ok'; userId: string }
   | { type: 'auth:error'; message: string }
