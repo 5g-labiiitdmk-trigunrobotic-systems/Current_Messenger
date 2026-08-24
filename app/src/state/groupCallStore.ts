@@ -9,7 +9,7 @@ import { useCallStore } from './callStore';
 import { startCallAudioSession, stopCallAudioSession, playIncomingRingtone, stopIncomingRingtone, playOutgoingRingback, stopOutgoingRingback } from '../lib/callAudio';
 
 /**
- * Group calling — mesh topology, hard-capped at 4 participants. See
+ * FILE PURPOSE: Group calling — mesh topology, hard-capped at 4 participants. See
  * docs/GROUP_CALLING.md for the full architecture writeup (why mesh not
  * SFU, why the cap, what the relay already supports). This store is a
  * deliberately PARALLEL, INDEPENDENT path from callStore.ts (1:1 calling)
@@ -134,16 +134,23 @@ let selfJoined = false;
 let localMediaPromise: Promise<void> | null = null;
 let iceServers: IceServerConfig[] = [{ urls: 'stun:stun.l.google.com:19302' }];
 
+// Sends one group-call signal to a single peer, over the same call:signal
+// wire message 1:1 calls use, distinguished by `groupId` being set.
 function sendSignal(to: string, groupId: string, signal: GroupCallSignal) {
   relayClient.send({ type: 'call:signal', to, groupId, signal: signal as unknown as Record<string, unknown> });
 }
 
+// Sends the same signal to every roster member except self — used for
+// accept/decline, which (per the mesh bootstrap protocol above) must reach
+// every other invitee, not just whoever originally rang this device.
 function broadcastSignal(targets: string[], self: string, groupId: string, signal: GroupCallSignal) {
   for (const id of targets) {
     if (id !== self) sendSignal(id, groupId, signal);
   }
 }
 
+// Clears all three per-peer timers (ring, connecting, ICE-disconnect) for
+// one peer — called whenever that peer reaches a terminal state.
 function clearPeerTimers(peerId: string) {
   const rt = ringTimeoutTimers.get(peerId);
   if (rt) clearTimeout(rt);
@@ -156,6 +163,9 @@ function clearPeerTimers(peerId: string) {
   iceDisconnectTimers.delete(peerId);
 }
 
+// Fully removes one peer's connection and all associated per-peer state —
+// does not touch the overall call phase (see markPeerFailed/hangup
+// handling for that).
 function closePeer(peerId: string) {
   clearPeerTimers(peerId);
   const pc = pcs.get(peerId);
@@ -169,6 +179,9 @@ function closePeer(peerId: string) {
   readyPeers.delete(peerId);
 }
 
+// Closes every peer connection and resets all module-scope call state —
+// the group-call equivalent of callStore.ts's teardownConnection, called
+// by endGroupCall on every ending path.
 function teardownAll() {
   if (endedResetTimer) {
     clearTimeout(endedResetTimer);
@@ -227,6 +240,9 @@ async function tryConnectReadyPeers(get: () => GroupCallState, set: SetFn) {
   }
 }
 
+// Creates and wires up one mesh peer's RTCPeerConnection — local tracks,
+// ICE candidate/track/connection-state event handlers. Mirrors
+// callStore.ts's single-peer setup, duplicated per remote participant here.
 function createPeerConnection(peerId: string, get: () => GroupCallState, set: SetFn) {
   const pc = new RTCPeerConnection({ iceServers });
   const localStream = get().localStream;
@@ -295,6 +311,9 @@ function createPeerConnection(peerId: string, get: () => GroupCallState, set: Se
   return pc;
 }
 
+// Per-peer version of callStore.ts's CONNECTING_TIMEOUT_MS backstop —
+// drops just this one peer (not the whole call) if its connection never
+// finishes.
 function startPeerConnectingTimeout(peerId: string, get: () => GroupCallState, set: SetFn) {
   const existing = connectingTimeoutTimers.get(peerId);
   if (existing) clearTimeout(existing);
@@ -355,6 +374,9 @@ export const useGroupCallStore = create<GroupCallState>((set, get) => ({
   connectedAt: null,
   wired: false,
 
+  // Subscribes to group-call:signal relay events (the groupId-present
+  // subset callStore.ts's own listener explicitly ignores). Call once at
+  // app startup.
   wire: () => {
     if (get().wired) return;
     set({ wired: true });
@@ -489,6 +511,9 @@ export const useGroupCallStore = create<GroupCallState>((set, get) => ({
     });
   },
 
+  // Initiates a group call: picks up to GROUP_CALL_CAP-1 other members,
+  // rings each individually with the full roster, and marks self as
+  // already-joined.
   startGroupCall: (groupId, kind) => {
     if (get().phase !== 'idle' || useCallStore.getState().phase !== 'idle') return;
     const self = useAuthStore.getState().session?.user.id;
@@ -525,6 +550,9 @@ export const useGroupCallStore = create<GroupCallState>((set, get) => ({
     }
   },
 
+  // Joins an incoming group call: broadcasts accept to the whole roster
+  // (see broadcastSignal above) and starts connecting to any peer already
+  // known to be ready.
   accept: async () => {
     const s = get();
     if (s.phase !== 'ringing-in' || !s.incoming) return;
@@ -545,6 +573,8 @@ export const useGroupCallStore = create<GroupCallState>((set, get) => ({
     }
   },
 
+  // Declines an incoming group call without ever joining — notifies the
+  // full roster and clears local ringing state.
   decline: () => {
     const s = get();
     if (!s.incoming) return;
@@ -582,6 +612,9 @@ export const useGroupCallStore = create<GroupCallState>((set, get) => ({
   },
 }));
 
+// Per-peer version of callStore.ts's flushPendingCandidates — applies any
+// ICE candidates that arrived for this peer before its remote description
+// was set.
 async function flushPendingCandidates(peerId: string) {
   const pc = pcs.get(peerId);
   if (!pc) return;

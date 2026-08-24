@@ -5,6 +5,11 @@ import { useAuthStore } from './authStore';
 import { relayClient } from '../lib/relayClient';
 import type { ServerEvent } from '../types/relay';
 
+// FILE PURPOSE: Long-term contact relationships — approved contacts,
+// incoming/outgoing requests, and blocking/reporting — backed by
+// Supabase's contact_requests/blocked_users tables. Contrast
+// chatSessionStore.ts's per-connection session layer, which sits on top
+// of (not instead of) this.
 export interface ContactRequestWithUser extends ContactRequestRow {
   otherUser: UserRow;
 }
@@ -52,6 +57,9 @@ export const useContactStore = create<ContactState>((set, get) => ({
   loading: false,
   wired: false,
 
+  // Fetches contacts once a session exists, and subscribes to both the
+  // (effectively dead — see comment below) Supabase realtime channel and
+  // the relay's contact:refresh event to stay live-updated.
   wire: () => {
     if (get().wired) return;
     set({ wired: true });
@@ -94,6 +102,10 @@ export const useContactStore = create<ContactState>((set, get) => ({
     });
   },
 
+  // Re-fetches every contact_requests row involving this user plus their
+  // blocked-users list, then splits them into approved/incoming/outgoing,
+  // filtering out anyone blocked. Sequence-guarded (see refreshSeq above)
+  // against out-of-order concurrent calls.
   refresh: async () => {
     const me = useAuthStore.getState().session?.user.id;
     if (!me) return;
@@ -151,6 +163,8 @@ export const useContactStore = create<ContactState>((set, get) => ({
     });
   },
 
+  // Case-insensitive substring search over usernames, for the "add
+  // contact" flow — excludes the searching user's own row.
   searchByUsername: async (query) => {
     const me = useAuthStore.getState().session?.user.id;
     if (!query.trim()) return [];
@@ -269,6 +283,8 @@ export const useContactStore = create<ContactState>((set, get) => ({
     set((s) => ({ blocked: [...s.blocked, userId], approved: s.approved.filter((c) => c.id !== userId) }));
   },
 
+  // Removes the block — does not restore any prior contact relationship;
+  // a fresh contact request is still required.
   unblock: async (userId) => {
     const me = useAuthStore.getState().session?.user.id;
     if (!me) return;
