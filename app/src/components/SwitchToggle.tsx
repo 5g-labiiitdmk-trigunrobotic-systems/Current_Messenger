@@ -4,10 +4,18 @@ import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-na
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../theme/useTheme';
 
+/**
+ * FILE PURPOSE: A custom animated on/off switch (used in place of RN's
+ * platform Switch throughout Settings/Privacy) — a gradient-filled
+ * track when on, a plain outlined track when off, with the white knob
+ * sliding smoothly between the two positions.
+ */
 export function SwitchToggle({ value, onChange }: { value: boolean; onChange: () => void }) {
   const { tokens, a1, a2 } = useTheme();
   const progress = useSharedValue(value ? 1 : 0);
 
+  // Animates the knob's position whenever `value` changes (including
+  // from external state changes, not just this component's own taps).
   useEffect(() => {
     progress.value = withTiming(value ? 1 : 0, { duration: 220 });
   }, [value]);

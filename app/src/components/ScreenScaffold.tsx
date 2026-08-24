@@ -28,6 +28,13 @@ interface ScreenScaffoldProps {
 // overlapping text, not a clean hide.
 const EXTRA_EDGE_BUFFER = 28;
 
+/**
+ * FILE PURPOSE: The shared full-screen wrapper used by nearly every
+ * screen in the app — ambient background (BokehBackground), app-wide
+ * keyboard avoidance (see the long comment below), edge-to-edge-aware
+ * top/bottom padding, and an optional ScrollView vs. plain View
+ * container depending on whether the screen's content scrolls.
+ */
 export function ScreenScaffold({ children, scroll = true, padded = true, tabBar = false, style }: ScreenScaffoldProps) {
   const insets = useSafeAreaInsets();
   const Container = scroll ? ScrollView : View;

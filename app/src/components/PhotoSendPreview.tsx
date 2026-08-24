@@ -12,7 +12,7 @@ interface PhotoSendPreviewProps {
 }
 
 /**
- * Confirmation step inserted between expo-image-picker's native crop
+ * FILE PURPOSE / component doc: Confirmation step inserted between expo-image-picker's native crop
  * screen (allowsEditing: true — its own UI, confirmed not customizable;
  * see the separate crop-button-text investigation) and sendRich(). Not a
  * new interaction pattern for this app — mirrors MessageBubble.tsx's
