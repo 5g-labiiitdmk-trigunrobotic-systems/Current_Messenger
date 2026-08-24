@@ -1,3 +1,5 @@
+// FILE PURPOSE: Data-only file — exports LEGAL_TEXT, the app's entire
+// Terms of Service & Privacy Policy as a single markdown-like string.
 // The full Terms of Service & Privacy Policy text, embedded verbatim as
 // provided (see app/legal.tsx for the renderer that turns this lightweight
 // markdown into styled screens). This is the finalized, lawyer-reviewed

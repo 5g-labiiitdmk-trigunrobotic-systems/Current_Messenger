@@ -8,6 +8,13 @@ import { isPresenceVisible } from '../lib/presencePolicy';
 import type { UserRow } from '../types/database';
 import type { GroupInfo } from '../state/groupStore';
 
+// FILE PURPOSE: Derives the "Chats" tab's list rows (and shared message-
+// preview text) from several separate stores — see
+// useConversationRows's own doc comment below.
+//
+// One row in the chat list — either a 1:1 contact or a group, unified
+// into a single shape so the Chats screen doesn't need to branch on
+// isGroup for basic rendering.
 export interface ConversationRow {
   id: string;
   isGroup: boolean;
@@ -78,6 +85,9 @@ export function useConversationRows(): ConversationRow[] {
       });
     }
 
+    // Newest-last-message first; rows with no messages yet (empty `time`)
+    // naturally sort to the bottom since '' compares less than any real
+    // time string.
     return rows.sort((a, b) => (b.time > a.time ? 1 : -1));
   }, [approved, groups, threads, me, presence]);
 }
@@ -94,6 +104,8 @@ export function previewFor(m: { kind: string; text?: string; meta?: Record<strin
   return m.text ?? '…';
 }
 
+// Formats a timestamp as a short local time string for the chat list's
+// "last message at" column.
 function timeLabel(iso: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';

@@ -1,3 +1,8 @@
+// FILE PURPOSE: The static data behind the "Lab" screens (lab/index.tsx,
+// lab/[key].tsx) — see LAB_FEATURES's own doc comment below.
+//
+// One entry in the Lab list: `key` is the route param used by
+// lab/[key].tsx to look this entry up, `icon` an inline SVG path string.
 export interface LabFeature {
   key: string;
   label: string;
