@@ -5,6 +5,11 @@ import { router } from 'expo-router';
 import { supabase } from './supabase';
 import { useCallStore } from '../state/callStore';
 
+// FILE PURPOSE: Ordinary (non-call) push notification setup — permission
+// request, Expo push token registration/rotation, and tap-to-route
+// handling for call notifications. See callNotifications.ts for the
+// separate, richer full-screen incoming-call notification path, and
+// server/src/pushPing.ts for what actually sends these.
 Notifications.setNotificationHandler({
   // Message pings stay silent-banner-only (existing behavior) — but a call
   // notification should actually ring, same as a phone call or WhatsApp
@@ -30,6 +35,8 @@ const projectId = Constants.expoConfig?.extra?.eas?.projectId as string | undefi
 // would accumulate a new duplicate subscription every single time.
 let tokenListenerRegistered = false;
 
+// Obtains this device's Expo push token and saves it on the user's profile
+// row so the relay knows where to send offline-ping notifications.
 async function fetchAndStoreToken(userId: string): Promise<void> {
   // Explicit projectId rather than relying on auto-detection from
   // Constants — recommended by Expo's own docs, and removes one point of
@@ -121,6 +128,8 @@ export async function registerForPushNotifications(userId: string) {
   }
 }
 
+// Shared by both the cold-start and warm-tap paths in initNotificationRouting
+// below — routes to the incoming-call screen if this was a call notification.
 function handleCallNotificationTap(data: Record<string, unknown> | undefined) {
   if (data?.kind !== 'call') return;
   // Only a fast-path: if the app was already warm and already knows about

@@ -6,9 +6,11 @@ const RECONNECT_BASE_MS = 1000;
 const RECONNECT_MAX_MS = 15000;
 
 /**
- * Thin WebSocket client for the relay server. Reconnects with backoff and
- * re-authenticates automatically. Nothing here ever touches disk — messages
- * exist only as in-flight JS objects on their way to/from the socket.
+ * FILE PURPOSE / class doc: Thin WebSocket client for the relay server.
+ * Reconnects with backoff and re-authenticates automatically. Nothing here
+ * ever touches disk — messages exist only as in-flight JS objects on their
+ * way to/from the socket. Consumed by chatStore.ts/callStore.ts/etc. via
+ * the single `relayClient` instance exported below.
  */
 class RelayClient {
   private socket: WebSocket | null = null;
@@ -34,12 +36,16 @@ class RelayClient {
     return () => this.statusHandlers.delete(handler);
   }
 
+  // Public entry point — call once with a fresh auth token to (re)start
+  // the connection lifecycle.
   connect(token: string) {
     this.manuallyClosed = false;
     this.token = token;
     this.openSocket();
   }
 
+  // Opens one WebSocket attempt and wires its lifecycle handlers,
+  // including the reconnect-with-backoff scheduling on close.
   private openSocket() {
     const url = process.env.EXPO_PUBLIC_RELAY_WS_URL;
     if (!url) {
@@ -88,6 +94,8 @@ class RelayClient {
     };
   }
 
+  // Intentional close (e.g. sign-out) — suppresses the auto-reconnect that
+  // would otherwise fire from onclose.
   disconnect() {
     this.manuallyClosed = true;
     this.token = null;
@@ -97,16 +105,22 @@ class RelayClient {
     this.setStatus('idle');
   }
 
+  // Public send — currently just forwards to rawSend, kept as its own
+  // method so call sites depend on a stable public API distinct from the
+  // internal auth/pong sends in openSocket above.
   send(event: ClientEvent) {
     this.rawSend(event);
   }
 
+  // Silently drops the event if the socket isn't open — callers don't need
+  // to track connection state themselves before sending.
   private rawSend(event: ClientEvent) {
     if (this.socket?.readyState === WebSocket.OPEN) {
       this.socket.send(JSON.stringify(event));
     }
   }
 
+  // Subscribes to every incoming server event; returns an unsubscribe fn.
   on(handler: Handler) {
     this.handlers.add(handler);
     return () => this.handlers.delete(handler);
