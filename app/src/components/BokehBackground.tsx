@@ -8,6 +8,10 @@ import { wallpapers, type Pool } from '../theme/wallpapers';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
+// One softly-glowing "bokeh" circle that drifts back and forth
+// diagonally, forever, on its own independent timer — `duration` and
+// `reverse` let each instance (see render below) move at a different
+// speed/direction so the whole group doesn't look synchronized.
 function DriftOrb({ baseX, baseY, size, opacity, color, duration, reverse }: { baseX: number; baseY: number; size: number; opacity: number; color: string; duration: number; reverse?: boolean }) {
   const t = useSharedValue(0);
   useEffect(() => {
@@ -28,6 +32,15 @@ function DriftOrb({ baseX, baseY, size, opacity, color, duration, reverse }: { b
   return <AnimatedCircle animatedProps={animatedProps} r={size} fill={color} opacity={opacity} />;
 }
 
+/**
+ * FILE PURPOSE: The app's ambient animated background — a gradient wash
+ * plus soft radial "pools" of color and a handful of drifting bokeh
+ * orbs, all derived from the currently-selected wallpaper
+ * (theme/wallpapers.ts) and light/dark mode. Mounted behind content on
+ * nearly every screen in the app. Renders a flat solid color instead
+ * when the selected wallpaper opts out of all the gradient/orb detail
+ * (def.flat) — see the comment below.
+ */
 export function BokehBackground({ style }: { style?: any }) {
   const { mode } = useTheme();
   const wallpaperKey = useThemeStore((s) => s.wallpaperKey);

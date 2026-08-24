@@ -14,6 +14,15 @@ interface PrimaryButtonProps {
   height?: number;
 }
 
+// FILE PURPOSE: A handful of shared button/icon-button components used
+// across the app (auth screens, chat composers, headers, etc.) —
+// PrimaryButton (filled gradient CTA), GlassButton (frosted secondary
+// button), and IconCircle (a circular icon button in several visual
+// variants).
+//
+// The app's primary call-to-action button — a gradient-filled pill with
+// a press-scale animation, a loading spinner in place of its label when
+// `loading`, and a dimmed disabled state.
 export function PrimaryButton({ title, onPress, style, disabled, loading, height = 56 }: PrimaryButtonProps) {
   const { a1, a2 } = useTheme();
   return (
@@ -41,6 +50,8 @@ interface GlassButtonProps {
   icon?: React.ReactNode;
 }
 
+// A frosted-glass secondary button — same press-scale animation as
+// PrimaryButton, no gradient fill, optional leading icon.
 export function GlassButton({ title, onPress, style, height = 56, icon }: GlassButtonProps) {
   const { tokens } = useTheme();
   return (
@@ -55,6 +66,10 @@ export function GlassButton({ title, onPress, style, height = 56, icon }: GlassB
   );
 }
 
+// Lays out GlassButton's icon + label in a centered row. Uses a
+// Pressable purely as a layout container (pointerEvents="none" makes it
+// non-interactive) rather than a plain View, only because it already
+// supports the flex row/center styling needed here with no extra import.
 function SkinnedRow({ children, height }: { children: React.ReactNode; height: number }) {
   return (
     <Pressable style={{ height, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }} pointerEvents="none">
@@ -71,6 +86,10 @@ interface IconCircleProps {
   style?: StyleProp<ViewStyle>;
 }
 
+// A circular icon button in one of four visual variants: 'accent' (a
+// gradient-filled circle), 'transparent' (no background at all, just
+// the icon), or 'bg'/'bg2' (frosted-glass circle, the default) — used
+// throughout headers, composers, and toolbars app-wide.
 export function IconCircle({ onPress, size = 42, children, variant = 'bg', style }: IconCircleProps) {
   const { a1, a2 } = useTheme();
   if (variant === 'accent') {
@@ -105,6 +124,7 @@ export function IconCircle({ onPress, size = 42, children, variant = 'bg', style
   );
 }
 
+// Static styling shared across these components.
 const styles = StyleSheet.create({
   primary: {
     borderRadius: 20,

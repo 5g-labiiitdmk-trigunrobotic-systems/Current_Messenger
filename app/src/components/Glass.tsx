@@ -11,7 +11,8 @@ interface GlassProps {
 }
 
 /**
- * Solid elevation-tone panel. Depth comes from a flat tone difference
+ * FILE PURPOSE / component doc: This app's single most-used building
+ * block — a solid elevation-tone panel. Depth comes from a flat tone difference
  * between elevation levels (Material 3 dark-theme convention) plus a thin
  * hairline border — no blur, no inset highlight/shadow gradients, no
  * outer glow. This replaced a BlurView-based "Liquid Glass" treatment

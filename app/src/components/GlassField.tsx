@@ -10,6 +10,12 @@ interface GlassFieldProps extends TextInputProps {
   rightIcon?: React.ReactNode;
 }
 
+/**
+ * FILE PURPOSE: The app's shared labeled text field — a Glass-panel
+ * wrapper around a plain TextInput with a small uppercase label, an
+ * optional trailing icon slot, and automatic show/hide toggling for any
+ * `secureTextEntry` (password) field.
+ */
 export function GlassField({ label, rightIcon, style, secureTextEntry, ...rest }: GlassFieldProps) {
   const { tokens } = useTheme();
   // Applies to every password field in the app for free — any field passed
