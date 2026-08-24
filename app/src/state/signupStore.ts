@@ -1,6 +1,10 @@
 import { create } from 'zustand';
 
-/** Transient state for the multi-step signup wizard. Never persisted. */
+/**
+ * FILE PURPOSE: Transient state for the multi-step signup wizard. Never
+ * persisted — a cold-start resume of email verification loses this,
+ * which is why account.ts/usernameGen.ts exist as a fallback path.
+ */
 interface SignupState {
   username: string;
   email: string;

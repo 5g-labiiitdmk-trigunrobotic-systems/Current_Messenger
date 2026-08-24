@@ -2,7 +2,12 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-/** Device-local preferences only — not message content, safe to persist locally. */
+/**
+ * FILE PURPOSE: Simple boolean app-preference toggles, persisted to
+ * AsyncStorage via zustand's persist middleware.
+ *
+ * Device-local preferences only — not message content, safe to persist locally.
+ */
 interface SettingsState {
   biometricLock: boolean;
   pushNotifications: boolean;

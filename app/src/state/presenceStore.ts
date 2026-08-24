@@ -15,6 +15,10 @@ interface PresenceState {
 }
 
 /**
+ * FILE PURPOSE: Live online/offline presence for every user this relay
+ * connection has seen — see presencePolicy.ts for the client-side
+ * visibility filtering this store's raw data must be run through.
+ *
  * NOTE on the privacy toggle (users.status_visibility): the relay broadcasts
  * presence to every connected socket (it holds no per-user visibility rules
  * in memory, by design, to avoid extra persisted state). Screens that render
@@ -26,6 +30,8 @@ export const usePresenceStore = create<PresenceState>((set, get) => ({
   byUser: {},
   wired: false,
 
+  // Subscribes to presence/presence:snapshot relay events. Call once at
+  // app startup.
   wire: () => {
     if (get().wired) return;
     set({ wired: true });
@@ -49,5 +55,7 @@ export const usePresenceStore = create<PresenceState>((set, get) => ({
     });
   },
 
+  // Broadcasts this device's own presence to the relay (e.g. 'away' when
+  // the app backgrounds).
   setMyStatus: (status) => relayClient.send({ type: 'presence:set', status }),
 }));

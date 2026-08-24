@@ -22,7 +22,7 @@ export interface IncomingGroupInvite {
 }
 
 /**
- * Group identity/membership is intentionally NOT in Supabase (only users,
+ * FILE PURPOSE: Group identity/membership is intentionally NOT in Supabase (only users,
  * contact_requests, blocked_users, device_keys are persisted there). Groups
  * live only in the relay server's process memory, and this store mirrors
  * that in the client's memory for the current app session — a relay restart
@@ -59,6 +59,7 @@ export const useGroupStore = create<GroupState>((set, get) => ({
   incomingInvites: {},
   wired: false,
 
+  // Subscribes to every group:* relay event. Call once at app startup.
   wire: () => {
     if (get().wired) return;
     set({ wired: true });
@@ -169,6 +170,9 @@ export const useGroupStore = create<GroupState>((set, get) => ({
     });
   },
 
+  // Starts a new group: generates its id client-side and asks the relay to
+  // create it, inviting the given members. Returns the new groupId
+  // immediately (optimistic — the group itself arrives via group:created).
   createGroup: (name, memberIds, isBroadcast) => {
     const groupId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     // `memberIds` here is who to INVITE — the relay only adds the creator
@@ -178,8 +182,11 @@ export const useGroupStore = create<GroupState>((set, get) => ({
     return groupId;
   },
 
+  // Invites one more user to an existing group.
   invite: (groupId, userId) => relayClient.send({ type: 'group:invite', groupId, to: userId }),
 
+  // Accepts or declines a pending incoming group invite — currently only
+  // called from the appAlert buttons above.
   respondToInvite: (groupId, accept) => {
     set((s) => {
       if (!s.incomingInvites[groupId]) return s;
@@ -191,5 +198,8 @@ export const useGroupStore = create<GroupState>((set, get) => ({
     relayClient.send({ type: 'group:invite_respond', groupId, accept });
   },
 
+  // Leaves a group — no optimistic local update; relies on the relay's
+  // own follow-up events (group:member_left for other members, a future
+  // group:snapshot for this device) to reflect it.
   leave: (groupId) => relayClient.send({ type: 'group:leave', groupId }),
 }));

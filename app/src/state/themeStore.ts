@@ -5,6 +5,10 @@ import { Appearance } from 'react-native';
 import type { Mode } from '../theme/tokens';
 import type { WallpaperKey } from '../theme/wallpapers';
 
+// FILE PURPOSE: Persisted user theme preferences (light/dark mode, accent
+// color, chat wallpaper) — defaults to the OS color scheme on first launch.
+// `hydrated` lets screens defer rendering theme-dependent UI until the
+// persisted value has actually loaded (see onRehydrateStorage below).
 interface ThemeState {
   mode: Mode;
   accentKey: 'purple' | 'blue' | 'pink' | 'green';
