@@ -1,5 +1,8 @@
 import { create } from 'zustand';
 
+// FILE PURPOSE: A zustand-backed, themed replacement for React Native's
+// native Alert.alert — see appAlert() below, the function every call site
+// in the app actually uses.
 export interface AppAlertButton {
   text: string;
   onPress?: () => void;

@@ -8,6 +8,10 @@ import { relayClient } from '../lib/relayClient';
 import { registerForPushNotifications } from '../lib/push';
 import { normalizeUsername, usernameFormatError, isUsernameTaken } from '../lib/username';
 
+// FILE PURPOSE: The zustand store owning the Supabase auth session +
+// profile row, and the glue that wires a signed-in session into the rest
+// of the app (device E2E key publishing, relay socket connect/disconnect,
+// push registration). See each method's own doc comment below for details.
 interface AuthState {
   session: Session | null;
   profile: UserRow | null;
@@ -47,6 +51,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   profileError: null,
   needsProfileSetup: false,
 
+  // Called once at app startup: restores any existing Supabase session,
+  // then subscribes to future auth-state changes (sign-in, sign-out, token
+  // refresh) to keep profile, the relay connection, and push registration
+  // all in sync with the current session.
   initialize: async () => {
     const { data } = await supabase.auth.getSession();
     set({ session: data.session });
@@ -168,6 +176,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     return null;
   },
 
+  // Ends the Supabase session and disconnects the relay socket. Local
+  // on-device data (chat history in localDb.ts, secure-store keys) is
+  // deliberately left untouched — signing out doesn't erase history.
   signOut: async () => {
     relayClient.disconnect();
     await supabase.auth.signOut();

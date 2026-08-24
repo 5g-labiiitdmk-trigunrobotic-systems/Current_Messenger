@@ -18,6 +18,11 @@ import {
   type AudioRoute,
 } from '../lib/callAudio';
 
+// FILE PURPOSE: 1:1 voice/video calling — WebRTC connection setup, relay-
+// based offer/answer/ICE signaling, ringtone/audio-route control, and the
+// on-device call log. See groupCallStore.ts for the separate group-calling
+// path, and the module doc comment on useCallStore below for the overall
+// signaling design.
 export interface CallLogEntry {
   id: string;
   peerId: string;
@@ -112,6 +117,8 @@ function clearTimers() {
   endedResetTimer = null;
 }
 
+// Arms the CONNECTING_TIMEOUT_MS backstop described above; harmless no-op
+// if the call has already left 'connecting' by the time it fires.
 function startConnectingTimeout(get: () => CallState, set: (partial: Partial<CallState>) => void) {
   if (connectingTimeoutTimer) clearTimeout(connectingTimeoutTimer);
   connectingTimeoutTimer = setTimeout(() => {
@@ -124,10 +131,14 @@ function startConnectingTimeout(get: () => CallState, set: (partial: Partial<Cal
   }, CONNECTING_TIMEOUT_MS);
 }
 
+// Wraps a typed CallSignal into the generic relay call:signal message.
 function sendSignal(to: string, signal: CallSignal) {
   relayClient.send({ type: 'call:signal', to, signal: signal as unknown as Record<string, unknown> });
 }
 
+// Tears down every piece of a call's local resources — timers, ringtone/
+// ringback, audio session, the RTCPeerConnection itself, and pending ICE
+// state — called by every call-ending path via endCall below.
 function teardownConnection() {
   clearTimers();
   stopIncomingRingtone(); // no-op if it wasn't playing — always safe to call on any call-ending path
@@ -463,6 +474,11 @@ export const useCallStore = create<CallState>((set, get) => ({
   },
 }));
 
+// Acquires the local mic/camera stream, starts the in-call audio session,
+// and creates + wires up the RTCPeerConnection (ICE candidate exchange,
+// remote track handling, connection-state-driven phase transitions).
+// Called from both the caller's 'accept' handler and the callee's own
+// accept() action, since either side may be the one that goes first.
 async function startLocalMedia(get: () => CallState, set: (partial: Partial<CallState>) => void) {
   const kind = get().kind;
   const stream = await mediaDevices.getUserMedia({ audio: true, video: kind === 'video' });
@@ -555,6 +571,9 @@ async function startLocalMedia(get: () => CallState, set: (partial: Partial<Call
   });
 }
 
+// Applies any remote ICE candidates that arrived before setRemoteDescription
+// resolved (queued in pendingRemoteCandidates above) — WebRTC requires a
+// remote description to exist before addIceCandidate can succeed.
 async function flushPendingCandidates() {
   if (!pc) return;
   const queued = pendingRemoteCandidates;
@@ -568,6 +587,10 @@ async function flushPendingCandidates() {
   }
 }
 
+// The single exit point for every call-ending path (hangup, decline, busy,
+// timeout, or a WebRTC/network failure): tears down the connection,
+// finalizes the call-log entry (duration, missed-call relabeling), and
+// moves phase to 'ended' with a timed fallback back to 'idle'.
 function endCall(get: () => CallState, set: (partial: Partial<CallState>) => void, reason: CallEndReason) {
   teardownConnection();
   const s = get();
