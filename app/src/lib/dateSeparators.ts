@@ -1,13 +1,17 @@
-// Shared by chat/[id].tsx and group-chat/[id].tsx's inverted message
-// lists — both need the exact same "which calendar day is this message
-// on, and what should the separator between two different days say"
+// FILE PURPOSE: Shared by chat/[id].tsx and group-chat/[id].tsx's inverted
+// message lists — both need the exact same "which calendar day is this
+// message on, and what should the separator between two different days say"
 // logic, so it lives here once instead of being duplicated per screen.
 
+// Groups a timestamp into a same-calendar-day bucket key (local time).
 export function dayKey(iso: string): string {
   const d = new Date(iso);
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 }
 
+// Human-readable label for a date separator row: "Today"/"Yesterday" for
+// the two most recent days, otherwise a locale-formatted date (year
+// omitted when it's the current year).
 export function dateSeparatorLabel(iso: string): string {
   const d = new Date(iso);
   const now = new Date();

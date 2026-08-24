@@ -7,6 +7,10 @@ import type { CallLogEntry } from '../state/callStore';
 import { appAlert } from '../state/alertStore';
 
 /**
+ * FILE PURPOSE: SQLCipher-encrypted, on-device-only, per-account chat
+ * history and call log — the exported functions at the bottom of this file
+ * are chatStore.ts/callStore.ts's persistence layer.
+ *
  * On-device-only chat history. This is a deliberate architecture change:
  * messages now survive closing/reopening the app, stored locally per
  * account on this specific device. The relay (server/src/index.ts) and
@@ -72,6 +76,8 @@ async function withDbErrorAlert<T>(context: string, fn: () => Promise<T>): Promi
   }
 }
 
+// Loads (or generates on first run) this user's 256-bit SQLCipher key,
+// stored as hex in the platform secure enclave.
 async function getDbKeyHex(userId: string): Promise<string> {
   return withDbErrorAlert('reading/creating encryption key', async () => {
     const storeId = `current_localdb_key_${userId}`;
@@ -208,6 +214,9 @@ async function openAndInitDb(userId: string, dbName: string, isRecoveryAttempt =
 // starting their own.
 const pendingOpens = new Map<string, Promise<SQLite.SQLiteDatabase>>();
 
+// Returns this user's already-open database, or the in-flight open promise
+// (see pendingOpens above), or starts a new open — the single entry point
+// every exported function below goes through.
 async function getDb(userId: string): Promise<SQLite.SQLiteDatabase> {
   const cached = dbCache.get(userId);
   if (cached) return cached;
@@ -227,6 +236,8 @@ async function getDb(userId: string): Promise<SQLite.SQLiteDatabase> {
   return openPromise;
 }
 
+// Maps one `messages` table row back to the in-memory ChatMessage shape
+// (JSON-decoding the `meta`/`reactions` text columns, coercing 0/1 to bool).
 function rowToMessage(row: any): ChatMessage {
   return {
     id: row.id,

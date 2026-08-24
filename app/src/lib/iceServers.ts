@@ -1,9 +1,13 @@
+// FILE PURPOSE: single-export file — fetchIceServers() below, see its own
+// doc comment for what it does and why TURN credentials live server-side.
 export interface IceServerConfig {
   urls: string | string[];
   username?: string;
   credential?: string;
 }
 
+// Public STUN-only server, used when the relay has no TURN config or is
+// unreachable — no secret credentials involved, safe to hardcode.
 const FALLBACK_ICE_SERVERS: IceServerConfig[] = [{ urls: 'stun:stun.l.google.com:19302' }];
 
 /**

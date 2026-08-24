@@ -4,6 +4,10 @@ import { Platform } from 'react-native';
 import { generateKeyPair, type KeyPairB64 } from './crypto';
 import { supabase } from './supabase';
 
+// FILE PURPOSE: Per-device E2E keypair lifecycle — generate/load the
+// device's own secret key from secure storage, publish/fetch public keys
+// via Supabase's device_keys table. See crypto.ts for the actual
+// encrypt/decrypt primitives these keys feed.
 const SECRET_KEY_STORE_ID = 'current_e2e_secret_key';
 
 /**
