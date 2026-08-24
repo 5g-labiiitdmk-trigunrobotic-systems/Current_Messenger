@@ -1,4 +1,4 @@
-// Design tokens ported 1:1 from the Claude Design export (Current.dc.html).
+// FILE PURPOSE: Design tokens ported 1:1 from the Claude Design export (Current.dc.html).
 // Every color/opacity value below matches the `--` custom properties in that file.
 
 export type Mode = 'light' | 'dark';
@@ -86,6 +86,7 @@ export const radii = {
   pill: 999,
 };
 
+// 4px base unit — spacing(1) = 4, spacing(2) = 8, etc.
 export const spacing = (n: number) => n * 4;
 
 export const fontWeights = {
@@ -105,6 +106,9 @@ export const fontFamilies = {
   black: 'Inter_900Black',
 };
 
+// Maps a numeric font-weight (e.g. React Native's fontWeight prop values)
+// to the nearest available Inter font file, since RN on native doesn't
+// synthesize weights the way a browser does.
 export function fontFamily(weight: number): string {
   if (weight >= 900) return fontFamilies.black;
   if (weight >= 800) return fontFamilies.heavy;
@@ -119,6 +123,8 @@ export function avatarGradient(hue: number): [string, string] {
   return [hslToHex(hue, 72, 72), hslToHex(hue + 38, 62, 52)];
 }
 
+// Standard HSL-to-hex conversion, used by avatarGradient above to turn a
+// stored hue integer into real color stops.
 function hslToHex(h: number, s: number, l: number): string {
   s /= 100;
   l /= 100;

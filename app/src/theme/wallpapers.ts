@@ -1,3 +1,6 @@
+// FILE PURPOSE: The full catalog of selectable chat-background wallpapers
+// — gradient stops, drifting "pool"/orb decorations, and light/dark
+// variants for each — rendered by BokehBackground.tsx.
 export interface Pool {
   cx: number; // 0-1
   cy: number; // 0-1

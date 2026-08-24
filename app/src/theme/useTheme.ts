@@ -2,6 +2,9 @@ import { useMemo } from 'react';
 import { useThemeStore } from '../state/themeStore';
 import { themes, accentPalettes } from './tokens';
 
+// FILE PURPOSE / hook doc: single-export file — combines themeStore's
+// persisted mode/accent choice with the static token tables in tokens.ts
+// into the one object every themed component reads from.
 export function useTheme() {
   const mode = useThemeStore((s) => s.mode);
   const accentKey = useThemeStore((s) => s.accentKey);
