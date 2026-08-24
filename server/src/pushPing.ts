@@ -1,5 +1,9 @@
 import { supabaseAdmin } from './supabaseAdmin.js';
 
+// FILE PURPOSE: Every push notification the relay fires, all funneled
+// through Expo's push API (sendExpoPush below) — offline-message pings,
+// incoming-call pings, session-request pings, and contact-request pings.
+// Push carries only usernames/kind tags, never message content.
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 
 interface ExpoPushOptions {

@@ -1,5 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 
+// FILE PURPOSE: The relay's server-side Supabase client (service-role,
+// bypasses RLS) plus every Postgres-backed check the relay needs — auth
+// token verification, contact-approval, block checks, username lookup,
+// and the metadata-only delivery log.
 const url = process.env.SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -19,6 +23,8 @@ export const supabaseAdmin = createClient(url || 'https://placeholder.supabase.c
   auth: { autoRefreshToken: false, persistSession: false },
 });
 
+// Validates a client-supplied Supabase access token and returns the
+// authenticated userId, or null if it's invalid/expired.
 export async function verifyUserToken(token: string): Promise<string | null> {
   const { data, error } = await supabaseAdmin.auth.getUser(token);
   if (error || !data.user) return null;
@@ -31,6 +37,9 @@ export async function verifyUserToken(token: string): Promise<string | null> {
 const contactCache = new Map<string, { approved: boolean; expiresAt: number }>();
 const CACHE_TTL_MS = 30_000;
 
+// The server-side gate behind every message:send / call:signal / etc. —
+// true only if the two users have an approved contact_requests row in
+// either direction. Cached per unordered pair (see contactCache above).
 export async function areApprovedContacts(userA: string, userB: string): Promise<boolean> {
   const key = [userA, userB].sort().join(':');
   const cached = contactCache.get(key);
@@ -50,8 +59,12 @@ export async function areApprovedContacts(userA: string, userB: string): Promise
   return approved;
 }
 
+// Unlike contactCache above, this cache has no TTL — a username change
+// won't be reflected here until the relay process restarts.
 const usernameCache = new Map<string, string>();
 
+// Looks up (and caches) a user's username, e.g. for a call notification's
+// display text.
 export async function getUsername(userId: string): Promise<string | null> {
   if (usernameCache.has(userId)) return usernameCache.get(userId)!;
   const { data, error } = await supabaseAdmin.from('users').select('username').eq('id', userId).maybeSingle();
@@ -82,6 +95,8 @@ export function logTransfer(senderId: string, recipientId: string, byteSize: num
     });
 }
 
+// True if blockerId has blocked blockedId specifically (directional,
+// unlike areApprovedContacts) — checked before allowing message delivery.
 export async function isBlocked(blockerId: string, blockedId: string): Promise<boolean> {
   const { data, error } = await supabaseAdmin
     .from('blocked_users')

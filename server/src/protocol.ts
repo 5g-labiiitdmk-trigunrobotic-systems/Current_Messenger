@@ -1,4 +1,4 @@
-// Wire protocol for the relay. Mirrored in app/src/types/relay.ts — keep both in sync.
+// FILE PURPOSE: Wire protocol for the relay. Mirrored in app/src/types/relay.ts — keep both in sync.
 // Every payload field is opaque ciphertext (or plain JSON metadata like "isTyping");
 // the relay never inspects, logs, or stores message contents.
 
@@ -40,6 +40,7 @@ export interface EncryptedPayload {
   ciphertext: string;
 }
 
+// Every message shape the server can RECEIVE from a client.
 export type ClientEvent =
   | { type: 'auth'; token: string }
   | {
@@ -108,6 +109,7 @@ export type ClientEvent =
   // server wrongly believing a perfectly healthy connection was dead.
   | { type: 'pong' };
 
+// Every message shape the server can SEND to a client.
 export type ServerEvent =
   | { type: 'auth:ok'; userId: string }
   | { type: 'auth:error'; message: string }
