@@ -2,6 +2,11 @@ import 'react-native-url-polyfill/auto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 
+// FILE PURPOSE: The single shared Supabase client instance (auth + Postgres
+// access), configured for React Native's AsyncStorage-backed session
+// persistence. Every store/lib file that talks to Supabase imports
+// `supabase` from here.
+//
 // NOTE: intentionally untyped (no <Database> generic). supabase-js v2's
 // generated-types generic is picky about exact shape (Relationships,
 // Functions, __InternalSupabase versioning) and fighting it buys nothing at

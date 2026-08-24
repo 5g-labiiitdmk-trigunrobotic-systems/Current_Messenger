@@ -1,4 +1,4 @@
-// Web stub — react-native-webrtc has no web support and this app doesn't
+// FILE PURPOSE: Web stub — react-native-webrtc has no web support and this app doesn't
 // target web as a real platform (web only exists here for layout-verification
 // screenshots). Metro picks this file over webrtc.ts automatically for web
 // bundles via its platform-suffix resolution, so react-native-webrtc's
@@ -33,6 +33,9 @@ export class MediaStream {
   }
 }
 
+// Renders as a plain (empty) View rather than throwing, unlike everything
+// else in this file — call screens can still mount/lay out their video
+// tiles on web without crashing, they just show nothing in them.
 export const RTCView: React.FC<any> = (props) => React.createElement(View, props);
 
 export const mediaDevices = {

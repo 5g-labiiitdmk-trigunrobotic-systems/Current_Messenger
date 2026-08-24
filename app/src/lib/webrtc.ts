@@ -1,4 +1,4 @@
-// Native (iOS/Android) implementation — thin re-export of react-native-webrtc.
+// FILE PURPOSE: Native (iOS/Android) implementation — thin re-export of react-native-webrtc.
 // webrtc.web.ts is the counterpart Metro picks on web (react-native-webrtc has
 // no web support and cannot even be required there); keeping this split by
 // filename, rather than a Platform.OS branch inside one file, matters because

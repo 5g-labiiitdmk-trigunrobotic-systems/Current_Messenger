@@ -1,4 +1,4 @@
-// Native (iOS/Android) implementation — thin re-export of
+// FILE PURPOSE: Native (iOS/Android) implementation — thin re-export of
 // react-native-video-trim. videoTrim.web.ts is the counterpart Metro
 // picks on web (mirrors webrtc.ts/webrtc.web.ts's exact split, for the
 // exact same reason): merely IMPORTING react-native-video-trim throws at

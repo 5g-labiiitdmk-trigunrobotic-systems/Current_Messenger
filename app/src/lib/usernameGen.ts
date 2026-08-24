@@ -1,3 +1,6 @@
+// FILE PURPOSE / function doc: single-export file — generateFriendlyUsername()
+// below builds a random "adjective+noun+digits" fallback username from
+// these word lists (no real-account data involved).
 const ADJECTIVES = [
   'quiet', 'swift', 'amber', 'coral', 'lunar', 'ember', 'violet', 'cobalt',
   'maple', 'cedar', 'misty', 'solar', 'arctic', 'velvet', 'indigo', 'copper',

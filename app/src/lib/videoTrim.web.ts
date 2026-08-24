@@ -1,4 +1,4 @@
-// Web stub — see videoTrim.ts's comment for why this split exists at all
+// FILE PURPOSE: Web stub — see videoTrim.ts's comment for why this split exists at all
 // (importing react-native-video-trim crashes immediately on web, not
 // just when called). Video sending isn't a real web flow in this app —
 // web only exists here for layout-verification screenshots, same

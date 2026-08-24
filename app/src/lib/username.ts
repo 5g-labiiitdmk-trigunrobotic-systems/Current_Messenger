@@ -1,5 +1,9 @@
 import { supabase } from './supabase';
 
+// FILE PURPOSE: Username format validation + availability checking, shared
+// by signup and the post-signup username-change setting. See
+// usernameGen.ts for the separate random-suggestion generator.
+//
 // Same rule enforced by the DB check constraint on public.users.username —
 // keep in sync with supabase/migrations/0001_init.sql. Single source of
 // truth for both the signup flow and the post-signup username-change
@@ -7,6 +11,8 @@ import { supabase } from './supabase';
 // duplicated independently in three places.
 export const USERNAME_RE = /^[a-z0-9_.]{3,24}$/;
 
+// Canonical form used everywhere a username is compared/stored: trimmed,
+// lowercased.
 export function normalizeUsername(raw: string): string {
   return raw.trim().toLowerCase();
 }
