@@ -8,7 +8,7 @@ import { useGroupStore } from '../state/groupStore';
 import { fontFamilies } from '../theme/tokens';
 
 /**
- * Group-call counterpart to ActiveCallBanner.tsx — deliberately a separate
+ * FILE PURPOSE / component doc: Group-call counterpart to ActiveCallBanner.tsx — deliberately a separate
  * component (not that one extended to branch on call type) so the existing
  * 1:1 banner stays untouched. Same "tap to return" pattern, mounted
  * alongside it at the app root (see _layout.tsx).

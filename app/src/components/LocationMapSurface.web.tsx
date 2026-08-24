@@ -4,7 +4,9 @@ import { Map as MapLibreGlMap, Marker as MapLibreGlMarker, type ErrorEvent as Ma
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type { LocationMapSurfaceProps } from './LocationMapSurface.ios';
 
-// Web isn't a real target platform for this app (it only exists for
+// FILE PURPOSE: The web implementation of LocationMapSurface, using
+// maplibre-gl (a plain JS/DOM library, not react-native-maps or the
+// native MapLibre binding). Web isn't a real target platform for this app (it only exists for
 // layout-verification screenshots — see this project's own established
 // scope), but this uses the actual maplibre-gl JS library (MapLibre
 // Native's sibling project, same OpenFreeMap-recommended renderer) rather
@@ -21,6 +23,10 @@ export function LocationMapSurface({ lat, lng, width, height, interactive, onLoa
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreGlMap | null>(null);
 
+  // Mount-once effect: creates the maplibre-gl Map instance directly
+  // against the plain <div> below (maplibre-gl is a DOM library, not a
+  // React component), wires an error listener into onLoadFailed, adds
+  // the single location marker, and tears the map down on unmount.
   useEffect(() => {
     if (!containerRef.current) return;
     const map = new MapLibreGlMap({

@@ -4,6 +4,14 @@ import { Map as MapLibreMap, Camera, Marker } from '@maplibre/maplibre-react-nat
 import { LocationPinIcon } from './LocationPinIcon';
 import type { LocationMapSurfaceProps } from './LocationMapSurface.ios';
 
+// FILE PURPOSE: The Android implementation of LocationMapSurface — a
+// MapLibre-rendered map view showing one pinned location, used both as
+// a small non-interactive preview inside a location message bubble and
+// as the full-screen interactive map when that bubble is tapped open.
+// Carries substantial diagnostic scaffolding (LOG_TAG, DebugStatus) from
+// an unresolved real-device rendering investigation — see each
+// constant's own comment below for the full story.
+//
 // Real vector-tile rendering via MapLibre Native + OpenFreeMap
 // (https://openfreemap.org), replacing the raster tile-image mosaic this
 // project used before (raw OpenStreetMap tiles, then briefly MapTiler,
@@ -103,6 +111,9 @@ const LOG_TAG = '[LocationMapSurface]';
 // confirmed fixed.
 type DebugStatus = 'render-only' | 'mounted' | 'loaded' | 'failed-style' | 'failed-timeout';
 
+// Renders the map itself plus the temporary debug badge; onLoadFailed is
+// called (once) if either MapLibre reports an explicit style-load
+// failure or LOAD_TIMEOUT_MS elapses with no success signal at all.
 export function LocationMapSurface({ lat, lng, width, height, interactive, onLoadFailed }: LocationMapSurfaceProps) {
   const finishedRef = useRef(false);
   const [debugStatus, setDebugStatus] = useState<DebugStatus>('render-only');

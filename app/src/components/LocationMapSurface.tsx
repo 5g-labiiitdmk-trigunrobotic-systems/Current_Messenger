@@ -1,4 +1,6 @@
-// Metro never actually loads this file — it always finds a more specific
+// FILE PURPOSE: tsc-only stand-in for the platform-specific
+// LocationMapSurface implementations (see the other three files in this
+// same directory). Metro never actually loads this file — it always finds a more specific
 // match first (LocationMapSurface.ios.tsx / .android.tsx / .web.tsx cover
 // every platform this app targets). This bare file exists only so plain
 // `tsc` module resolution (which, unlike Metro, doesn't know about RN's
