@@ -4,7 +4,7 @@ import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withSequence, w
 import { LinearGradient } from 'expo-linear-gradient';
 
 /**
- * The Trusty/Current lock mascot: rounded body, smiley face, small arms.
+ * FILE PURPOSE / component doc: The Trusty/Current lock mascot: rounded body, smiley face, small arms.
  * Pure View/SVG-free reconstruction of the CSS shapes in Current.dc.html.
  */
 export function Mascot({ size = 128, animated = true }: { size?: number; animated?: boolean }) {
@@ -12,6 +12,9 @@ export function Mascot({ size = 128, animated = true }: { size?: number; animate
   const rotate = useSharedValue(0);
   const lift = useSharedValue(0);
 
+  // A gentle continuous "wiggle" (rotate) + "float" (vertical lift), each
+  // its own independent looping sequence — skipped entirely if
+  // `animated` is false.
   useEffect(() => {
     if (!animated) return;
     rotate.value = withRepeat(

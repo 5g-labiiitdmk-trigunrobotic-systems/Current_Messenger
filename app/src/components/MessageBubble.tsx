@@ -12,6 +12,13 @@ import type { ChatMessage } from '../state/chatStore';
 import { playAudioBase64 } from '../lib/media';
 import { appAlert } from '../state/alertStore';
 
+// FILE PURPOSE: Renders one chat message as a bubble, dispatching on
+// `message.kind` to the right content renderer (plain text w/ @mentions,
+// sticker, poll, voice note, photo, video, or location) — MessageBubble
+// itself owns the shared shell (sender name for group chats, timestamp,
+// edited/read-receipt indicators, reactions), while BubbleContent below
+// picks the per-kind body. Used by both chat/[id].tsx and
+// group-chat/[id].tsx.
 function timeLabel(iso: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
@@ -33,6 +40,10 @@ interface MessageBubbleProps {
   replyPreview?: { senderLabel: string; text: string } | null;
 }
 
+// Top-level bubble shell: handles the "deleted" placeholder state, the
+// group-chat sender-name label, long-press menu trigger, and the shared
+// footer row (edited flag, timestamp, read receipt, reactions) around
+// whatever BubbleContent renders for this message's kind.
 export function MessageBubble({ message: m, isMe, meId, senderName, onLongPress, onVote, replyPreview }: MessageBubbleProps) {
   const { tokens, a1, a2 } = useTheme();
   if (m.deleted) {
@@ -79,6 +90,10 @@ export function MessageBubble({ message: m, isMe, meId, senderName, onLongPress,
   );
 }
 
+// Renders the actual message body, dispatched on m.kind — sticker, poll
+// (with live vote tallies/percentages), voice note, video, photo,
+// location, or (the default/fallback) plain text with @mention
+// highlighting and an optional quoted-reply strip.
 function BubbleContent({ m, isMe, a1, a2, tokens, meId, onVote, replyPreview }: any) {
   if (m.kind === 'sticker' && m.meta?.emoji) {
     return (
@@ -378,9 +393,16 @@ function LocationBubble({ meta, isMe, a1, tokens }: { meta: any; isMe: boolean; 
   );
 }
 
+// Matches an @username token (2-24 chars: letters/digits/underscore/dot)
+// — SPLIT_RE (global, capturing) breaks a message into alternating
+// plain/mention chunks; TEST_RE (non-global) re-checks each chunk to
+// decide which style to apply, since .split() with a capturing group
+// includes the matched delimiters in its result array too.
 const MENTION_SPLIT_RE = /(@[a-z0-9_.]{2,24})/gi;
 const MENTION_TEST_RE = /^@[a-z0-9_.]{2,24}$/i;
 
+// Renders plain message text with any @mentions styled/colored
+// differently from the rest.
 function MentionText({ text, baseColor, mentionColor, isMe }: { text: string; baseColor: string; mentionColor: string; isMe: boolean }) {
   const parts = text.split(MENTION_SPLIT_RE);
   return (
@@ -502,6 +524,8 @@ function VideoPlayerModal({ visible, onClose, base64, mime }: { visible: boolean
   return <VideoPlayerModalInner onClose={onClose} base64={base64} mime={mime} />;
 }
 
+// A filled triangular play glyph, reused for both the video thumbnail's
+// overlay and its play-button circle.
 function PlayIcon({ size = 22 }: { size?: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="#fff">
@@ -546,6 +570,9 @@ function VideoMessageBubble({ meta }: { meta: any }) {
   );
 }
 
+// The play button + static waveform bars + duration label shown inside
+// a voice-message bubble. The "waveform" is a fixed, non-audio-derived
+// bar pattern — a visual flourish, not an actual amplitude rendering.
 function VoiceRow({ color, playBg, playFill, dur, durCol }: any) {
   const bars = [9, 17, 24, 13, 20, 8, 15, 22, 11, 18, 7, 14];
   return (
@@ -565,6 +592,10 @@ function VoiceRow({ color, playBg, playFill, dur, durCol }: any) {
   );
 }
 
+// The small status indicator next to a sent-by-me message's timestamp:
+// a hollow circle while sending, red "Failed" text on failure, or a
+// double-checkmark (colored to indicate read vs. delivered-but-unread)
+// once it's left the device.
 function ReadReceipt({ status, color }: { status: ChatMessage['status']; color: string }) {
   if (status === 'sending') return <Text style={{ fontSize: 10, color }}>○</Text>;
   if (status === 'failed') return <Text style={{ fontSize: 11, color: '#ff5a6e', fontFamily: fontFamilies.bold }}>Failed</Text>;

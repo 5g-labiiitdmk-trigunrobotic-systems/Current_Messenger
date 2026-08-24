@@ -1,7 +1,7 @@
 import React from 'react';
 import Svg, { Path } from 'react-native-svg';
 
-// Shared between LocationMapSurface.android.tsx and .web.tsx (both place
+// FILE PURPOSE: A simple teardrop map-pin SVG icon. Shared between LocationMapSurface.android.tsx and .web.tsx (both place
 // this as a custom marker on their respective MapLibre map), moved out of
 // MessageBubble.tsx where it used to live only for the now-removed raster
 // tile mosaic. Not used by the iOS variant — react-native-maps' Marker
