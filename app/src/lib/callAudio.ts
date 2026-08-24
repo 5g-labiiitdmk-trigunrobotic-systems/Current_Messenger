@@ -1,3 +1,7 @@
+// FILE PURPOSE: Native (Android) call-audio routing + ringtone/ringback
+// playback for voice/video calls. See callAudio.web.ts for the no-op web
+// stand-in (InCallManager is a native-only module).
+//
 // Native (iOS/Android) call-audio routing + ringtone, via
 // react-native-incall-manager — the companion library to react-native-webrtc
 // for exactly this (speaker/earpiece/Bluetooth routing, proximity sensor,
@@ -22,6 +26,8 @@ export interface AudioRouteState {
 
 const EMPTY_STATE: AudioRouteState = { availableRoutes: [], selectedRoute: null };
 
+// Normalizes InCallManager's raw native event/return payload (a JSON string
+// list plus a selected-device string) into AudioRouteState.
 function parseStatus(raw: any): AudioRouteState {
   let availableRoutes: AudioRoute[] = [];
   try {

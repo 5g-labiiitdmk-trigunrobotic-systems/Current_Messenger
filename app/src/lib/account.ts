@@ -1,7 +1,8 @@
 import { supabase } from './supabase';
 
 /**
- * Creates (or completes) the public.users row once email is verified. This
+ * FILE PURPOSE / function doc: single-export file — finalizeAccount()
+ * creates (or completes) the public.users row once email is verified. This
  * is the single point where an account becomes "real" — before this, the
  * auth.users row exists but the account can't be discovered, added as a
  * contact, or message anyone.

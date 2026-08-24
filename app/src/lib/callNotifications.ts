@@ -1,3 +1,9 @@
+// FILE PURPOSE: Full-screen, lock-screen-visible incoming-call
+// notifications via @notifee/react-native, driven by an expo-task-manager
+// background task that wakes on every incoming FCM push. See push.ts for
+// the ordinary (non-call) notification setup this file deliberately keeps
+// separate from.
+//
 // Full-screen incoming-call notifications — the piece expo-notifications
 // genuinely cannot do (confirmed by reading its native Android source
 // directly: no field, no hook, nothing builds a notification with
@@ -51,6 +57,8 @@ export async function setupCallNotificationChannel() {
   });
 }
 
+// Builds and shows the actual notifee full-screen call notification from
+// the parsed push payload.
 async function displayFullScreenCallNotification(data: CallPushData) {
   const title = data.callKind === 'video' ? 'Incoming video call' : 'Incoming voice call';
   const body = data.callerUsername ? `@${data.callerUsername} is calling you` : 'Someone is calling you';

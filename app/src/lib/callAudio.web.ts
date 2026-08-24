@@ -1,4 +1,4 @@
-// Web stub — react-native-incall-manager is native-only (Android/iOS
+// FILE PURPOSE: Web stub — react-native-incall-manager is native-only (Android/iOS
 // device audio routing has no web equivalent) and this app doesn't target
 // web as a real platform (web only exists here for layout-verification
 // screenshots). Metro picks this file over callAudio.ts automatically for

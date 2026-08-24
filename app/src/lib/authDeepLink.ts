@@ -1,5 +1,9 @@
 import { supabase } from './supabase';
 
+// FILE PURPOSE: Parses the `current://` deep links Supabase's auth emails
+// (signup confirmation, password reset) open the app with, and turns them
+// into a live Supabase session. See app/_layout.tsx for where the parsed
+// result is routed to a screen.
 /**
  * Supabase's default "Confirm signup" email is a clickable link (not a
  * code) unless you configure custom SMTP with a code-based template. This
@@ -37,6 +41,9 @@ export interface AuthDeepLinkResult {
   message?: string;
 }
 
+// Pulls the query-string-shaped params out of everything after the first
+// `#` (Supabase's implicit/token flow) or, failing that, `?` (PKCE `code`
+// flow) in the deep link URL.
 function extractParams(url: string): Record<string, string> {
   const hashIndex = url.indexOf('#');
   const queryIndex = url.indexOf('?');
@@ -50,6 +57,9 @@ function extractParams(url: string): Record<string, string> {
   return params;
 }
 
+// Entry point called from app/_layout.tsx's deep-link listener. Turns a
+// raw `current://...` URL into a live Supabase session (or an error/ignored
+// result if the URL isn't one of the auth link shapes we recognize).
 export async function handleAuthDeepLink(url: string): Promise<AuthDeepLinkResult> {
   const params = extractParams(url);
 
