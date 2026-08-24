@@ -17,6 +17,8 @@ export const TAB_BAR_HEIGHT = 66;
 export const TAB_BAR_BOTTOM_GAP = 8;
 export const TAB_BAR_TOP_MARGIN = 14; // breathing room above the bar
 
+// One icon-drawing function per tab route name, keyed to match the
+// (tabs) route names exactly (chats/calls/contacts/profile).
 const ICONS: Record<string, (color: string) => React.ReactNode> = {
   chats: (c) => (
     <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -45,6 +47,14 @@ const ICONS: Record<string, (color: string) => React.ReactNode> = {
 
 const LABELS: Record<string, string> = { chats: 'Chats', calls: 'Calls', contacts: 'Contacts', profile: 'Profile' };
 
+/**
+ * FILE PURPOSE: This app's custom bottom tab bar — passed to expo-router
+ * Tabs' `tabBar` prop (see app/(tabs)/_layout.tsx) in place of the
+ * default tab bar UI. A floating frosted-glass pill, absolutely
+ * positioned over screen content (not part of normal layout flow — see
+ * TAB_BAR_HEIGHT/BOTTOM_GAP/TOP_MARGIN above for why screens need to pad
+ * for it explicitly).
+ */
 export function TabBar({ state, navigation }: BottomTabBarProps) {
   const { tokens, a1, mode } = useTheme();
   const insets = useSafeAreaInsets();

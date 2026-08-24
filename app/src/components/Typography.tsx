@@ -3,6 +3,10 @@ import { Text, type TextProps } from 'react-native';
 import { useTheme } from '../theme/useTheme';
 import { fontFamilies } from '../theme/tokens';
 
+// FILE PURPOSE: Two small shared text presets used across screens —
+// ScreenTitle (a large glowing heading, used at the top of each main
+// tab) and Label (a small uppercase section-header style, used in lists
+// throughout the app).
 export function ScreenTitle({ children, size = 33, style, ...rest }: TextProps & { size?: number }) {
   const { tokens } = useTheme();
   return (
@@ -26,6 +30,7 @@ export function ScreenTitle({ children, size = 33, style, ...rest }: TextProps &
   );
 }
 
+// Small uppercase section-header label.
 export function Label({ children, style, ...rest }: TextProps) {
   const { tokens } = useTheme();
   return (
