@@ -7,6 +7,9 @@ import type { AudioRecorder } from 'expo-audio';
 import { createAudioPlayer, requestRecordingPermissionsAsync, setAudioModeAsync } from 'expo-audio';
 import { VideoTrimNative, showVideoTrimEditorNative, compressVideoNative, type VideoTrimSpec } from './videoTrim';
 
+// FILE PURPOSE: Every media capture/pick/process helper used by the
+// composer — photos (with crop), avatar photos, videos (with trim +
+// compress), device location, and voice-message recording/playback.
 /**
  * source: 'library' (default, unchanged for every existing call site —
  * none of them pass this) opens the photo gallery; 'camera' launches a
@@ -106,12 +109,15 @@ export type PickVideoResult =
   | { ok: true; base64: string; mime: string; durationLabel: string; thumbnailBase64: string | null }
   | { ok: false; reason: 'canceled' | 'permission_denied' | 'too_long' | 'too_large' | 'failed' };
 
+// Formats seconds as "m:ss" for video-message duration labels.
 function formatDuration(totalSeconds: number): string {
   const mins = Math.floor(totalSeconds / 60);
   const secs = totalSeconds % 60;
   return `${mins}:${String(secs).padStart(2, '0')}`;
 }
 
+// Estimates raw byte size from a base64 string's length (base64 inflates
+// by ~4/3), used as a quick over-the-wire size check.
 function approxBase64Bytes(base64Length: number): number {
   return (base64Length * 3) / 4;
 }
@@ -347,6 +353,9 @@ export async function pickVideoBase64(source: 'camera' | 'library' = 'library'):
   }
 }
 
+// One-shot device location fetch for the "share location" message type —
+// no background/continuous tracking, matches the privacy policy's
+// one-time-share-only claim.
 export async function getCurrentLocationOnce(): Promise<{ lat: number; lng: number } | null> {
   const perm = await Location.requestForegroundPermissionsAsync();
   if (perm.status !== 'granted') return null;
@@ -414,6 +423,8 @@ export async function stopVoiceRecording(recorder: AudioRecorder): Promise<{ bas
   }
 }
 
+// Writes a received voice message's base64 payload to a temp cache file
+// and plays it back — playback needs a real file URI, not a data URI.
 export async function playAudioBase64(base64: string, mime = 'audio/m4a') {
   const uri = `${FileSystem.cacheDirectory}voice-${Date.now()}.m4a`;
   await FileSystem.writeAsStringAsync(uri, base64, { encoding: FileSystem.EncodingType.Base64 });

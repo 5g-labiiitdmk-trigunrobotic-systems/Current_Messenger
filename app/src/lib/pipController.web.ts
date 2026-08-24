@@ -1,4 +1,4 @@
-// Web stub — Picture-in-Picture here is Android's native
+// FILE PURPOSE: Web stub — Picture-in-Picture here is Android's native
 // enterPictureInPictureMode, which has no web equivalent, and this app
 // doesn't target web as a real platform (web only exists here for
 // layout-verification screenshots). Matches the existing

@@ -1,6 +1,10 @@
 import { Platform } from 'react-native';
 import { requireOptionalNativeModule } from 'expo';
 
+// FILE PURPOSE: JS bridge to the native PipController module (see
+// modules/pip-controller/) that drives Android picture-in-picture for
+// video calls. See pipController.web.ts for the no-op web stand-in.
+//
 // Android only for now (see modules/pip-controller/expo-module.config.json
 // — platforms: ["android"]; iOS support is deliberately out of scope this
 // round, matching this project's current Android-first phase). On iOS the
