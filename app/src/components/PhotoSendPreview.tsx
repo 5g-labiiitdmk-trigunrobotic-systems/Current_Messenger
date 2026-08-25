@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, Image, Pressable, Modal, useWindowDimensions } from 'react-native';
+import { View, Text, Pressable, Modal, useWindowDimensions } from 'react-native';
+import { Image } from 'expo-image';
 import { useTheme } from '../theme/useTheme';
 import { fontFamilies } from '../theme/tokens';
 
@@ -43,7 +44,7 @@ export function PhotoSendPreview({ visible, base64, mime, onSend, onCancel }: Ph
   return (
     <Modal visible={visible} animationType="fade" onRequestClose={onCancel} statusBarTranslucent>
       <View style={{ flex: 1, backgroundColor: '#000' }}>
-        {base64 && <Image source={{ uri: `data:${mime};base64,${base64}` }} style={{ width, height }} resizeMode="contain" />}
+        {base64 && <Image source={{ uri: `data:${mime};base64,${base64}` }} style={{ width, height }} contentFit="contain" />}
         <Pressable
           onPress={onCancel}
           style={{ position: 'absolute', top: 56, right: 20, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' }}

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Image, Pressable, Modal, Platform, Linking, useWindowDimensions, ActivityIndicator } from 'react-native';
+import { View, Text, Pressable, Modal, Platform, Linking, useWindowDimensions, ActivityIndicator } from 'react-native';
+import { Image } from 'expo-image';
 import Svg, { Path } from 'react-native-svg';
 import Animated, { FadeInUp } from 'react-native-reanimated';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -158,7 +159,7 @@ function BubbleContent({ m, isMe, a1, a2, tokens, meId, onVote, replyPreview }: 
   if (m.kind === 'media' && m.meta?.base64) {
     return (
       <View style={{ borderRadius: 20, overflow: 'hidden' }}>
-        <Image source={{ uri: `data:${m.meta.mime ?? 'image/jpeg'};base64,${m.meta.base64}` }} style={{ width: 220, height: 220 }} resizeMode="cover" />
+        <Image source={{ uri: `data:${m.meta.mime ?? 'image/jpeg'};base64,${m.meta.base64}` }} style={{ width: 220, height: 220 }} contentFit="cover" />
       </View>
     );
   }
@@ -548,7 +549,7 @@ function VideoMessageBubble({ meta }: { meta: any }) {
     <>
       <Pressable onPress={() => setExpanded(true)} style={{ borderRadius: 20, overflow: 'hidden', width: 220, height: 220 }}>
         {thumb ? (
-          <Image source={{ uri: thumb }} style={{ width: 220, height: 220 }} resizeMode="cover" />
+          <Image source={{ uri: thumb }} style={{ width: 220, height: 220 }} contentFit="cover" />
         ) : (
           <View style={{ width: 220, height: 220, alignItems: 'center', justifyContent: 'center', backgroundColor: '#1c1c22' }}>
             <PlayIcon size={30} />
