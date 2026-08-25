@@ -128,7 +128,8 @@
       "./plugins/withLockScreenCallActivity",
       "./plugins/withPictureInPicture",
       "./plugins/withLargeScreenSupport",
-      "./plugins/withAdjustNothingSoftInput"
+      "./plugins/withAdjustNothingSoftInput",
+      "./plugins/withR8FullOptimization"
     ],
     "experiments": {
       "typedRoutes": true
