@@ -193,6 +193,15 @@ export default function RootLayout() {
               <Stack.Screen name="lab/index" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="lab/[key]" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="auth-redirect" options={{ animation: 'fade' }} />
+              {/* Phone/OTP verification — built, NOT wired into the live
+                  signup/login flow (see phone-auth/entry.tsx's own doc
+                  comment and docs/SETUP.md's "Phone/OTP verification"
+                  section). Registered here only so these two screens get
+                  the same slide-in transition every other utility screen
+                  above does when navigated to directly for testing —
+                  nothing in the app links to either route yet. */}
+              <Stack.Screen name="phone-auth/entry" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="phone-auth/verify" options={{ animation: 'slide_from_right' }} />
             </Stack>
           </AppLockGate>
           <ActiveCallBanner />

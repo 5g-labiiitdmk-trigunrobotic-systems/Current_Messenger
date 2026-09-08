@@ -194,6 +194,72 @@ user ...`, or the specific failure) — check Metro/logcat output on the
 device to confirm registration itself is succeeding before assuming the
 server-side send is the problem.
 
+## 2.6 Phone/OTP verification — built, NOT wired into signup/login yet
+
+Two new screens (`app/phone-auth/entry.tsx`, `app/phone-auth/verify.tsx`)
+plus a provider-agnostic service layer (`src/lib/otp.ts`) exist in the
+repo, ready to activate, but **nothing currently links to either
+screen** — the live signup/login flow is completely unchanged. This is
+deliberate: as section 2 above documents, this project has already built
+and removed phone verification twice, both times over Firebase Phone
+Auth's Blaze-billing-plan requirement. Building it a third time as
+inert, mock-backed code — rather than wiring it straight into signup
+again — means it can be reviewed, tested, and a provider chosen and
+billed for *before* it's live, instead of discovering the billing
+problem again after users depend on it.
+
+**How to test it right now, with zero configuration:** navigate directly
+to `/phone-auth/entry` (e.g. `router.push('/phone-auth/entry')` from
+anywhere temporarily, or Expo Router's dev deep link
+`current://phone-auth/entry`). Enter any plausible number for the
+selected country and tap "Send code" — the mock provider in
+`src/lib/otp.ts` generates a real random 6-digit code and logs it to the
+console/Metro output as `[otp:mock] "Sent" 6-digit code NNNNNN to
++91...` (there is no real SMS to check it in). Enter that code on the
+next screen to see the success animation; enter any other 6 digits to
+see the shake/error state. The code expires after 5 minutes (mock-only
+TTL, shortened from a provider-realistic 15 minutes purely so the
+expired-code path is reachable without an actual wait) or once used
+once.
+
+**To activate this for real, in order:**
+
+1. **Choose and sign up for a provider.** MSG91 is the leading candidate
+   (mentioned by name when this was scoped) — it's a direct SMS/OTP
+   gateway with its own pay-as-you-go pricing, not tied to Firebase's
+   Blaze plan, so it doesn't reintroduce the exact problem that killed
+   the previous two attempts. Create an MSG91 account, set up an OTP
+   template/flow in their dashboard, and obtain an **Auth Key**.
+2. **Never put that Auth Key in the app bundle.** It's a secret exactly
+   like Supabase's service-role key (see `server/src/supabaseAdmin.ts`'s
+   own doc comment) — anything shipped as `EXPO_PUBLIC_*` or hardcoded in
+   client JS is extractable from the built app. Add two small endpoints
+   to the existing relay server (`server/.env` gets `MSG91_AUTH_KEY=...`,
+   consumed only in `server/src/`) — a `POST /otp/send` and
+   `POST /otp/verify` that hold the key server-side and proxy the actual
+   MSG91 API calls. A Supabase Edge Function would work equally well if
+   you'd rather not extend the relay for this.
+3. **Implement one new `OtpProvider` object** in `src/lib/otp.ts` (e.g.
+   `msg91OtpProvider`) whose `sendOtp`/`verifyOtp` call those new
+   endpoints instead of the in-memory mock, then change the single
+   `activeProvider = mockOtpProvider` line to point at it. See the TODO
+   block at the bottom of that file for the exact contract — neither
+   screen needs to change at all, since both only ever see the
+   `OtpSendResult`/`OtpVerifyResult` shapes `sendOtp`/`verifyOtp` already
+   return.
+4. **Decide where phone verification fits in the actual signup flow**
+   (e.g. an optional step in `app/(auth)/signup.tsx` alongside email, or
+   a `settings.tsx` "add a phone number" entry point for an already-signed-
+   -up account) and add the one `router.push('/phone-auth/entry')` call
+   that makes it reachable. This is the only step that touches the live
+   auth flow — everything above it is inert until this happens.
+5. **Real-device test the whole round-trip** (a real SMS actually
+   arriving, `textContentType="oneTimeCode"`/`autoComplete="sms-otp"`
+   autofill actually firing) before shipping — this sandbox's web-based
+   verification workflow can exercise every UI/state-machine path against
+   the mock (and did, before this was committed) but cannot receive a
+   real SMS or confirm autofill behavior on a real OS.
+
 ## 3. Relay server
 
 1. `cd server && cp .env.example .env` and fill in `SUPABASE_URL` +
@@ -313,6 +379,10 @@ dev client picks up.
   was no reason to change it too. `google-services.json` now has a
   Firebase Android app registered under `com.trigunrobotics.current` —
   see the FCM section above for details.
+- **Phone/OTP verification** — screens and a mock-backed service layer
+  exist (`app/phone-auth/`, `src/lib/otp.ts`) but nothing links to them
+  from signup/login yet. See section 2.6 above for how to test it as-is
+  and exactly what activating it for real requires.
 - **Background calling (CallKit/ConnectionService)** — calling is real
   WebRTC audio/video (see `src/state/callStore.ts`), but there's no native
   VoIP-push/CallKit integration, so a call backgrounded for long enough may
