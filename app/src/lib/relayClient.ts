@@ -53,18 +53,30 @@ class RelayClient {
       console.warn('[relay] EXPO_PUBLIC_RELAY_WS_URL is not set — see .env.example');
       return;
     }
+    // eslint-disable-next-line no-console
+    console.log('[relay] connecting to', url, '(attempt', this.reconnectAttempt, ')');
     this.setStatus('connecting');
     const socket = new WebSocket(url);
     this.socket = socket;
 
     socket.onopen = () => {
+      // eslint-disable-next-line no-console
+      console.log('[relay] socket open — sending auth');
       this.reconnectAttempt = 0;
       if (this.token) this.rawSend({ type: 'auth', token: this.token });
     };
     socket.onmessage = (e) => {
       try {
         const event: ServerEvent = JSON.parse(e.data);
-        if (event.type === 'auth:ok') this.setStatus('connected');
+        if (event.type === 'auth:ok') {
+          // eslint-disable-next-line no-console
+          console.log('[relay] authenticated as', event.userId);
+          this.setStatus('connected');
+        }
+        if (event.type === 'auth:error') {
+          // eslint-disable-next-line no-console
+          console.warn('[relay] auth rejected by server:', event.message);
+        }
         // Server-initiated heartbeat — reply immediately so the relay
         // knows this connection is still alive. A plain JSON app message,
         // not a native WebSocket protocol-level pong control frame — see
@@ -78,10 +90,19 @@ class RelayClient {
         // ignore malformed frames
       }
     };
-    socket.onerror = () => {
+    socket.onerror = (e) => {
+      // React Native's WebSocket error event carries a `message` field
+      // (not a standard browser ErrorEvent) — logged so a connection
+      // failure (bad URL, unreachable host, TLS issue) is actually visible
+      // instead of silently leaving status stuck at 'connecting'/'error'
+      // with zero trace anywhere.
+      // eslint-disable-next-line no-console
+      console.warn('[relay] socket error:', (e as any)?.message ?? e);
       this.setStatus('error');
     };
-    socket.onclose = () => {
+    socket.onclose = (e) => {
+      // eslint-disable-next-line no-console
+      console.log('[relay] socket closed — code:', e.code, 'reason:', e.reason || '(none)', 'manuallyClosed:', this.manuallyClosed);
       this.socket = null;
       if (this.manuallyClosed) {
         this.setStatus('idle');
@@ -90,6 +111,8 @@ class RelayClient {
       this.setStatus('reconnecting');
       const delay = Math.min(RECONNECT_BASE_MS * 2 ** this.reconnectAttempt, RECONNECT_MAX_MS);
       this.reconnectAttempt += 1;
+      // eslint-disable-next-line no-console
+      console.log('[relay] reconnecting in', delay, 'ms');
       this.reconnectTimer = setTimeout(() => this.openSocket(), delay);
     };
   }
