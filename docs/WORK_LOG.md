@@ -18,8 +18,8 @@ what is still open). Times are IST.
 |---|---|
 | Google Play | Live in India, v1.0.1 (does **not** have the app fixes below) |
 | App Store | Build 7 in TestFlight, **not submitted**. Wait for build 8. |
-| Relay (Render) | Live: `https://current-messenger-relay.onrender.com`. Has fix 3; fixes 13, 6, 14 deploying. |
-| `main` branch | Fixes 3, 4, 5, 23/10, 11, 13, 6, 14 merged. Nothing builds automatically. |
+| Relay (Render) | Live: `https://current-messenger-relay.onrender.com`. Has fix 3; fixes 13, 6, 14, 15, 19 deploying. |
+| `main` branch | Fixes 3, 4, 5, 23/10, 11, 13, 6, 14, 15, 19 merged. Nothing builds automatically. |
 | Build 8 | Not made yet. Should include 4, 5, 11, 23/10, 22 and the rest of the app batch. |
 
 ---
@@ -41,7 +41,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 11 | Messages stuck on "sending" forever when the relay is unreachable or the answer never arrives | app | `6b99d2d` | In `main`, needs build 8 |
 | 13 | Relay accepted frames up to 100 MiB and had no rate limits | relay | `7d2b8bd` | Merged to `main` 02:51; Render auto-deploys |
 | 6 | Filter injection in `areApprovedContacts`: a crafted `to` value bypassed the contact check | relay | `5c989d9` | Merged to `main` 03:37 with 14; Render auto-deploys |
-| 15 | `group:create` with an existing group id silently replaced that group (members dropped, creator became owner) | relay | branch `fix/issue-15-group-overwrite` | Tested, waiting for merge |
+| 15 | `group:create` with an existing group id silently replaced that group (members dropped, creator became owner) | relay | branch `fix/issue-15-group-overwrite` | Merged to `main` 04:41; Render auto-deploys |
 | 14 | Contact cache kept "not a contact" for 30 s after approval or a database hiccup; `isBlocked` failed open | relay | branch `fix/issue-14-contact-cache` | Merged to `main` 03:37 (includes 6); Render auto-deploys |
 
 ### Open (original 20)
@@ -57,7 +57,6 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 16 | Groups lost when the relay restarts | M | relay |
 | 17 | Transfer log kept forever | M | DB |
 | 18 | Docs and encryption PDF say "libsodium"; the app uses TweetNaCl | M | docs |
-| 19 | Decline / hangup clears another caller's ring | L | relay |
 | 20 | `contact:request_sent` pushes without a real request | L | relay |
 
 ### Open (found in the broader audit)
@@ -181,7 +180,15 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Change:** creating an id that belongs to someone else's group is refused with an error and the group is untouched; the owner re-sending create (a retry) just re-confirms the group without resetting it or re-sending invites; `createGroup` itself never replaces an existing group; input limits (id up to 128 characters, name 200, 256 invitees).
 - **Tested (local relay, old vs new):** old relay: after the hijack the real owner can no longer message the group (5 checks fail); new relay passes 7/7 (refused, original group works, attacker not a member, owner retry safe, long id rejected); regression and size/rate-limit suites pass; typecheck clean.
 - **Limit:** group membership still lives only in relay memory and is lost on restart (issue 16).
-- **Shipped:** branch only.
+- **Shipped:** merged to `main` (with 19).
+
+### 2026-10-28: Issue 19 — call ring cleared by the wrong person
+- **Root cause:** any call-resolving signal (decline, hangup, accept, busy, timeout) cleared the pending ring for BOTH the sender and the target, whoever started it. So any contact could cancel someone else's pending call to a person by sending that person a "hangup", and a user's own unrelated incoming ring vanished whenever they signalled anyone. The pending ring is what a closed app learns about when it reconnects, so the call was silently lost.
+- **Files:** `server/src/state.ts`, `server/src/index.ts`.
+- **Change:** a resolving signal clears only the ring between those two users (either direction) and only in the same context (the same group id, or none for a 1:1 call).
+- **Tested (local relay, old vs new):** old relay fails 3 checks (stranger's hangup cancels the ring; callee signalling someone else cancels their own ring; a 1:1 hangup clears a group ring); new relay passes 7/7, including the normal cases (caller hangup, callee decline, accept, group hangup all still clear). Regression and size/rate-limit suites pass; typecheck clean.
+- **Limit:** one pending ring is remembered per person, so two simultaneous callers still overwrite each other (the app shows one ring at a time).
+- **Shipped:** merged to `main` (with 15).
 
 ---
 
