@@ -40,7 +40,8 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 23 | No dead-connection detection, no foreground reconnect, stale token on reconnect | app | `01e27fd` | In `main`, needs build 8 |
 | 11 | Messages stuck on "sending" forever when the relay is unreachable or the answer never arrives | app | `6b99d2d` | In `main`, needs build 8 |
 | 13 | Relay accepted frames up to 100 MiB and had no rate limits | relay | `7d2b8bd` | Merged to `main` 02:51; Render auto-deploys |
-| 6 | Filter injection in `areApprovedContacts`: a crafted `to` value bypassed the contact check | relay | branch `fix/issue-6-filter-injection` | Tested, waiting for merge (deploys on merge) |
+| 6 | Filter injection in `areApprovedContacts`: a crafted `to` value bypassed the contact check | relay | `5c989d9` (branch `fix/issue-6-filter-injection`) | Tested, waiting for merge (deploys on merge) |
+| 14 | Contact cache kept "not a contact" for 30 s after approval or a database hiccup; `isBlocked` failed open | relay | branch `fix/issue-14-contact-cache` (includes 6) | Tested, waiting for merge |
 
 ### Open (original 20)
 
@@ -52,7 +53,6 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 8 | Users can set their own `email_verified` / `phone_verified` | H | DB |
 | 9 | Public `/ice-servers` exposes TURN credentials | H | relay |
 | 12 | Presence visibility setting is cosmetic | H | app + relay |
-| 14 | Contact cache stale for 30s; `isBlocked` fails open | M | relay |
 | 15 | A group id can be overwritten | M | relay |
 | 16 | Groups lost when the relay restarts | M | relay |
 | 17 | Transfer log kept forever | M | DB |
@@ -166,6 +166,14 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Tested:** against a mock database that evaluates the filter like PostgREST: old code answers "approved" for a stranger with two crafted values (2 fails), new code answers false for both; real pairs (either order, upper or lower case) still true; relay regression suite re-run with UUID ids, 26/26 pass. Typecheck clean.
 - **Not covered:** `isBlocked` already uses safe parameters but treats a database error as "not blocked" (issue 14).
 - **Shipped:** branch only; deploys on merge to `main`.
+
+### 2026-10-28: Issue 14 — contact cache and block check
+- **Root cause:** `areApprovedContacts` remembered every answer for 30 s, including "no" and database errors. Someone whose request had just been accepted (or who hit one failed lookup) kept getting "not a contact" and failed sends for up to 30 s. `isBlocked` treated a database error as "not blocked", so a blocked person's message could get through during a hiccup.
+- **Files:** `server/src/supabaseAdmin.ts`, `server/src/index.ts`.
+- **Change:** only "yes" is cached; errors and "no" are never cached; the cache is cleared for a pair when the relay is told their request was sent or answered (`contact:request_sent` / `contact:request_responded`); cache size is bounded; `isBlocked` now fails closed (database error = treated as blocked). Branched from fix 6, so merging this also brings in fix 6.
+- **Tested:** mock database with switchable states: old code fails 3 checks (stale "no" after approval, error remembered, error treated as not blocked), new code passes 9/9; repeated checks still served from cache (0 database hits); relay regression (UUID ids) and the size/rate-limit suite still pass. Typecheck clean.
+- **Limit:** a contact that was removed or declined from another device can still pass for up to 30 s unless the relay was told (only the live nudge events clear it).
+- **Shipped:** branch only.
 
 ---
 

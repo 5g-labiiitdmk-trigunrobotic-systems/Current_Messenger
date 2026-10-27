@@ -62,8 +62,24 @@ export async function areApprovedContacts(userA: string, userB: string): Promise
     .limit(1)
     .maybeSingle();
   const approved = !error && !!data;
-  contactCache.set(key, { approved, expiresAt: Date.now() + CACHE_TTL_MS });
+  // Only a confirmed "yes" is cached. A "no" (or a database error) used to be
+  // cached too, so someone whose request had JUST been accepted — or who hit a
+  // momentary database hiccup — kept getting "not a contact" for up to 30 s.
+  if (approved) {
+    if (contactCache.size > 5000) {
+      const now = Date.now();
+      for (const [k, v] of contactCache) if (v.expiresAt <= now) contactCache.delete(k);
+    }
+    contactCache.set(key, { approved, expiresAt: Date.now() + CACHE_TTL_MS });
+  }
   return approved;
+}
+
+// Forget the cached answer for a pair — called when the relay is told their
+// contact request changed (accepted / declined / re-sent), so a stale "yes"
+// doesn't outlive a decline.
+export function invalidateContactCache(userA: string, userB: string): void {
+  contactCache.delete([userA, userB].sort().join(':'));
 }
 
 // Unlike contactCache above, this cache has no TTL — a username change
@@ -112,6 +128,10 @@ export async function isBlocked(blockerId: string, blockedId: string): Promise<b
     .eq('blocked_id', blockedId)
     .limit(1)
     .maybeSingle();
-  if (error) return false;
+  // Fail closed: if the block list can't be read, treat the sender as blocked
+  // rather than let a blocked person's message through (areApprovedContacts
+  // already refuses on a database error, so nothing legitimate works then
+  // either).
+  if (error) return true;
   return !!data;
 }
