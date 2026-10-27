@@ -61,12 +61,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (data.session) await get().refreshProfile();
     set({ initializing: false });
 
+    // Every (re)connect asks for a CURRENT token — getSession() refreshes an
+    // expired one — instead of reusing the token captured at login.
+    relayClient.setTokenProvider(async () => (await supabase.auth.getSession()).data.session?.access_token ?? null);
+
     supabase.auth.onAuthStateChange(async (_event, session) => {
       set({ session });
       if (session) {
         await get().refreshProfile();
         await get().ensureDeviceKeyPublished();
-        relayClient.connect(session.access_token);
+        relayClient.connect(session.access_token, session.user.id);
         if (!get().needsProfileSetup) {
           registerForPushNotifications(session.user.id).catch(() => {});
         }
