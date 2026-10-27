@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { relayClient } from '../lib/relayClient';
-import { encryptMessage, decryptMessage } from '../lib/crypto';
-import { getOrCreateDeviceKeyPair, fetchPublicKey, fetchPublicKeyWithRetry } from '../lib/keystore';
+import { decryptPayload, type KeyPairB64 } from '../lib/crypto';
+import { getOrCreateDeviceKeyPair, fetchActivePublicKeysWithRetry, encryptForUser } from '../lib/keystore';
 import { loadAllThreads, loadPinned, saveMessage, renameMessageId, setPinned, deleteThreadLocal } from '../lib/localDb';
 import type { MessageKind, ServerEvent, EncryptedPayload } from '../types/relay';
 import { useAuthStore } from './authStore';
@@ -62,14 +62,14 @@ const RICH_KINDS = new Set<MessageKind>(['voice', 'media', 'location', 'sticker'
  * same as how a 1-1 message to someone with no published key already
  * fails outright rather than sending anything.
  */
-async function encryptForGroupMembers(groupId: string, me: string, plaintext: string, secretKey: string): Promise<Record<string, EncryptedPayload>> {
+async function encryptForGroupMembers(groupId: string, me: string, plaintext: string, kp: KeyPairB64): Promise<Record<string, EncryptedPayload>> {
   const memberIds = useGroupStore.getState().groups[groupId]?.memberIds ?? [];
   const others = memberIds.filter((id) => id !== me);
-  const keys = await Promise.all(others.map((id) => fetchPublicKey(id)));
+  const encrypted = await Promise.all(others.map((id) => encryptForUser(plaintext, id, kp)));
   const payloads: Record<string, EncryptedPayload> = {};
   others.forEach((id, i) => {
-    const k = keys[i];
-    if (k) payloads[id] = encryptMessage(plaintext, k, secretKey);
+    const p = encrypted[i];
+    if (p) payloads[id] = p;
   });
   return payloads;
 }
@@ -219,10 +219,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
         // no longer caches (see its own doc comment — the cache made
         // these retries a no-op once a stale value was already cached),
         // each attempt here is a genuine fresh query.
-        const senderKey = await fetchPublicKeyWithRetry(event.from);
+        // ALL of the sender's active keys, not just the newest: a sender
+        // signed in on more than one device (or who reinstalled) may have
+        // encrypted with an older key, and picking only "the newest" was the
+        // root cause of "[unable to decrypt]" — see decryptPayload in
+        // crypto.ts for the order keys are tried in.
+        const senderKeys = await fetchActivePublicKeysWithRetry(event.from);
         let text: string | undefined;
         let richMeta: Record<string, unknown> | undefined;
-        const decrypted = senderKey && kp ? decryptMessage(event.payload, senderKey, kp.secretKey) : null;
+        const decrypted = senderKeys.length > 0 && kp ? decryptPayload(event.payload, senderKeys, kp) : null;
 
         if (event.kind === 'text' || event.kind === 'edit' || event.kind === 'reply') {
           text = decrypted ?? '[unable to decrypt]';
@@ -395,12 +400,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     if (!isGroup) {
       // 1-1: encrypt to the one recipient's public key.
-      const recipientKey = await fetchPublicKey(targetId);
-      if (!recipientKey) {
+      const payload = await encryptForUser(text, targetId, kp);
+      if (!payload) {
         markFailed('no_key');
         return;
       }
-      const payload = encryptMessage(text, recipientKey, kp.secretKey);
       relayClient.send({
         type: 'message:send',
         tempId,
@@ -421,7 +425,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // payload) failing and rendering "[unable to decrypt]". This fixes
       // both problems by making the payload itself genuinely decryptable
       // per recipient.
-      const payloads = await encryptForGroupMembers(targetId, me, text, kp.secretKey);
+      const payloads = await encryptForGroupMembers(targetId, me, text, kp);
       if (Object.keys(payloads).length === 0) {
         markFailed('no_key');
         return;
@@ -493,7 +497,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // sendText had for plain text, so a group photo/poll/voice message
       // would have rendered as empty/undecryptable to everyone but the
       // sender the moment any group screen gained the UI to send one.
-      const payloads = await encryptForGroupMembers(targetId, me, json, kp.secretKey);
+      const payloads = await encryptForGroupMembers(targetId, me, json, kp);
       if (Object.keys(payloads).length === 0) {
         markFailed('no_key');
         return;
@@ -502,12 +506,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return;
     }
 
-    const encryptTo = await fetchPublicKey(targetId);
-    if (!encryptTo) {
+    const payload = await encryptForUser(json, targetId, kp);
+    if (!payload) {
       markFailed('no_key');
       return;
     }
-    const payload = encryptMessage(json, encryptTo, kp.secretKey);
     relayClient.send({ type: 'message:send', tempId, to: targetId, kind, payload, meta: { replyToId } });
   },
 
@@ -644,9 +647,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       try {
         const kp = await getOrCreateDeviceKeyPair(me);
         if (!isGroup) {
-          const recipientKey = await fetchPublicKey(targetId);
-          if (!recipientKey) return;
-          const payload = encryptMessage(newText, recipientKey, kp.secretKey);
+          const payload = await encryptForUser(newText, targetId, kp);
+          if (!payload) return;
           relayClient.send({ type: 'message:send', tempId: `edit-${Date.now()}`, to: targetId, kind: 'edit', payload, meta: { targetMessageId: messageId } });
         }
       } catch (e: any) {

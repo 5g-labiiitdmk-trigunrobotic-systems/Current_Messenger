@@ -38,6 +38,11 @@ export type MessageKind =
 export interface EncryptedPayload {
   nonce: string;
   ciphertext: string;
+  // Optional, additive fields added by the app (see app/src/types/relay.ts).
+  // The relay never reads them — it forwards the payload object untouched.
+  senderPublicKey?: string;
+  recipientPublicKey?: string;
+  extras?: { recipientPublicKey: string; nonce: string; ciphertext: string }[];
 }
 
 // Every message shape the server can RECEIVE from a client.

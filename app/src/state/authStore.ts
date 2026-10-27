@@ -97,7 +97,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     // gap on the SecureStore side instead of just at one of its callers.
     try {
       const kp = await getOrCreateDeviceKeyPair(session.user.id);
-      await publishPublicKey(session.user.id, kp.publicKey).catch(() => {});
+      await publishPublicKey(session.user.id, kp.publicKey).catch((e: any) => {
+        // Not fatal for login, but it means other people can't encrypt to
+        // this device yet — it retries on the next auth event/app launch.
+        // eslint-disable-next-line no-console
+        console.error('[auth] publishPublicKey failed:', e?.message ?? e);
+      });
     } catch (e: any) {
       // eslint-disable-next-line no-console
       console.error('[auth] ensureDeviceKeyPublished failed (device key unavailable this session):', e?.message ?? e);

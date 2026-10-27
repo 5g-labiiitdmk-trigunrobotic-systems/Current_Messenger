@@ -24,6 +24,19 @@ export type MessageKind =
 export interface EncryptedPayload {
   nonce: string;
   ciphertext: string;
+  // Everything below is OPTIONAL and additive: the relay forwards the payload
+  // object untouched, and app versions that predate these fields simply ignore
+  // them and decrypt `nonce`/`ciphertext` exactly as before.
+  //
+  // The public key the sender actually encrypted with — lets the receiver try
+  // that key first instead of guessing which of the sender's keys was used.
+  senderPublicKey?: string;
+  // The public key `nonce`/`ciphertext` above were encrypted TO.
+  recipientPublicKey?: string;
+  // The same plaintext encrypted separately to the recipient's OTHER active
+  // device keys, so every device they're signed in on can read it. Only added
+  // for small messages (see MAX_EXTRA_DEVICE_CHARS in crypto.ts).
+  extras?: { recipientPublicKey: string; nonce: string; ciphertext: string }[];
 }
 
 // Every message shape this client can SEND to the relay.

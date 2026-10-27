@@ -1,7 +1,7 @@
 import * as SecureStore from 'expo-secure-store';
 import * as Application from 'expo-application';
 import { Platform } from 'react-native';
-import { generateKeyPair, type KeyPairB64 } from './crypto';
+import { generateKeyPair, encryptForKeys, type KeyPairB64, type EncryptedPayload } from './crypto';
 import { supabase } from './supabase';
 
 // FILE PURPOSE: Per-device E2E keypair lifecycle — generate/load the
@@ -26,7 +26,25 @@ const SECRET_KEY_STORE_ID = 'current_e2e_secret_key';
  * person) and isn't caught by anything, since getOrCreateDeviceKeyPair()
  * happily "finds" the other account's key and returns it unchanged.
  */
-export async function getOrCreateDeviceKeyPair(userId: string): Promise<KeyPairB64> {
+// Concurrent first-run callers (auth listener, finish-setup, an incoming
+// message, a send) all call getOrCreateDeviceKeyPair at nearly the same
+// moment. Each used to find "no key yet", generate its OWN keypair, and the
+// last write to SecureStore won — while the key already published to the
+// server (and used by the other side to encrypt to us) could be the loser.
+// That produced permanent "[unable to decrypt]" for everything sent to this
+// device. Sharing one in-flight promise per user makes the first call do the
+// work and every concurrent caller get the very same keypair.
+const keyPairInFlight = new Map<string, Promise<KeyPairB64>>();
+
+export function getOrCreateDeviceKeyPair(userId: string): Promise<KeyPairB64> {
+  const inFlight = keyPairInFlight.get(userId);
+  if (inFlight) return inFlight;
+  const p = loadOrCreateDeviceKeyPair(userId).finally(() => keyPairInFlight.delete(userId));
+  keyPairInFlight.set(userId, p);
+  return p;
+}
+
+async function loadOrCreateDeviceKeyPair(userId: string): Promise<KeyPairB64> {
   // NOT a ':' separator — expo-secure-store validates keys against
   // /^[\w.-]+$/ (confirmed by reading its actual source,
   // node_modules/expo-secure-store/src/SecureStore.ts's isValidKey/
@@ -71,12 +89,25 @@ export async function publishPublicKey(userId: string, publicKey: string) {
 
   const deviceLabel = Platform.OS === 'ios' ? 'iOS device' : 'Android device';
   const applicationId = Application.applicationId ?? undefined;
-  await supabase.from('device_keys').insert({
-    user_id: userId,
-    public_key: publicKey,
-    device_label: applicationId ? `${deviceLabel} (${applicationId})` : deviceLabel,
-    is_active: true,
-  });
+  // supabase-js reports failures in `{ error }` instead of throwing, so the
+  // old bare `await insert(...)` silently treated a failed publish as
+  // success — the other side then never got a key to encrypt to for this
+  // device. One retry covers a brief network blip; anything else is thrown
+  // so callers (which log it) know the key is NOT on record.
+  let lastError: { message: string; code?: string } | null = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const { error } = await supabase.from('device_keys').insert({
+      user_id: userId,
+      public_key: publicKey,
+      device_label: applicationId ? `${deviceLabel} (${applicationId})` : deviceLabel,
+      is_active: true,
+    });
+    // 23505 = unique(user_id, public_key): another call published it first.
+    if (!error || error.code === '23505') return;
+    lastError = error;
+    if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 1500));
+  }
+  throw new Error(`publishPublicKey failed: ${lastError?.message ?? 'unknown error'}`);
 }
 
 /**
@@ -136,4 +167,53 @@ export async function fetchPublicKeyWithRetry(userId: string, attempts = 4, dela
     if (i < attempts - 1) await new Promise((resolve) => setTimeout(resolve, delayMs));
   }
   return null;
+}
+
+// How many of a user's newest active keys we look at. Old rows are never
+// deactivated (reinstalls, test devices), so this keeps both the lookup and
+// the worst-case number of decrypt attempts bounded.
+const MAX_ACTIVE_KEYS = 8;
+// How many of the RECIPIENT's keys a send encrypts to (extra devices only
+// matter for people signed in on a few phones, not for stale rows).
+const MAX_ENCRYPT_TARGET_KEYS = 4;
+
+/**
+ * Every active public key a user has published, NEWEST FIRST (empty on error
+ * or if they have none). A person can be signed in on several devices, and
+ * the sender/receiver of a message can't know which one was used — so
+ * callers need all of them, not just the newest.
+ */
+export async function fetchActivePublicKeys(userId: string, limit = MAX_ACTIVE_KEYS): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('device_keys')
+    .select('public_key')
+    .eq('user_id', userId)
+    .eq('is_active', true)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error || !data) return [];
+  const keys = (data as { public_key: string }[]).map((r) => r.public_key);
+  return keys.filter((k, i) => keys.indexOf(k) === i);
+}
+
+// Same retry rationale as fetchPublicKeyWithRetry, for the full key list.
+export async function fetchActivePublicKeysWithRetry(userId: string, attempts = 4, delayMs = 500): Promise<string[]> {
+  for (let i = 0; i < attempts; i++) {
+    const keys = await fetchActivePublicKeys(userId);
+    if (keys.length > 0) return keys;
+    if (i < attempts - 1) await new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
+  return [];
+}
+
+/**
+ * Encrypts `plaintext` for `userId` so that EVERY device they're signed in
+ * on (up to MAX_ENCRYPT_TARGET_KEYS) can read it — see encryptForKeys in
+ * crypto.ts for the payload shape. Returns null if they have no published
+ * key (callers treat that as the existing 'no_key' failure).
+ */
+export async function encryptForUser(plaintext: string, userId: string, sender: KeyPairB64): Promise<EncryptedPayload | null> {
+  const keys = await fetchActivePublicKeys(userId, MAX_ENCRYPT_TARGET_KEYS);
+  if (keys.length === 0) return null;
+  return encryptForKeys(plaintext, keys, sender);
 }
