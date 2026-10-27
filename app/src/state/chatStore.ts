@@ -113,6 +113,10 @@ let hydrated = false;
 async function hydrateFromLocal(userId: string) {
   if (hydrated) return;
   hydrated = true;
+  // `hydrated` is reset whenever the signed-in account changes (see wire()),
+  // so this runs once PER ACCOUNT. It used to be a once-per-app-launch flag:
+  // sign out of A and into B, and B's history was never loaded while A's
+  // in-memory threads stayed on screen.
   // getDb() (src/lib/localDb.ts) now recovers on its own from the most
   // likely real-world failure (a SQLCipher key/file mismatch — see its own
   // doc comment), but this still has zero handling for whatever's left
@@ -123,6 +127,9 @@ async function hydrateFromLocal(userId: string) {
   // load" even though messages really had been sent/received before.
   try {
     const [localThreads, localPinned] = await Promise.all([loadAllThreads(userId), loadPinned(userId)]);
+    // The account may have changed while the (async) load was running; never
+    // put one account's history into another account's store.
+    if (useAuthStore.getState().session?.user.id !== userId) return;
     useChatStore.setState((s) => {
       const threads: Record<string, ChatMessage[]> = { ...localThreads };
       for (const [key, list] of Object.entries(s.threads)) {
@@ -153,8 +160,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const existingUserId = useAuthStore.getState().session?.user.id;
     if (existingUserId) hydrateFromLocal(existingUserId);
     useAuthStore.subscribe((s, prev) => {
-      const userId = s.session?.user.id;
-      if (userId && userId !== prev.session?.user.id) hydrateFromLocal(userId);
+      const userId = s.session?.user.id ?? null;
+      const prevUserId = prev.session?.user.id ?? null;
+      // Token refreshes change `session` but not the account — ignore them.
+      if (userId === prevUserId) return;
+      // Signed out, or switched to a different account: drop everything that
+      // belonged to the previous one before anything of the new account loads.
+      if (prevUserId) {
+        hydrated = false;
+        set({ threads: {}, typing: {}, pinned: {} });
+      }
+      if (userId) hydrateFromLocal(userId);
     });
 
     relayClient.on(async (event: ServerEvent) => {

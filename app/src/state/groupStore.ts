@@ -63,6 +63,17 @@ export const useGroupStore = create<GroupState>((set, get) => ({
   wire: () => {
     if (get().wired) return;
     set({ wired: true });
+    // Groups and invites live only in the relay, but the previous account's
+    // copy stays in this store after sign-out until the next group:snapshot
+    // — which never arrives if the next login fails or is slow. Clear on
+    // sign-out/account switch.
+    useAuthStore.subscribe((s, prev) => {
+      const userId = s.session?.user.id ?? null;
+      const prevUserId = prev.session?.user.id ?? null;
+      if (userId === prevUserId || !prevUserId) return;
+      incomingAlertForGroupId = null;
+      set({ groups: {}, incomingInvites: {} });
+    });
     relayClient.on((event: ServerEvent) => {
       if (event.type === 'group:snapshot') {
         // Sent once, right after every successful auth (fresh connect,

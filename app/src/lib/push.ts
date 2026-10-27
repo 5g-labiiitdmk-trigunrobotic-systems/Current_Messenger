@@ -35,6 +35,13 @@ const projectId = Constants.expoConfig?.extra?.eas?.projectId as string | undefi
 // would accumulate a new duplicate subscription every single time.
 let tokenListenerRegistered = false;
 
+// The account push tokens are currently being saved for. The token-rotation
+// listener below is registered only once per app run, so it used to capture
+// the FIRST signed-in user's id in its closure: after switching accounts, a
+// rotated token was written onto the previous account's row. It now reads
+// this variable at the moment the token rotates.
+let pushUserId: string | null = null;
+
 // Obtains this device's Expo push token and saves it on the user's profile
 // row so the relay knows where to send offline-ping notifications.
 async function fetchAndStoreToken(userId: string): Promise<void> {
@@ -105,6 +112,7 @@ export async function registerForPushNotifications(userId: string) {
       return;
     }
 
+    pushUserId = userId;
     await fetchAndStoreToken(userId);
 
     // Push tokens can rotate over a device's lifetime (FCM/APNs token
@@ -116,7 +124,8 @@ export async function registerForPushNotifications(userId: string) {
     if (!tokenListenerRegistered) {
       tokenListenerRegistered = true;
       Notifications.addPushTokenListener(() => {
-        fetchAndStoreToken(userId).catch((e) => {
+        if (!pushUserId) return; // signed out — nobody to save a token for
+        fetchAndStoreToken(pushUserId).catch((e) => {
           // eslint-disable-next-line no-console
           console.error('[push] failed to re-register rotated token:', e?.message ?? e);
         });
@@ -125,6 +134,26 @@ export async function registerForPushNotifications(userId: string) {
   } catch (e: any) {
     // eslint-disable-next-line no-console
     console.error('[push] registerForPushNotifications failed:', e?.message ?? e);
+  }
+}
+
+/**
+ * Called on sign-out: removes this account's push token so "X tried to reach
+ * you" / incoming-call pushes meant for the account that just signed out stop
+ * arriving on this device — where the NEXT person to sign in would otherwise
+ * see them. Must run while the session is still valid (RLS only lets a user
+ * update their own row). Best-effort: never blocks or fails the sign-out.
+ */
+export async function clearPushToken(userId: string): Promise<void> {
+  pushUserId = null;
+  try {
+    await Promise.race([
+      supabase.from('users').update({ push_token: null }).eq('id', userId),
+      new Promise((resolve) => setTimeout(resolve, 3000)), // don't hang sign-out on a bad network
+    ]);
+  } catch (e: any) {
+    // eslint-disable-next-line no-console
+    console.error('[push] failed to clear push token on sign-out:', e?.message ?? e);
   }
 }
 

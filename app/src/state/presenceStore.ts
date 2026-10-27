@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { relayClient } from '../lib/relayClient';
+import { useAuthStore } from './authStore';
 import type { ServerEvent } from '../types/relay';
 
 interface PresenceEntry {
@@ -35,6 +36,13 @@ export const usePresenceStore = create<PresenceState>((set, get) => ({
   wire: () => {
     if (get().wired) return;
     set({ wired: true });
+    // Online/last-seen info belongs to the signed-in account's contacts;
+    // drop it on sign-out or account switch (auth:ok below only clears it
+    // once a NEW connection is established).
+    useAuthStore.subscribe((s, prev) => {
+      const prevUserId = prev.session?.user.id ?? null;
+      if (prevUserId && prevUserId !== (s.session?.user.id ?? null)) set({ byUser: {} });
+    });
     relayClient.on((event: ServerEvent) => {
       if (event.type === 'presence') {
         set((s) => ({ byUser: { ...s.byUser, [event.userId]: { status: event.status, lastSeenAt: event.lastSeenAt } } }));

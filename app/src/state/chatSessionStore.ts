@@ -3,6 +3,7 @@ import { relayClient } from '../lib/relayClient';
 import { appAlert } from './alertStore';
 import { useAlertStore } from './alertStore';
 import { useContactStore } from './contactStore';
+import { useAuthStore } from './authStore';
 import type { ServerEvent } from '../types/relay';
 
 /**
@@ -54,6 +55,15 @@ export const useChatSessionStore = create<ChatSessionState>((set, get) => ({
   wire: () => {
     if (get().wired) return;
     set({ wired: true });
+
+    // Chat-session approvals are per account and per relay connection; clear
+    // them (and any "X wants to chat" prompt) on sign-out or account switch.
+    useAuthStore.subscribe((s, prev) => {
+      const prevUserId = prev.session?.user.id ?? null;
+      if (!prevUserId || prevUserId === (s.session?.user.id ?? null)) return;
+      incomingAlertForPeerId = null;
+      set({ sessions: {}, rejectReasons: {}, incomingFrom: {} });
+    });
 
     relayClient.on((event: ServerEvent) => {
       switch (event.type) {

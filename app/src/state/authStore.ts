@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase';
 import type { UserRow } from '../types/database';
 import { getOrCreateDeviceKeyPair, publishPublicKey } from '../lib/keystore';
 import { relayClient } from '../lib/relayClient';
-import { registerForPushNotifications } from '../lib/push';
+import { registerForPushNotifications, clearPushToken } from '../lib/push';
 import { normalizeUsername, usernameFormatError, isUsernameTaken } from '../lib/username';
 
 // FILE PURPOSE: The zustand store owning the Supabase auth session +
@@ -185,8 +185,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   // on-device data (chat history in localDb.ts, secure-store keys) is
   // deliberately left untouched — signing out doesn't erase history.
   signOut: async () => {
+    // Before the session goes away: stop this account's pushes from reaching
+    // this device (see clearPushToken). Needs the still-valid session.
+    const userId = get().session?.user.id;
+    if (userId) await clearPushToken(userId);
     relayClient.disconnect();
     await supabase.auth.signOut();
+    // Setting session to null also fires every store's auth subscription
+    // (chat, contacts, groups, presence, sessions, call log), which is what
+    // clears the previous account's in-memory data — see chatStore.wire().
     set({ session: null, profile: null, needsProfileSetup: false });
   },
 }));

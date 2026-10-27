@@ -179,6 +179,9 @@ async function hydrateCallLogFromLocal(userId: string) {
   // here specifically doesn't vanish as a silent unhandled rejection.
   try {
     const local = await loadCallLog(userId);
+    // Account changed while loading — don't put this account's log into the
+    // next account's store.
+    if (useAuthStore.getState().session?.user.id !== userId) return;
     useCallStore.setState((s) => {
       const existingIds = new Set(s.log.map((e) => e.id));
       const merged = [...s.log, ...local.filter((e) => !existingIds.has(e.id))];
@@ -230,8 +233,17 @@ export const useCallStore = create<CallState>((set, get) => ({
     const existingUserId = useAuthStore.getState().session?.user.id;
     if (existingUserId) hydrateCallLogFromLocal(existingUserId);
     useAuthStore.subscribe((s, prev) => {
-      const userId = s.session?.user.id;
-      if (userId && userId !== prev.session?.user.id) hydrateCallLogFromLocal(userId);
+      const userId = s.session?.user.id ?? null;
+      const prevUserId = prev.session?.user.id ?? null;
+      if (userId === prevUserId) return; // token refresh, same account
+      if (prevUserId) {
+        // Sign-out or account switch: the call log belongs to the previous
+        // account, and the once-only load flag must reset so the next
+        // account's log is actually loaded.
+        callLogHydrated = false;
+        set({ log: [] });
+      }
+      if (userId) hydrateCallLogFromLocal(userId);
     });
 
     relayClient.on(async (event: ServerEvent) => {

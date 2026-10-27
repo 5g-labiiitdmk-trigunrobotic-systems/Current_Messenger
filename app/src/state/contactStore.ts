@@ -79,8 +79,17 @@ export const useContactStore = create<ContactState>((set, get) => ({
     const existingUserId = useAuthStore.getState().session?.user.id;
     if (existingUserId) get().refresh();
     useAuthStore.subscribe((s, prev) => {
-      const userId = s.session?.user.id;
-      if (userId && userId !== prev.session?.user.id) get().refresh();
+      const userId = s.session?.user.id ?? null;
+      const prevUserId = prev.session?.user.id ?? null;
+      if (userId === prevUserId) return; // token refresh, same account
+      if (prevUserId) {
+        // Sign-out or account switch: the previous account's contacts must
+        // not stay visible, and any refresh still in flight for them must
+        // not land afterwards (bumping refreshSeq makes it count as stale).
+        refreshSeq++;
+        set({ approved: [], incoming: [], outgoing: [], blocked: [], loading: false });
+      }
+      if (userId) get().refresh();
     });
 
     // Kept as a redundant fallback, but this table was never added to
