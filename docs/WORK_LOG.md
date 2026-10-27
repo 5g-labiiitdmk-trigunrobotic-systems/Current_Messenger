@@ -57,7 +57,6 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 16 | Groups lost when the relay restarts | M | relay |
 | 17 | Transfer log kept forever | M | DB |
 | 18 | Docs and encryption PDF say "libsodium"; the app uses TweetNaCl | M | docs |
-| 19 | Decline / hangup clears another caller's ring | L | relay |
 | 20 | `contact:request_sent` pushes without a real request | L | relay |
 
 ### Open (found in the broader audit)
@@ -174,6 +173,14 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Tested:** mock database with switchable states: old code fails 3 checks (stale "no" after approval, error remembered, error treated as not blocked), new code passes 9/9; repeated checks still served from cache (0 database hits); relay regression (UUID ids) and the size/rate-limit suite still pass. Typecheck clean.
 - **Limit:** a contact that was removed or declined from another device can still pass for up to 30 s unless the relay was told (only the live nudge events clear it).
 - **Shipped:** merged to `main` together with fix 6.
+
+### 2026-10-28: Issue 19 — call ring cleared by the wrong person
+- **Root cause:** any call-resolving signal (decline, hangup, accept, busy, timeout) cleared the pending ring for BOTH the sender and the target, whoever started it. So any contact could cancel someone else's pending call to a person by sending that person a "hangup", and a user's own unrelated incoming ring vanished whenever they signalled anyone. The pending ring is what a closed app learns about when it reconnects, so the call was silently lost.
+- **Files:** `server/src/state.ts`, `server/src/index.ts`.
+- **Change:** a resolving signal clears only the ring between those two users (either direction) and only in the same context (the same group id, or none for a 1:1 call).
+- **Tested (local relay, old vs new):** old relay fails 3 checks (stranger's hangup cancels the ring; callee signalling someone else cancels their own ring; a 1:1 hangup clears a group ring); new relay passes 7/7, including the normal cases (caller hangup, callee decline, accept, group hangup all still clear). Regression and size/rate-limit suites pass; typecheck clean.
+- **Limit:** one pending ring is remembered per person, so two simultaneous callers still overwrite each other (the app shows one ring at a time).
+- **Shipped:** branch only.
 
 ---
 

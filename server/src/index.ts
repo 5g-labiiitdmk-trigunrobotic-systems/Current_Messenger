@@ -418,10 +418,10 @@ wss.on('connection', (socket) => {
           // clear the pending-ring record so a later reconnect doesn't
           // replay a call that's already over. Signal direction varies (a
           // caller's own 'timeout' targets the callee; an 'accept' from the
-          // callee targets the caller) so just clear both — deleting a
-          // nonexistent key is a harmless no-op.
-          relayState.clearRing(userId);
-          relayState.clearRing(event.to);
+          // callee targets the caller), so the ring is matched in either
+          // direction — but only the ring between THESE two users (and this
+          // group, if any) is cleared, never someone else's.
+          relayState.clearRingBetween(userId, event.to, event.groupId);
         }
         break;
       }

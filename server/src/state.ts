@@ -207,6 +207,24 @@ class RelayState {
   }
 
   /**
+   * Clears the pending ring that exists BETWEEN these two users (either
+   * direction) for this call context (`groupId`, or none for a 1:1 call) —
+   * and nothing else. A resolve signal (decline / hangup / accept / busy /
+   * timeout) used to clear every ring for both users, so any contact could
+   * cancel someone else's pending call to a person just by sending them a
+   * 'hangup', and a user's own unrelated incoming ring vanished whenever they
+   * signalled anyone.
+   */
+  clearRingBetween(userA: string, userB: string, groupId?: string) {
+    for (const [callee, other] of [[userA, userB], [userB, userA]] as const) {
+      const ring = this.activeRings.get(callee);
+      if (ring && ring.callerId === other && (ring.groupId ?? null) === (groupId ?? null)) {
+        this.activeRings.delete(callee);
+      }
+    }
+  }
+
+  /**
    * Called on disconnect. Ends every session (active or pending) involving
    * this user and reports who needs telling what, so index.ts can send the
    * right event to each — an already-*active* session ending needs no
