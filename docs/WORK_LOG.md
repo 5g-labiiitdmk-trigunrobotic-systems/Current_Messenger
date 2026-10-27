@@ -18,8 +18,8 @@ what is still open). Times are IST.
 |---|---|
 | Google Play | Live in India, v1.0.1 (does **not** have the app fixes below) |
 | App Store | Build 7 in TestFlight, **not submitted**. Wait for build 8. |
-| Relay (Render) | Live: `https://current-messenger-relay.onrender.com`. Has fix 3; fix 13 deploying. |
-| `main` branch | Fixes 3, 4, 5, 23/10, 11, 13 merged. Nothing builds automatically. |
+| Relay (Render) | Live: `https://current-messenger-relay.onrender.com`. Has fix 3; fixes 13, 6, 14 deploying. |
+| `main` branch | Fixes 3, 4, 5, 23/10, 11, 13, 6, 14 merged. Nothing builds automatically. |
 | Build 8 | Not made yet. Should include 4, 5, 11, 23/10, 22 and the rest of the app batch. |
 
 ---
@@ -40,8 +40,8 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 23 | No dead-connection detection, no foreground reconnect, stale token on reconnect | app | `01e27fd` | In `main`, needs build 8 |
 | 11 | Messages stuck on "sending" forever when the relay is unreachable or the answer never arrives | app | `6b99d2d` | In `main`, needs build 8 |
 | 13 | Relay accepted frames up to 100 MiB and had no rate limits | relay | `7d2b8bd` | Merged to `main` 02:51; Render auto-deploys |
-| 6 | Filter injection in `areApprovedContacts`: a crafted `to` value bypassed the contact check | relay | `5c989d9` (branch `fix/issue-6-filter-injection`) | Tested, waiting for merge (deploys on merge) |
-| 14 | Contact cache kept "not a contact" for 30 s after approval or a database hiccup; `isBlocked` failed open | relay | branch `fix/issue-14-contact-cache` (includes 6) | Tested, waiting for merge |
+| 6 | Filter injection in `areApprovedContacts`: a crafted `to` value bypassed the contact check | relay | `5c989d9` | Merged to `main` 03:37 with 14; Render auto-deploys |
+| 14 | Contact cache kept "not a contact" for 30 s after approval or a database hiccup; `isBlocked` failed open | relay | branch `fix/issue-14-contact-cache` | Merged to `main` 03:37 (includes 6); Render auto-deploys |
 
 ### Open (original 20)
 
@@ -173,7 +173,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Change:** only "yes" is cached; errors and "no" are never cached; the cache is cleared for a pair when the relay is told their request was sent or answered (`contact:request_sent` / `contact:request_responded`); cache size is bounded; `isBlocked` now fails closed (database error = treated as blocked). Branched from fix 6, so merging this also brings in fix 6.
 - **Tested:** mock database with switchable states: old code fails 3 checks (stale "no" after approval, error remembered, error treated as not blocked), new code passes 9/9; repeated checks still served from cache (0 database hits); relay regression (UUID ids) and the size/rate-limit suite still pass. Typecheck clean.
 - **Limit:** a contact that was removed or declined from another device can still pass for up to 30 s unless the relay was told (only the live nudge events clear it).
-- **Shipped:** branch only.
+- **Shipped:** merged to `main` together with fix 6.
 
 ---
 
