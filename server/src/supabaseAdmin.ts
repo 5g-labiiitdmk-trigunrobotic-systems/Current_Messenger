@@ -34,6 +34,7 @@ export async function verifyUserToken(token: string): Promise<string | null> {
 // Short-lived cache so rapid-fire events (typing, read receipts) don't hammer
 // Postgres with a lookup per keystroke. Message sends still get a fresh-enough
 // answer within 30s of an approval/decline, which is fine for this use case.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const contactCache = new Map<string, { approved: boolean; expiresAt: number }>();
 const CACHE_TTL_MS = 30_000;
 
@@ -41,6 +42,12 @@ const CACHE_TTL_MS = 30_000;
 // true only if the two users have an approved contact_requests row in
 // either direction. Cached per unordered pair (see contactCache above).
 export async function areApprovedContacts(userA: string, userB: string): Promise<boolean> {
+  // Both ids end up inside a PostgREST filter string below. `userB` is often
+  // client-supplied (the `to` of an event), and a crafted value such as
+  // "x),and(sender_id.neq.0,receiver_id.neq.0" would rewrite the filter so any
+  // approved row matches — i.e. bypass the contact check. Real ids are always
+  // UUIDs, so anything else is simply "not a contact" (and is never cached).
+  if (!UUID_RE.test(userA) || !UUID_RE.test(userB)) return false;
   const key = [userA, userB].sort().join(':');
   const cached = contactCache.get(key);
   if (cached && cached.expiresAt > Date.now()) return cached.approved;
@@ -55,8 +62,24 @@ export async function areApprovedContacts(userA: string, userB: string): Promise
     .limit(1)
     .maybeSingle();
   const approved = !error && !!data;
-  contactCache.set(key, { approved, expiresAt: Date.now() + CACHE_TTL_MS });
+  // Only a confirmed "yes" is cached. A "no" (or a database error) used to be
+  // cached too, so someone whose request had JUST been accepted — or who hit a
+  // momentary database hiccup — kept getting "not a contact" for up to 30 s.
+  if (approved) {
+    if (contactCache.size > 5000) {
+      const now = Date.now();
+      for (const [k, v] of contactCache) if (v.expiresAt <= now) contactCache.delete(k);
+    }
+    contactCache.set(key, { approved, expiresAt: Date.now() + CACHE_TTL_MS });
+  }
   return approved;
+}
+
+// Forget the cached answer for a pair — called when the relay is told their
+// contact request changed (accepted / declined / re-sent), so a stale "yes"
+// doesn't outlive a decline.
+export function invalidateContactCache(userA: string, userB: string): void {
+  contactCache.delete([userA, userB].sort().join(':'));
 }
 
 // Unlike contactCache above, this cache has no TTL — a username change
@@ -105,6 +128,10 @@ export async function isBlocked(blockerId: string, blockedId: string): Promise<b
     .eq('blocked_id', blockedId)
     .limit(1)
     .maybeSingle();
-  if (error) return false;
+  // Fail closed: if the block list can't be read, treat the sender as blocked
+  // rather than let a blocked person's message through (areApprovedContacts
+  // already refuses on a database error, so nothing legitimate works then
+  // either).
+  if (error) return true;
   return !!data;
 }

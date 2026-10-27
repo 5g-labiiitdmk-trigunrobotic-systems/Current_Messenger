@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import { WebSocketServer, WebSocket } from 'ws';
 import type { ClientEvent, ServerEvent } from './protocol.js';
 import { relayState } from './state.js';
-import { verifyUserToken, areApprovedContacts, isBlocked, getUsername, logTransfer } from './supabaseAdmin.js';
+import { verifyUserToken, areApprovedContacts, invalidateContactCache, isBlocked, getUsername, logTransfer } from './supabaseAdmin.js';
 import { pingOfflineRecipient, pingIncomingCall, pingContactRequest, pingSessionRequest } from './pushPing.js';
 
 // FILE PURPOSE: The relay server itself — HTTP health/ICE endpoints, the
@@ -431,6 +431,7 @@ wss.on('connection', (socket) => {
         // Deliberately no approval check here: a contact request is how two
         // users *become* approved contacts, so requiring that would make
         // this permanently no-op.
+        invalidateContactCache(userId, event.to);
         getUsername(userId)
           .then((senderUsername) => pingContactRequest(event.to, senderUsername))
           .catch(() => {});
@@ -442,6 +443,7 @@ wss.on('connection', (socket) => {
         // Live nudge back to the original requester — accepting/declining
         // is also just a direct Supabase write from the client (see
         // contactStore.ts's respond()), invisible to the relay otherwise.
+        invalidateContactCache(userId, event.to);
         const requesterSocket = relayState.getSocket(event.to);
         if (requesterSocket) send(requesterSocket, { type: 'contact:refresh' });
         break;
