@@ -99,6 +99,57 @@ function broadcastPresence(userId: string, status: 'online' | 'offline') {
   }
 }
 
+// Shape checks for every ClientEvent, run BEFORE any handler touches the
+// event. JSON.parse happily returns null / numbers / objects missing fields,
+// and the handlers below dereference fields directly (event.type,
+// event.signal.kind, event.memberIds iteration, ...) — one malformed frame
+// from any client used to throw inside an async handler, which Node turns
+// into an unhandled rejection that kills the whole process (every user
+// disconnected until Render restarts it). These checks only require the
+// fields a handler actually reads, with the same types the real app sends
+// (see app/src/types/relay.ts), so valid traffic is never rejected.
+const isStr = (v: unknown): v is string => typeof v === 'string';
+const isOptStr = (v: unknown) => v === undefined || v === null || typeof v === 'string';
+const isOptObj = (v: unknown) => v === undefined || v === null || (typeof v === 'object' && !Array.isArray(v));
+
+function isValidClientEvent(e: any): boolean {
+  switch (e.type) {
+    case 'auth':
+      return isStr(e.token);
+    case 'message:send':
+      return isStr(e.tempId) && isStr(e.kind) && isOptStr(e.to) && isOptStr(e.groupId) && isOptObj(e.payload) && isOptObj(e.payloads) && isOptObj(e.meta);
+    case 'typing':
+      return isOptStr(e.to) && isOptStr(e.groupId);
+    case 'read':
+      return isOptStr(e.to) && isOptStr(e.groupId) && isStr(e.messageId);
+    case 'group:create':
+      return (
+        isStr(e.groupId) &&
+        isStr(e.name) &&
+        Array.isArray(e.memberIds) &&
+        e.memberIds.every(isStr) &&
+        (e.isBroadcast === undefined || e.isBroadcast === null || typeof e.isBroadcast === 'boolean')
+      );
+    case 'group:invite':
+      return isStr(e.groupId) && isStr(e.to);
+    case 'group:invite_respond':
+    case 'group:leave':
+      return isStr(e.groupId);
+    case 'call:signal':
+      return isStr(e.to) && isOptStr(e.groupId) && typeof e.signal === 'object' && e.signal !== null && !Array.isArray(e.signal);
+    case 'contact:request_sent':
+    case 'contact:request_responded':
+    case 'session:request':
+      return isStr(e.to);
+    case 'session:respond':
+      return isStr(e.peerId);
+    default:
+      // ping / pong / presence:set / unknown types: handlers either read
+      // nothing or only compare a value, so nothing can throw.
+      return true;
+  }
+}
+
 // Per-connection lifecycle: unauthenticated sockets get AUTH_TIMEOUT_MS to
 // send an 'auth' event before being dropped; once authenticated, every
 // other ClientEvent type is dispatched via the switch below.
@@ -112,12 +163,30 @@ wss.on('connection', (socket) => {
     }
   }, AUTH_TIMEOUT_MS);
 
-  socket.on('message', async (raw) => {
+  // ws emits 'error' on the socket for protocol-level problems (bad frames,
+  // oversized messages, resets). With no listener attached Node throws it as
+  // an uncaught exception and the whole process dies.
+  socket.on('error', (err) => {
+    console.warn('[relay] socket error:', err.message);
+  });
+
+  const onMessage = async (raw: unknown) => {
     let event: ClientEvent;
     try {
-      event = JSON.parse(raw.toString());
+      event = JSON.parse(String(raw));
     } catch {
       send(socket, { type: 'error', message: 'Malformed JSON' });
+      return;
+    }
+
+    // JSON.parse can return null, a number, a string, an array... — only a
+    // plain object with a string `type` is a candidate event.
+    if (typeof event !== 'object' || event === null || Array.isArray(event) || typeof (event as { type?: unknown }).type !== 'string') {
+      send(socket, { type: 'error', message: 'Invalid event' });
+      return;
+    }
+    if (!isValidClientEvent(event)) {
+      send(socket, { type: 'error', message: `Invalid ${event.type} event` });
       return;
     }
 
@@ -328,6 +397,15 @@ wss.on('connection', (socket) => {
       default:
         break;
     }
+  };
+
+  // Safety net: whatever a handler throws or rejects with is logged and
+  // dropped for this one frame — it must never become an unhandled
+  // rejection that takes the process (and every other user) down.
+  socket.on('message', (raw) => {
+    onMessage(raw).catch((err) => {
+      console.error('[relay] handler error:', err instanceof Error ? err.message : err);
+    });
   });
 
   socket.on('close', () => {
@@ -688,6 +766,17 @@ async function forwardToRecipients(userId: string, to: string | undefined, group
   // between approved contacts, same as the messages themselves.
   if (to && relayState.isOnline(to) && (await areApprovedContacts(userId, to))) sendFn(to);
 }
+
+// Last line of defence for anything the per-frame guards above miss (a bug
+// in a timer callback, a rejected promise nobody awaited). The relay holds
+// only ephemeral state, so staying up and logging beats a crash that drops
+// every connected user at once.
+process.on('uncaughtException', (err) => {
+  console.error('[relay] uncaughtException:', err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[relay] unhandledRejection:', reason);
+});
 
 server.listen(PORT, () => {
   // eslint-disable-next-line no-console
