@@ -18,8 +18,8 @@ what is still open). Times are IST.
 |---|---|
 | Google Play | Live in India, v1.0.1 (does **not** have the app fixes below) |
 | App Store | Build 7 in TestFlight, **not submitted**. Wait for build 8. |
-| Relay (Render) | Live: `https://current-messenger-relay.onrender.com`. Has fix 3. |
-| `main` branch | Fixes 3, 4, 5, 23/10, 11 merged. Nothing builds automatically. |
+| Relay (Render) | Live: `https://current-messenger-relay.onrender.com`. Has fix 3; fix 13 deploying. |
+| `main` branch | Fixes 3, 4, 5, 23/10, 11, 13 merged. Nothing builds automatically. |
 | Build 8 | Not made yet. Should include 4, 5, 11, 23/10, 22 and the rest of the app batch. |
 
 ---
@@ -39,7 +39,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 10 | Duplicate sockets / stale `onclose` in the relay client | app | `01e27fd` | In `main`, needs build 8 |
 | 23 | No dead-connection detection, no foreground reconnect, stale token on reconnect | app | `01e27fd` | In `main`, needs build 8 |
 | 11 | Messages stuck on "sending" forever when the relay is unreachable or the answer never arrives | app | `6b99d2d` | In `main`, needs build 8 |
-| 13 | Relay accepted frames up to 100 MiB and had no rate limits | relay | branch `fix/issue-13-limits` | Tested, waiting for merge (deploys on merge) |
+| 13 | Relay accepted frames up to 100 MiB and had no rate limits | relay | `7d2b8bd` | Merged to `main` 02:51; Render auto-deploys |
 
 ### Open (original 20)
 
@@ -157,7 +157,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Change:** frames over 64 MiB are refused and that socket is closed; a socket that has not logged in may send only 8 KB; per connection: 30 messages per 10 s, 150 MB of messages per 60 s, 300 other events per 10 s (excess is rejected with an error / `rate_limited`; 3x the event limit closes the connection). Pings and pongs are never limited.
 - **Tested (local relay, mock Supabase):** normal message delivered; a 27 MB message (largest single-chat video) delivered; 70 MB frame closes only that socket and the relay stays healthy; 20 KB pre-login frame closed; of 40 rapid messages exactly 30 go through and 10 get `rate_limited`; 500 pings all answered; 1000-event flood closes the connection; earlier regression and malformed-event suites still pass. Typecheck clean (relay and app).
 - **Limit to know:** in a group, a video is encrypted once per member inside one frame, so a maximum-size video (about 27 MB per member) now only fits in groups with up to two other members. Smaller or compressed videos are unaffected. Before this, bigger groups worked only because the cap was 100 MiB. Follow-up for the app batch: cap or compress group videos by member count.
-- **Shipped:** branch only; deploys to Render when merged to `main`.
+- **Shipped:** `7d2b8bd`, merged to `main`; Render auto-deploy started.
 
 ---
 
