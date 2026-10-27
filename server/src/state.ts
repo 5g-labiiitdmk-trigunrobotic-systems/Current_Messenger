@@ -239,6 +239,11 @@ class RelayState {
   // group:invite (see handleGroupInviteRequest in index.ts), instead of
   // being added directly the moment the group is created.
   createGroup(id: string, name: string, ownerId: string, isBroadcast = false): Group {
+    // Never replace a group that already exists: doing so wiped its member
+    // list and handed ownership to whoever sent the latest group:create with
+    // that id. The caller decides what to do about an existing group.
+    const existing = this.groups.get(id);
+    if (existing) return existing;
     const group: Group = {
       id,
       name,

@@ -148,8 +148,12 @@ function isValidClientEvent(e: any): boolean {
     case 'group:create':
       return (
         isStr(e.groupId) &&
+        e.groupId.length > 0 &&
+        e.groupId.length <= 128 &&
         isStr(e.name) &&
+        e.name.length <= 200 &&
         Array.isArray(e.memberIds) &&
+        e.memberIds.length <= 256 &&
         e.memberIds.every(isStr) &&
         (e.isBroadcast === undefined || e.isBroadcast === null || typeof e.isBroadcast === 'boolean')
       );
@@ -343,8 +347,19 @@ wss.on('connection', (socket) => {
         // Only the creator is an actual member right away — everyone else
         // they picked goes through the same invite-consent flow as
         // group:invite below, not a direct add.
+        const already = relayState.getGroup(event.groupId);
+        if (already && already.ownerId !== userId) {
+          // The id belongs to someone else's group — creating it again used
+          // to silently replace that group (members dropped, creator becomes
+          // owner). Refuse instead.
+          send(socket, { type: 'error', message: 'Group id already in use' });
+          break;
+        }
         const group = relayState.createGroup(event.groupId, event.name, userId, event.isBroadcast);
         send(socket, { type: 'group:created', groupId: group.id, name: group.name, memberIds: [...group.memberIds], isBroadcast: group.isBroadcast });
+        // Same owner re-sending create for a group that already exists (a
+        // retry): just re-confirm it, don't re-send every invite.
+        if (already) break;
         for (const memberId of event.memberIds) {
           if (memberId === userId) continue;
           await handleGroupInviteRequest(userId, group.id, memberId);

@@ -41,6 +41,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 11 | Messages stuck on "sending" forever when the relay is unreachable or the answer never arrives | app | `6b99d2d` | In `main`, needs build 8 |
 | 13 | Relay accepted frames up to 100 MiB and had no rate limits | relay | `7d2b8bd` | Merged to `main` 02:51; Render auto-deploys |
 | 6 | Filter injection in `areApprovedContacts`: a crafted `to` value bypassed the contact check | relay | `5c989d9` | Merged to `main` 03:37 with 14; Render auto-deploys |
+| 15 | `group:create` with an existing group id silently replaced that group (members dropped, creator became owner) | relay | branch `fix/issue-15-group-overwrite` | Tested, waiting for merge |
 | 14 | Contact cache kept "not a contact" for 30 s after approval or a database hiccup; `isBlocked` failed open | relay | branch `fix/issue-14-contact-cache` | Merged to `main` 03:37 (includes 6); Render auto-deploys |
 
 ### Open (original 20)
@@ -53,7 +54,6 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 8 | Users can set their own `email_verified` / `phone_verified` | H | DB |
 | 9 | Public `/ice-servers` exposes TURN credentials | H | relay |
 | 12 | Presence visibility setting is cosmetic | H | app + relay |
-| 15 | A group id can be overwritten | M | relay |
 | 16 | Groups lost when the relay restarts | M | relay |
 | 17 | Transfer log kept forever | M | DB |
 | 18 | Docs and encryption PDF say "libsodium"; the app uses TweetNaCl | M | docs |
@@ -174,6 +174,14 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Tested:** mock database with switchable states: old code fails 3 checks (stale "no" after approval, error remembered, error treated as not blocked), new code passes 9/9; repeated checks still served from cache (0 database hits); relay regression (UUID ids) and the size/rate-limit suite still pass. Typecheck clean.
 - **Limit:** a contact that was removed or declined from another device can still pass for up to 30 s unless the relay was told (only the live nudge events clear it).
 - **Shipped:** merged to `main` together with fix 6.
+
+### 2026-10-28: Issue 15 — group id could be overwritten
+- **Root cause:** `group:create` replaced any existing group with the same id. Anyone who knew or guessed a group id (the app makes them client-side) could send a create for it: the real members were dropped from the relay's roster and the sender became owner.
+- **Files:** `server/src/state.ts`, `server/src/index.ts`.
+- **Change:** creating an id that belongs to someone else's group is refused with an error and the group is untouched; the owner re-sending create (a retry) just re-confirms the group without resetting it or re-sending invites; `createGroup` itself never replaces an existing group; input limits (id up to 128 characters, name 200, 256 invitees).
+- **Tested (local relay, old vs new):** old relay: after the hijack the real owner can no longer message the group (5 checks fail); new relay passes 7/7 (refused, original group works, attacker not a member, owner retry safe, long id rejected); regression and size/rate-limit suites pass; typecheck clean.
+- **Limit:** group membership still lives only in relay memory and is lost on restart (issue 16).
+- **Shipped:** branch only.
 
 ---
 
