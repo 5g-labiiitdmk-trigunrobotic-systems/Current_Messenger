@@ -81,7 +81,30 @@ const server = http.createServer((req, res) => {
   res.end();
 });
 
-const wss = new WebSocketServer({ server });
+// Size and rate limits. The relay buffers each incoming frame in memory
+// (Render free tier = 512 MB), and ws's default cap is 100 MiB per frame, so a
+// handful of oversized frames could take the whole relay down for everyone.
+//  - MAX_FRAME_BYTES: the largest legitimate frame is a max-size video (20 MB
+//    file = ~27 MB base64); in a group the same video is encrypted once per
+//    member inside ONE frame, so 64 MiB covers it for groups of up to two
+//    other members. Anything bigger makes ws close the socket (code 1009).
+//  - Unauthenticated sockets may only send a tiny auth frame.
+//  - Per-connection sliding windows cap event rate, message rate and bytes.
+const MAX_FRAME_BYTES = 64 * 1024 * 1024;
+const MAX_UNAUTH_FRAME_BYTES = 8 * 1024;
+const RATE_WINDOW_MS = 10_000;
+const MAX_EVENTS_PER_WINDOW = 300; // everything except ping/pong (call ICE bursts are the heaviest legitimate traffic)
+const MAX_SENDS_PER_WINDOW = 30; // message:send
+const BYTE_WINDOW_MS = 60_000;
+const MAX_SEND_BYTES_PER_BYTE_WINDOW = 150 * 1024 * 1024;
+const ABUSE_CLOSE_FACTOR = 3; // this many times over the event limit => drop the connection
+
+// Drops timestamps older than the window, then reports whether another entry fits.
+function pruneWindow(stamps: number[], now: number, windowMs: number) {
+  while (stamps.length && now - stamps[0] > windowMs) stamps.shift();
+}
+
+const wss = new WebSocketServer({ server, maxPayload: MAX_FRAME_BYTES });
 
 // The one place every outgoing ServerEvent is actually serialized and
 // written to a socket — guards against sending to an already-closed one.
@@ -156,6 +179,10 @@ function isValidClientEvent(e: any): boolean {
 wss.on('connection', (socket) => {
   let userId: string | null = null;
 
+  const eventStamps: number[] = [];
+  const sendStamps: number[] = [];
+  const sendBytes: { at: number; bytes: number }[] = [];
+
   const authTimer = setTimeout(() => {
     if (!userId) {
       send(socket, { type: 'auth:error', message: 'Auth timeout' });
@@ -171,6 +198,12 @@ wss.on('connection', (socket) => {
   });
 
   const onMessage = async (raw: unknown) => {
+    const rawBytes = (raw as { length?: number }).length ?? 0;
+    // Before login only a small auth frame is acceptable.
+    if (!userId && rawBytes > MAX_UNAUTH_FRAME_BYTES) {
+      socket.close(1009, 'Frame too large');
+      return;
+    }
     let event: ClientEvent;
     try {
       event = JSON.parse(String(raw));
@@ -193,6 +226,33 @@ wss.on('connection', (socket) => {
     if (event.type === 'ping') {
       send(socket, { type: 'pong' });
       return;
+    }
+
+    // Rate limits (ping/pong above are exempt so heartbeats always work).
+    if (event.type !== 'pong' && event.type !== 'auth') {
+      const now = Date.now();
+      pruneWindow(eventStamps, now, RATE_WINDOW_MS);
+      eventStamps.push(now);
+      if (eventStamps.length > MAX_EVENTS_PER_WINDOW * ABUSE_CLOSE_FACTOR) {
+        socket.close(1008, 'Rate limit exceeded');
+        return;
+      }
+      if (eventStamps.length > MAX_EVENTS_PER_WINDOW) {
+        if (event.type === 'message:send') send(socket, { type: 'message:failed', tempId: event.tempId, reason: 'rate_limited' });
+        else send(socket, { type: 'error', message: 'Rate limit exceeded' });
+        return;
+      }
+      if (event.type === 'message:send') {
+        pruneWindow(sendStamps, now, RATE_WINDOW_MS);
+        while (sendBytes.length && now - sendBytes[0].at > BYTE_WINDOW_MS) sendBytes.shift();
+        const bytesInWindow = sendBytes.reduce((n, b) => n + b.bytes, 0);
+        if (sendStamps.length >= MAX_SENDS_PER_WINDOW || bytesInWindow + rawBytes > MAX_SEND_BYTES_PER_BYTE_WINDOW) {
+          send(socket, { type: 'message:failed', tempId: event.tempId, reason: 'rate_limited' });
+          return;
+        }
+        sendStamps.push(now);
+        sendBytes.push({ at: now, bytes: rawBytes });
+      }
     }
 
     if (event.type === 'pong') {

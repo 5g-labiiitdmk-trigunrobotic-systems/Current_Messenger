@@ -119,7 +119,7 @@ export type ServerEvent =
   | { type: 'auth:ok'; userId: string }
   | { type: 'auth:error'; message: string }
   | { type: 'message:sent'; tempId: string; messageId: string; sentAt: string }
-  | { type: 'message:failed'; tempId: string; reason: 'recipient_offline' | 'not_contact' | 'blocked' | 'not_group_member' | 'broadcast_read_only' | 'unauthenticated' | 'session_not_approved' }
+  | { type: 'message:failed'; tempId: string; reason: 'recipient_offline' | 'not_contact' | 'blocked' | 'not_group_member' | 'broadcast_read_only' | 'unauthenticated' | 'session_not_approved' | 'rate_limited' }
   | { type: 'message:receive'; messageId: string; from: string; groupId?: string; kind: MessageKind; payload: EncryptedPayload; meta?: Record<string, unknown>; sentAt: string }
   | { type: 'typing'; from: string; groupId?: string; isTyping: boolean }
   | { type: 'read'; from: string; groupId?: string; messageId: string }
