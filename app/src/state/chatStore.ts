@@ -3,7 +3,7 @@ import { relayClient } from '../lib/relayClient';
 import { decryptPayload, type KeyPairB64 } from '../lib/crypto';
 import { getOrCreateDeviceKeyPair, fetchActivePublicKeysWithRetry, encryptForUser } from '../lib/keystore';
 import { loadAllThreads, loadPinned, saveMessage, renameMessageId, setPinned, deleteThreadLocal } from '../lib/localDb';
-import type { MessageKind, ServerEvent, EncryptedPayload } from '../types/relay';
+import type { ClientEvent, MessageKind, ServerEvent, EncryptedPayload } from '../types/relay';
 import { useAuthStore } from './authStore';
 import { useGroupStore } from './groupStore';
 import { appAlert } from './alertStore';
@@ -130,6 +130,19 @@ async function hydrateFromLocal(userId: string) {
     // The account may have changed while the (async) load was running; never
     // put one account's history into another account's store.
     if (useAuthStore.getState().session?.user.id !== userId) return;
+    // Anything still 'sending' in storage was interrupted (app closed or
+    // killed before the relay answered) and can never be acknowledged now —
+    // show it as failed instead of "sending" forever.
+    const interrupted: { key: string; msg: ChatMessage }[] = [];
+    for (const [key, list] of Object.entries(localThreads)) {
+      localThreads[key] = list.map((m) => {
+        if (m.status !== 'sending' || pendingSends.has(m.tempId)) return m;
+        const failed = { ...m, status: 'failed' as const, failReason: 'interrupted' };
+        interrupted.push({ key, msg: failed });
+        return failed;
+      });
+    }
+    interrupted.forEach(({ key, msg }) => saveMessage(userId, key, msg).catch(() => {}));
     useChatStore.setState((s) => {
       const threads: Record<string, ChatMessage[]> = { ...localThreads };
       for (const [key, list] of Object.entries(s.threads)) {
@@ -141,6 +154,61 @@ async function hydrateFromLocal(userId: string) {
   } catch (err: any) {
     console.error('[chatStore] failed to load local chat history:', err);
     appAlert('Local history unavailable', "Your saved messages on this device couldn't be loaded. New messages will still be sent and received normally.");
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Delivery tracking for outgoing messages.
+//
+// A message is shown as 'sending' until the relay answers with message:sent or
+// message:failed. Nothing used to cover the cases where no answer ever comes
+// (connection dropped right after the send, the relay restarted, a slow network
+// call never finished, the app was closed mid-send), so such messages sat on
+// "sending" forever. Every outgoing message is now tracked: if it is still
+// 'sending' when the connection is lost, or after SEND_ACK_TIMEOUT_MS, it is
+// marked failed. A late genuine ack still wins: message:sent overwrites 'failed'.
+// ---------------------------------------------------------------------------
+const SEND_ACK_TIMEOUT_MS = 30_000;
+const pendingSends = new Map<string, { timer: ReturnType<typeof setTimeout>; userId: string }>();
+
+function trackSend(userId: string, tempId: string) {
+  settleSend(tempId);
+  const timer = setTimeout(() => {
+    pendingSends.delete(tempId);
+    failIfStillSending(userId, tempId, 'timeout');
+  }, SEND_ACK_TIMEOUT_MS);
+  pendingSends.set(tempId, { timer, userId });
+}
+
+function settleSend(tempId: string) {
+  const entry = pendingSends.get(tempId);
+  if (entry) clearTimeout(entry.timer);
+  pendingSends.delete(tempId);
+}
+
+// Marks the message failed ONLY if it is still 'sending' (never downgrades a
+// message that has since been acknowledged).
+function failIfStillSending(userId: string, tempId: string, reason: string) {
+  let updatedKey: string | null = null;
+  let updatedMsg: ChatMessage | null = null;
+  useChatStore.setState((s) => ({
+    threads: mapThreads(s.threads, (key, list) =>
+      list.map((m) => {
+        if (m.tempId !== tempId || m.status !== 'sending') return m;
+        updatedKey = key;
+        updatedMsg = { ...m, status: 'failed' as const, failReason: reason };
+        return updatedMsg;
+      })
+    ),
+  }));
+  if (updatedKey && updatedMsg) saveMessage(userId, updatedKey, updatedMsg).catch(() => {});
+}
+
+function failAllPendingSends(reason: string) {
+  for (const [tempId, { timer, userId }] of [...pendingSends]) {
+    clearTimeout(timer);
+    pendingSends.delete(tempId);
+    failIfStillSending(userId, tempId, reason);
   }
 }
 
@@ -173,11 +241,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
       if (userId) hydrateFromLocal(userId);
     });
 
+    // The relay has no queue: a message that was in flight when the connection
+    // dropped is gone, and its acknowledgement will never arrive.
+    relayClient.onStatus((status) => {
+      if (status === 'reconnecting' || status === 'error' || status === 'idle') failAllPendingSends('connection_lost');
+    });
+
     relayClient.on(async (event: ServerEvent) => {
       const me = useAuthStore.getState().session?.user.id;
       if (!me) return;
 
       if (event.type === 'message:sent') {
+        settleSend(event.tempId);
         let updatedKey: string | null = null;
         let updatedMsg: ChatMessage | null = null;
         set((s) => ({
@@ -198,6 +273,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
 
       if (event.type === 'message:failed') {
+        settleSend(event.tempId);
         let updatedKey: string | null = null;
         let updatedMsg: ChatMessage | null = null;
         set((s) => ({
@@ -389,11 +465,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
     };
     set((s) => ({ threads: { ...s.threads, [key]: [...(s.threads[key] ?? []), optimistic] } }));
     saveMessage(me, key, optimistic).catch(() => {});
+    trackSend(me, tempId);
 
     const markFailed = (failReason: string) => {
+      settleSend(tempId);
       const failed = { ...optimistic, status: 'failed' as const, failReason };
       set((s) => ({ threads: { ...s.threads, [key]: (s.threads[key] ?? []).map((m) => (m.tempId === tempId ? failed : m)) } }));
       saveMessage(me, key, failed).catch(() => {});
+    };
+    // relayClient.send() reports false when the connection isn't ready; the
+    // message would otherwise be silently dropped and sit on "sending".
+    const sendOrFail = (event: ClientEvent) => {
+      if (!relayClient.send(event)) markFailed('not_connected');
     };
 
     // getOrCreateDeviceKeyPair is a local SecureStore call, not a network
@@ -421,7 +504,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         markFailed('no_key');
         return;
       }
-      relayClient.send({
+      sendOrFail({
         type: 'message:send',
         tempId,
         to: targetId,
@@ -446,7 +529,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         markFailed('no_key');
         return;
       }
-      relayClient.send({
+      sendOrFail({
         type: 'message:send',
         tempId,
         groupId: targetId,
@@ -480,11 +563,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
     };
     set((s) => ({ threads: { ...s.threads, [key]: [...(s.threads[key] ?? []), optimistic] } }));
     saveMessage(me, key, optimistic).catch(() => {});
+    trackSend(me, tempId);
 
     const markFailed = (failReason: string) => {
+      settleSend(tempId);
       const failed = { ...optimistic, status: 'failed' as const, failReason };
       set((s) => ({ threads: { ...s.threads, [key]: (s.threads[key] ?? []).map((m) => (m.tempId === tempId ? failed : m)) } }));
       saveMessage(me, key, failed).catch(() => {});
+    };
+    // relayClient.send() reports false when the connection isn't ready; the
+    // message would otherwise be silently dropped and sit on "sending".
+    const sendOrFail = (event: ClientEvent) => {
+      if (!relayClient.send(event)) markFailed('not_connected');
     };
 
     // See the matching comment in sendText — a local SecureStore failure
@@ -518,7 +608,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         markFailed('no_key');
         return;
       }
-      relayClient.send({ type: 'message:send', tempId, groupId: targetId, kind, payloads, meta: { replyToId } });
+      sendOrFail({ type: 'message:send', tempId, groupId: targetId, kind, payloads, meta: { replyToId } });
       return;
     }
 
@@ -527,7 +617,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       markFailed('no_key');
       return;
     }
-    relayClient.send({ type: 'message:send', tempId, to: targetId, kind, payload, meta: { replyToId } });
+    sendOrFail({ type: 'message:send', tempId, to: targetId, kind, payload, meta: { replyToId } });
   },
 
   // Re-sends an existing message's content to a different target, tagged

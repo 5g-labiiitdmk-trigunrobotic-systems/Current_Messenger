@@ -307,6 +307,9 @@ class RelayClient {
   // socket — callers that need delivery feedback (e.g. marking a message
   // failed instead of leaving it on "sending" forever) can check it.
   send(event: ClientEvent): boolean {
+    // 'connected' means authenticated (auth:ok received). An event sent
+    // earlier would just be rejected by the relay ("Not authenticated").
+    if (this._status !== 'connected') return false;
     return this.rawSend(event);
   }
 

@@ -12,15 +12,15 @@ what is still open). Times are IST.
 
 ---
 
-## 1. Where things stand (updated 2026-10-28 02:25)
+## 1. Where things stand (updated 2026-10-28)
 
 | Area | State |
 |---|---|
 | Google Play | Live in India, v1.0.1 (does **not** have the app fixes below) |
 | App Store | Build 7 in TestFlight, **not submitted**. Wait for build 8. |
 | Relay (Render) | Live: `https://current-messenger-relay.onrender.com`. Has fix 3. |
-| `main` branch | Fixes 3, 4, 5, 23/10 merged. Nothing builds automatically. |
-| Build 8 | Not made yet. Should include 4, 5, 23/10, 22 and the rest of the app batch. |
+| `main` branch | Fixes 3, 4, 5, 23/10, 11 merged. Nothing builds automatically. |
+| Build 8 | Not made yet. Should include 4, 5, 11, 23/10, 22 and the rest of the app batch. |
 
 ---
 
@@ -38,6 +38,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 22 | Sign-out did not reset other stores or clear the push token (fixed together with 5) | app | `e0beba6` | In `main`, needs build 8 |
 | 10 | Duplicate sockets / stale `onclose` in the relay client | app | `01e27fd` | In `main`, needs build 8 |
 | 23 | No dead-connection detection, no foreground reconnect, stale token on reconnect | app | `01e27fd` | In `main`, needs build 8 |
+| 11 | Messages stuck on "sending" forever when the relay is unreachable or the answer never arrives | app | see log | In `main`, needs build 8 |
 
 ### Open (original 20)
 
@@ -49,7 +50,6 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 7 | Edit / delete / poll vote not checked against the original sender | H | app |
 | 8 | Users can set their own `email_verified` / `phone_verified` | H | DB |
 | 9 | Public `/ice-servers` exposes TURN credentials | H | relay |
-| 11 | Messages stuck on "sending" when the relay is unreachable | H | app (**next**) |
 | 12 | Presence visibility setting is cosmetic | H | app + relay |
 | 13 | No message size limit or rate limits | M | relay |
 | 14 | Contact cache stale for 30s; `isBlocked` fails open | M | relay |
@@ -86,7 +86,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 ### Suggested order
 1. **Relay, no app release:** 13 (small, deploys alone), then 6, 9, 14, 15.
 2. **Database:** 1, 8, then 2 last (it breaks login-by-username until replaced, and the live Android app still reads `users` directly).
-3. **App (build 8):** 11, then 26, 21, 24, 25, 27, and the medium items.
+3. **App (build 8):** 26, 21, 24, 25, 27, and the medium items.
 
 ---
 
@@ -144,6 +144,13 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 ### 2026-10-28 02:25: Work log created
 - This file. Appended to after every fix from here on.
 
+### 2026-10-28: Issue 11 — messages stuck on "sending"
+- **Root cause:** a message stays "sending" until the relay answers. Nothing handled the cases where no answer ever comes: send attempted before login finished (the relay rejected it), connection dropped right after the send, relay restarted, app closed mid-send. The relay has no queue, so such messages were lost and the answer never came.
+- **Files:** `app/src/state/chatStore.ts`, `app/src/lib/relayClient.ts`.
+- **Change:** `send()` now refuses (returns false) unless the connection is logged in, and the chat code marks the message failed at once (`not_connected`). Every outgoing message is tracked: failed if the connection is lost (`connection_lost`) or no answer within 30 s (`timeout`). Messages found as "sending" in local storage at start-up become failed (`interrupted`). A late real "sent" answer still upgrades a failed message to sent.
+- **Tested:** 14 checks on the real store code: old code fails 7, new code passes all. Relay client suite passes (including send() false when not connected / true when connected). Typecheck clean.
+- **Limits:** a failed message shows only a red "Failed" with no retry button and no reason (candidate follow-up, issue 41). Reactions, deletes and poll votes are still fire-and-forget. Possible duplicate: if the 30 s timeout fires and the user re-sends while the first one actually arrived late, the recipient sees two (issue 28 covers de-duplication).
+
 ---
 
 ## 5. Real-phone checks before releasing build 8
@@ -157,3 +164,4 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 7. Record a voice note, then place a voice call: the sound is normal.
 8. Create a group of three, send a message, leave it.
 9. Reset-password link on a fresh install.
+10. Airplane mode on, send a message: it shows Failed within a second, not "sending".
