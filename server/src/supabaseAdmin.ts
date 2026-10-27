@@ -34,6 +34,7 @@ export async function verifyUserToken(token: string): Promise<string | null> {
 // Short-lived cache so rapid-fire events (typing, read receipts) don't hammer
 // Postgres with a lookup per keystroke. Message sends still get a fresh-enough
 // answer within 30s of an approval/decline, which is fine for this use case.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const contactCache = new Map<string, { approved: boolean; expiresAt: number }>();
 const CACHE_TTL_MS = 30_000;
 
@@ -41,6 +42,12 @@ const CACHE_TTL_MS = 30_000;
 // true only if the two users have an approved contact_requests row in
 // either direction. Cached per unordered pair (see contactCache above).
 export async function areApprovedContacts(userA: string, userB: string): Promise<boolean> {
+  // Both ids end up inside a PostgREST filter string below. `userB` is often
+  // client-supplied (the `to` of an event), and a crafted value such as
+  // "x),and(sender_id.neq.0,receiver_id.neq.0" would rewrite the filter so any
+  // approved row matches — i.e. bypass the contact check. Real ids are always
+  // UUIDs, so anything else is simply "not a contact" (and is never cached).
+  if (!UUID_RE.test(userA) || !UUID_RE.test(userB)) return false;
   const key = [userA, userB].sort().join(':');
   const cached = contactCache.get(key);
   if (cached && cached.expiresAt > Date.now()) return cached.approved;

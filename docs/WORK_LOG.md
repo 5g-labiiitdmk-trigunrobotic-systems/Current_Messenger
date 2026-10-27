@@ -40,6 +40,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 23 | No dead-connection detection, no foreground reconnect, stale token on reconnect | app | `01e27fd` | In `main`, needs build 8 |
 | 11 | Messages stuck on "sending" forever when the relay is unreachable or the answer never arrives | app | `6b99d2d` | In `main`, needs build 8 |
 | 13 | Relay accepted frames up to 100 MiB and had no rate limits | relay | `7d2b8bd` | Merged to `main` 02:51; Render auto-deploys |
+| 6 | Filter injection in `areApprovedContacts`: a crafted `to` value bypassed the contact check | relay | branch `fix/issue-6-filter-injection` | Tested, waiting for merge (deploys on merge) |
 
 ### Open (original 20)
 
@@ -47,7 +48,6 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 |---|---|---|---|
 | 1 | `contact_requests` RLS lets a user approve their own request | C | DB |
 | 2 | `users` table readable by everyone (login-by-username, signup check, contact search, QR depend on it) | C | DB + app |
-| 6 | Filter injection in `areApprovedContacts` | H | relay |
 | 7 | Edit / delete / poll vote not checked against the original sender | H | app |
 | 8 | Users can set their own `email_verified` / `phone_verified` | H | DB |
 | 9 | Public `/ice-servers` exposes TURN credentials | H | relay |
@@ -84,7 +84,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 40 | No calls to a closed app on iPhone (no CallKit / push-to-talk) | — | product limit |
 
 ### Suggested order
-1. **Relay, no app release:** 6, 9, 14, 15.
+1. **Relay, no app release:** 9, 14, 15.
 2. **Database:** 1, 8, then 2 last (it breaks login-by-username until replaced, and the live Android app still reads `users` directly).
 3. **App (build 8):** 26, 21, 24, 25, 27, and the medium items.
 
@@ -158,6 +158,14 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Tested (local relay, mock Supabase):** normal message delivered; a 27 MB message (largest single-chat video) delivered; 70 MB frame closes only that socket and the relay stays healthy; 20 KB pre-login frame closed; of 40 rapid messages exactly 30 go through and 10 get `rate_limited`; 500 pings all answered; 1000-event flood closes the connection; earlier regression and malformed-event suites still pass. Typecheck clean (relay and app).
 - **Limit to know:** in a group, a video is encrypted once per member inside one frame, so a maximum-size video (about 27 MB per member) now only fits in groups with up to two other members. Smaller or compressed videos are unaffected. Before this, bigger groups worked only because the cap was 100 MiB. Follow-up for the app batch: cap or compress group videos by member count.
 - **Shipped:** `7d2b8bd`, merged to `main`; Render auto-deploy started.
+
+### 2026-10-28: Issue 6 — filter injection in the contact check
+- **Root cause:** `areApprovedContacts` built its database filter by pasting both user ids into a string. The second id is the `to` field of the client's event and was only checked to be "a string". A value like `x),and(sender_id.neq.0,receiver_id.neq.0` rewrote the filter so any approved contact row matched, so a logged-in user could pass the "are these two approved contacts" check for people they have no contact with (messages, typing, calls, group invites all use this check).
+- **File:** `server/src/supabaseAdmin.ts`.
+- **Change:** both ids must be real UUIDs (what Supabase user ids always are) or the answer is "not contacts"; such values are never cached.
+- **Tested:** against a mock database that evaluates the filter like PostgREST: old code answers "approved" for a stranger with two crafted values (2 fails), new code answers false for both; real pairs (either order, upper or lower case) still true; relay regression suite re-run with UUID ids, 26/26 pass. Typecheck clean.
+- **Not covered:** `isBlocked` already uses safe parameters but treats a database error as "not blocked" (issue 14).
+- **Shipped:** branch only; deploys on merge to `main`.
 
 ---
 
