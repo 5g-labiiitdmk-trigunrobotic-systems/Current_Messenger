@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import { WebSocketServer, WebSocket } from 'ws';
 import type { ClientEvent, ServerEvent } from './protocol.js';
 import { relayState } from './state.js';
-import { verifyUserToken, areApprovedContacts, invalidateContactCache, isBlocked, getUsername, logTransfer } from './supabaseAdmin.js';
+import { verifyUserToken, areApprovedContacts, invalidateContactCache, hasContactRequest, isBlocked, getUsername, logTransfer } from './supabaseAdmin.js';
 import { pingOfflineRecipient, pingIncomingCall, pingContactRequest, pingSessionRequest } from './pushPing.js';
 
 // FILE PURPOSE: The relay server itself — HTTP health/ICE endpoints, the
@@ -442,11 +442,15 @@ wss.on('connection', (socket) => {
       }
       case 'contact:request_sent': {
         // The actual contact_requests row was already written directly to
-        // Supabase by the client (see contactStore.ts's sendRequest).
-        // Deliberately no approval check here: a contact request is how two
-        // users *become* approved contacts, so requiring that would make
-        // this permanently no-op.
+        // Supabase by the client (see contactStore.ts's sendRequest), so the
+        // relay can — and now does — verify a real PENDING request from this
+        // user to `event.to` exists before notifying anyone. Without that,
+        // any logged-in user could trigger "new contact request" pushes and
+        // refresh nudges to any other user, with no request at all.
+        // (Deliberately no approval check: a request is how two users
+        // *become* approved contacts.)
         invalidateContactCache(userId, event.to);
+        if (!(await hasContactRequest(userId, event.to, ['pending']))) break;
         getUsername(userId)
           .then((senderUsername) => pingContactRequest(event.to, senderUsername))
           .catch(() => {});
@@ -458,7 +462,10 @@ wss.on('connection', (socket) => {
         // Live nudge back to the original requester — accepting/declining
         // is also just a direct Supabase write from the client (see
         // contactStore.ts's respond()), invisible to the relay otherwise.
+        // Only sent if the requester really has a request to this user that
+        // has been answered.
         invalidateContactCache(userId, event.to);
+        if (!(await hasContactRequest(event.to, userId, ['approved', 'declined']))) break;
         const requesterSocket = relayState.getSocket(event.to);
         if (requesterSocket) send(requesterSocket, { type: 'contact:refresh' });
         break;

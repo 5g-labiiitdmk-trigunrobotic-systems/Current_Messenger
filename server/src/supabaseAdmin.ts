@@ -82,6 +82,24 @@ export function invalidateContactCache(userA: string, userB: string): void {
   contactCache.delete([userA, userB].sort().join(':'));
 }
 
+// True if a contact_requests row exists from `senderId` to `receiverId` with
+// one of the given statuses. Used to check a client's "I just sent / answered a
+// request" notification against the real database row before the relay acts on
+// it (push notification, live refresh nudge). Fails closed: any error, or a
+// non-UUID id, means "no such request".
+export async function hasContactRequest(senderId: string, receiverId: string, statuses: ('pending' | 'approved' | 'declined')[]): Promise<boolean> {
+  if (!UUID_RE.test(senderId) || !UUID_RE.test(receiverId)) return false;
+  const { data, error } = await supabaseAdmin
+    .from('contact_requests')
+    .select('id')
+    .eq('sender_id', senderId)
+    .eq('receiver_id', receiverId)
+    .in('status', statuses)
+    .limit(1)
+    .maybeSingle();
+  return !error && !!data;
+}
+
 // Unlike contactCache above, this cache has no TTL — a username change
 // won't be reflected here until the relay process restarts.
 const usernameCache = new Map<string, string>();

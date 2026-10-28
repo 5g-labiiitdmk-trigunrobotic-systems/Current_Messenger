@@ -57,7 +57,6 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 16 | Groups lost when the relay restarts | M | relay |
 | 17 | Transfer log kept forever | M | DB |
 | 18 | Docs and encryption PDF say "libsodium"; the app uses TweetNaCl | M | docs |
-| 20 | `contact:request_sent` pushes without a real request | L | relay |
 
 ### Open (found in the broader audit)
 
@@ -189,6 +188,14 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Tested (local relay, old vs new):** old relay fails 3 checks (stranger's hangup cancels the ring; callee signalling someone else cancels their own ring; a 1:1 hangup clears a group ring); new relay passes 7/7, including the normal cases (caller hangup, callee decline, accept, group hangup all still clear). Regression and size/rate-limit suites pass; typecheck clean.
 - **Limit:** one pending ring is remembered per person, so two simultaneous callers still overwrite each other (the app shows one ring at a time).
 - **Shipped:** merged to `main` (with 15).
+
+### 2026-10-28: Issue 20 — contact notifications without a real request
+- **Root cause:** when the app sends a contact request it writes the row to the database itself and then tells the relay "I sent one" so the relay can push-notify the other person. The relay never checked that a request really existed, so any logged-in user could trigger "new contact request" pushes and live refreshes to any other user (and fake "request answered" nudges).
+- **Files:** `server/src/supabaseAdmin.ts` (new `hasContactRequest`), `server/src/index.ts`.
+- **Change:** `contact:request_sent` is acted on only if a PENDING request from this user to that person exists; `contact:request_responded` only if that person has a request to this user that is approved or declined. Anything else is ignored silently. Fails closed on database errors. The contact cache for the pair is also cleared on both events. The existing per-recipient push cooldown is unchanged.
+- **Tested (local relay with a fake Expo push endpoint, old vs new):** old relay fails 6 of 8 checks (every fake request still pushes and nudges); new relay passes 8/8: a real request still notifies and pushes, no request = nothing, a third party cannot trigger it, a response nudge only after the request is answered. Regression and size/rate-limit suites pass; typecheck clean.
+- **Limit:** the app writes the row before sending the event, so there is no timing gap; if the row insert were ever slow to become visible the notification would be skipped (the recipient still sees the request on their next refresh).
+- **Shipped:** branch only.
 
 ---
 
