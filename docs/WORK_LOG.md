@@ -80,6 +80,8 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 38 | Test values left in phone-auth code | L | app |
 | 39 | Over-broad Android permissions; `ITSAppUsesNonExemptEncryption` not set | L | app config |
 | 40 | No calls to a closed app on iPhone (no CallKit / push-to-talk) | — | product limit |
+| 41 | A failed message shows only "Failed": no retry button, no reason | M | app (found while fixing 11) |
+| 42 | Notifications go to a phone where the account was signed in earlier (one push token per account; a stale token stays after sign-out in the live app; no per-device tokens) | H | app + DB + relay (found 2026-10-28, reported by Krishna) |
 
 ### Suggested order
 1. **Relay, no app release:** 9, 14, 15.
@@ -196,6 +198,11 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Tested (local relay with a fake Expo push endpoint, old vs new):** old relay fails 6 of 8 checks (every fake request still pushes and nudges); new relay passes 8/8: a real request still notifies and pushes, no request = nothing, a third party cannot trigger it, a response nudge only after the request is answered. Regression and size/rate-limit suites pass; typecheck clean.
 - **Limit:** the app writes the row before sending the event, so there is no timing gap; if the row insert were ever slow to become visible the notification would be skipped (the recipient still sees the request on their next refresh).
 - **Shipped:** merged to `main`.
+
+### 2026-10-28 08:45: New report — notification on a phone the account had left (issue 42, not fixed)
+- **Report:** an account that was signed in on Krishna's phone earlier is now signed in on another phone; texting it notifies both phones.
+- **Findings (code read only):** each account has ONE push token in `users.push_token`, the last device that registered wins; the relay sends one push to that token. The live Android app does not clear the token on sign-out (build 8 does, fix 22), so a phone that signed out can keep a token that is still on file, and a phone that is still signed in also shows its own in-app notification from the live connection. Not yet confirmed which of these happened on the two phones.
+- **Open:** answers needed (was the account signed OUT on the first phone, or just left signed in; which notification appeared on which phone). Candidate fixes: build 8 already covers the sign-out case; a proper fix is one token per device (new database table, app registers per device, relay sends to all of the account's devices and Expo drops dead tokens) and needs a build.
 
 ---
 
