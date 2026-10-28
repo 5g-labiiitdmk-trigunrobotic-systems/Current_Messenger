@@ -28,43 +28,84 @@ interface ExpoPushOptions {
  * stays quiet, since that's an expected, unremarkable state.
  */
 async function sendExpoPush(recipientId: string, opts: ExpoPushOptions): Promise<void> {
-  const { data, error } = await supabaseAdmin.from('users').select('push_token').eq('id', recipientId).maybeSingle();
-  if (error) {
-    // eslint-disable-next-line no-console
-    console.error('[push] push_token lookup failed for', recipientId, ':', error.message);
-    return;
-  }
-  if (!data?.push_token) return;
+  const tokens = await getPushTokens(recipientId);
+  if (tokens.length === 0) return;
 
   try {
     const res = await fetch(EXPO_PUSH_URL, {
       method: 'POST',
       headers: { 'content-type': 'application/json', accept: 'application/json' },
-      body: JSON.stringify({
-        to: data.push_token,
-        title: opts.title,
-        body: opts.body,
-        sound: opts.sound ?? null,
-        priority: 'high',
-        channelId: opts.channelId ?? 'default',
-        ...(opts.data ? { data: opts.data } : {}),
-      }),
+      // One message per device the account is signed in on.
+      body: JSON.stringify(
+        tokens.map((to) => ({
+          to,
+          title: opts.title,
+          body: opts.body,
+          sound: opts.sound ?? null,
+          priority: 'high',
+          channelId: opts.channelId ?? 'default',
+          ...(opts.data ? { data: opts.data } : {}),
+        }))
+      ),
     });
     // Expo's push API returns 200 even for a per-notification failure (e.g.
     // an invalid/unregistered token, or missing FCM credentials on this
     // Expo project) — the actual outcome is inside the response body's
-    // ticket, not the HTTP status.
+    // tickets (one per message, same order), not the HTTP status.
     const body: any = await res.json().catch(() => null);
-    const ticket = body?.data;
-    if (!res.ok || ticket?.status === 'error') {
+    const tickets: any[] = Array.isArray(body?.data) ? body.data : body?.data ? [body.data] : [];
+    if (!res.ok) {
       // eslint-disable-next-line no-console
-      console.error('[push] Expo push send failed:', res.status, JSON.stringify(ticket ?? body));
+      console.error('[push] Expo push send failed:', res.status, JSON.stringify(body));
     }
+    tickets.forEach((ticket, i) => {
+      if (ticket?.status !== 'error') return;
+      // eslint-disable-next-line no-console
+      console.error('[push] Expo push send failed:', res.status, JSON.stringify(ticket));
+      // A token Expo says is dead (app uninstalled / token revoked) will never
+      // work again — forget it so it isn't retried on every message.
+      if (ticket?.details?.error === 'DeviceNotRegistered' && tokens[i]) {
+        removePushToken(recipientId, tokens[i]).catch(() => {});
+      }
+    });
   } catch (e: any) {
     // eslint-disable-next-line no-console
     console.error('[push] Expo push request threw:', e?.message ?? e);
     // best-effort only — a failed push must never block or retry the thing that triggered it
   }
+}
+
+// Every device token to notify for this account: one row per device in
+// device_push_tokens, plus the legacy single `users.push_token` that apps
+// older than the per-device change still write (de-duplicated). If the new
+// table isn't there yet (migration 0008 not run) it quietly falls back to the
+// legacy token alone, so pushes keep working either way.
+const MAX_TOKENS_PER_USER = 10;
+let warnedMissingTokenTable = false;
+async function getPushTokens(userId: string): Promise<string[]> {
+  const [perDevice, legacy] = await Promise.all([
+    supabaseAdmin.from('device_push_tokens').select('token').eq('user_id', userId).limit(MAX_TOKENS_PER_USER),
+    supabaseAdmin.from('users').select('push_token').eq('id', userId).maybeSingle(),
+  ]);
+  if (perDevice.error && !warnedMissingTokenTable) {
+    warnedMissingTokenTable = true;
+    // eslint-disable-next-line no-console
+    console.warn('[push] device_push_tokens unavailable, using users.push_token only:', perDevice.error.message);
+  }
+  if (legacy.error) {
+    // eslint-disable-next-line no-console
+    console.error('[push] push_token lookup failed for', userId, ':', legacy.error.message);
+  }
+  const tokens = new Set<string>();
+  for (const row of perDevice.data ?? []) if (typeof row?.token === 'string' && row.token) tokens.add(row.token);
+  const old = legacy.data?.push_token;
+  if (typeof old === 'string' && old) tokens.add(old);
+  return [...tokens].slice(0, MAX_TOKENS_PER_USER);
+}
+
+async function removePushToken(userId: string, token: string): Promise<void> {
+  await supabaseAdmin.from('device_push_tokens').delete().eq('token', token).eq('user_id', userId);
+  await supabaseAdmin.from('users').update({ push_token: null }).eq('id', userId).eq('push_token', token);
 }
 
 // Small cooldown so a burst of retries to an offline user doesn't spam pushes.

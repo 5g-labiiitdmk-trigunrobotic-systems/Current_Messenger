@@ -81,7 +81,6 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 39 | Over-broad Android permissions; `ITSAppUsesNonExemptEncryption` not set | L | app config |
 | 40 | No calls to a closed app on iPhone (no CallKit / push-to-talk) | — | product limit |
 | 41 | A failed message shows only "Failed": no retry button, no reason | M | app (found while fixing 11) |
-| 42 | Notifications go to a phone where the account was signed in earlier (one push token per account; a stale token stays after sign-out in the live app; no per-device tokens) | H | app + DB + relay (found 2026-10-28, reported by Krishna) |
 
 ### Suggested order
 1. **Relay, no app release:** 9, 14, 15.
@@ -204,6 +203,18 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Findings (code read only):** each account has ONE push token in `users.push_token`, the last device that registered wins; the relay sends one push to that token. The live Android app does not clear the token on sign-out (build 8 does, fix 22), so a phone that signed out can keep a token that is still on file, and a phone that is still signed in also shows its own in-app notification from the live connection. Not yet confirmed which of these happened on the two phones.
 - **Open:** answers needed (was the account signed OUT on the first phone, or just left signed in; which notification appeared on which phone). Candidate fixes: build 8 already covers the sign-out case; a proper fix is one token per device (new database table, app registers per device, relay sends to all of the account's devices and Expo drops dead tokens) and needs a build.
 
+### 2026-10-28: Issue 42 — one push token per account (per-device tokens)
+- **Root cause:** each account had a single push token (`users.push_token`); the last phone to register won, and the live app never removed a phone's token when it signed out (and the sign-out in `main` cleared the column even if the account's other phone had since registered). So a phone the account had left could keep getting notifications, or a second phone would silently take them over.
+- **Files:** new `supabase/migrations/0008_device_push_tokens.sql`; `server/src/pushPing.ts`; `app/src/lib/push.ts`.
+- **Change:**
+  - Database: new `device_push_tokens` table, one row per physical install (the token is the key, so it moves to whoever signs in on that phone). Clients have no direct table access; they call `register_push_token` / `unregister_push_token`, which can only act on the caller's own account. Safe to run twice.
+  - Relay: a push goes to every token of the account (one request, de-duplicated with the old single token); tokens Expo reports as dead (`DeviceNotRegistered`) are deleted; if the new table does not exist yet it falls back to the old token alone, so nothing breaks before the migration is run.
+  - App: registers this device through the new function (falls back to the old column if the function is missing); on sign-out removes only THIS device's token, and clears the profile column only if it holds this device's token.
+- **Tested:** the migration on a real Postgres engine with roles (13/13: moves tokens between accounts, cannot remove or read others', no direct writes, junk and unauthenticated calls refused, safe twice); app registration code old vs new (old fails 5, new passes 7/7); relay old vs new (old fails the multi-device checks; new passes 7/7, including legacy-only accounts, de-duplication, dead-token pruning, and the missing-table fallback); regression and size/rate-limit suites pass; app and relay typecheck clean.
+- **Rollout order:** (1) run migration 0008 in the Supabase SQL editor; (2) merge, which deploys the relay (it works before and after the migration); (3) the app part reaches phones with build 8.
+- **Limits:** a phone running the live (old) app still writes only the single profile token and never removes it on sign-out, so that stale-token case stays until those phones update; a stale old-style token is also cleaned up when Expo reports it dead. Android push still needs the FCM credentials on the Expo project (existing note in docs/SETUP.md).
+- **Shipped:** branch only.
+
 ---
 
 ## 5. Real-phone checks before releasing build 8
@@ -217,4 +228,5 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 7. Record a voice note, then place a voice call: the sound is normal.
 8. Create a group of three, send a message, leave it.
 9. Reset-password link on a fresh install.
+11. Sign the same account in on two phones, close the app on one of them, send it a message from a third account: only the phone that is signed in notifies; sign out on one phone and confirm it stops notifying.
 10. Airplane mode on, send a message: it shows Failed within a second, not "sending".
