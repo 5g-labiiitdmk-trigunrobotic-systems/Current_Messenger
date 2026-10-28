@@ -18,8 +18,8 @@ what is still open). Times are IST.
 |---|---|
 | Google Play | Live in India, v1.0.1 (does **not** have the app fixes below) |
 | App Store | Build 7 in TestFlight, **not submitted**. Wait for build 8. |
-| Relay (Render) | Live: `https://current-messenger-relay.onrender.com`. Has fix 3; fixes 13, 6, 14, 15, 19 deploying. |
-| `main` branch | Fixes 3, 4, 5, 23/10, 11, 13, 6, 14, 15, 19 merged. Nothing builds automatically. |
+| Relay (Render) | Live: `https://current-messenger-relay.onrender.com`. Has fix 3; fixes 13, 6, 14, 15, 19, 20 deploying. |
+| `main` branch | Fixes 3, 4, 5, 23/10, 11, 13, 6, 14, 15, 19, 20 merged. Nothing builds automatically. |
 | Build 8 | Not made yet. Should include 4, 5, 11, 23/10, 22 and the rest of the app batch. |
 
 ---
@@ -195,7 +195,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Change:** `contact:request_sent` is acted on only if a PENDING request from this user to that person exists; `contact:request_responded` only if that person has a request to this user that is approved or declined. Anything else is ignored silently. Fails closed on database errors. The contact cache for the pair is also cleared on both events. The existing per-recipient push cooldown is unchanged.
 - **Tested (local relay with a fake Expo push endpoint, old vs new):** old relay fails 6 of 8 checks (every fake request still pushes and nudges); new relay passes 8/8: a real request still notifies and pushes, no request = nothing, a third party cannot trigger it, a response nudge only after the request is answered. Regression and size/rate-limit suites pass; typecheck clean.
 - **Limit:** the app writes the row before sending the event, so there is no timing gap; if the row insert were ever slow to become visible the notification would be skipped (the recipient still sees the request on their next refresh).
-- **Shipped:** branch only.
+- **Shipped:** merged to `main`.
 
 ---
 
