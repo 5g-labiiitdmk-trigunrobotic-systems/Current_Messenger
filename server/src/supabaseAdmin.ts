@@ -153,3 +153,47 @@ export async function isBlocked(blockerId: string, blockedId: string): Promise<b
   if (error) return true;
   return !!data;
 }
+
+// ---------------------------------------------------------------------------
+// Account deletion (App Store guideline 5.1.1(v): an app that lets people
+// create an account must let them delete it from inside the app).
+// ---------------------------------------------------------------------------
+
+// Everyone with an approved contact row to/from this user — read BEFORE the
+// account is deleted (the rows cascade away with it) so they can be told to
+// refresh their contact lists.
+export async function getApprovedContactIds(userId: string): Promise<string[]> {
+  if (!UUID_RE.test(userId)) return [];
+  const { data, error } = await supabaseAdmin
+    .from('contact_requests')
+    .select('sender_id, receiver_id')
+    .eq('status', 'approved')
+    .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`);
+  if (error || !data) return [];
+  return [...new Set(data.map((r: any) => (r.sender_id === userId ? r.receiver_id : r.sender_id)))];
+}
+
+/**
+ * Permanently deletes the account: the auth user, which cascades to the
+ * profile row, contact requests, blocks, published public keys, push tokens
+ * and the transfer log (every table references users with ON DELETE CASCADE);
+ * then, best effort, the user's avatar files. The relay stores no messages,
+ * so there is nothing else server-side. Never called with an id that did not
+ * come from a verified token.
+ */
+export async function deleteAccountData(userId: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!UUID_RE.test(userId)) return { ok: false, error: 'invalid user id' };
+  const { error } = await supabaseAdmin.auth.admin.deleteUser(userId);
+  if (error) return { ok: false, error: error.message };
+  // The account is gone; leftovers below must never turn that into a failure.
+  try {
+    const { data: files } = await supabaseAdmin.storage.from('avatars').list(userId, { limit: 100 });
+    if (files && files.length > 0) await supabaseAdmin.storage.from('avatars').remove(files.map((f) => `${userId}/${f.name}`));
+  } catch (e: any) {
+    // eslint-disable-next-line no-console
+    console.warn('[account-delete] avatar cleanup failed:', e?.message ?? e);
+  }
+  usernameCache.delete(userId);
+  for (const key of [...contactCache.keys()]) if (key.split(':').includes(userId)) contactCache.delete(key);
+  return { ok: true };
+}

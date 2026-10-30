@@ -3,7 +3,8 @@ import type { Session } from '@supabase/supabase-js';
 import { decode } from 'base64-arraybuffer';
 import { supabase } from '../lib/supabase';
 import type { UserRow } from '../types/database';
-import { getOrCreateDeviceKeyPair, publishPublicKey } from '../lib/keystore';
+import { getOrCreateDeviceKeyPair, publishPublicKey, deleteDeviceKeyPair } from '../lib/keystore';
+import { deleteLocalAccountData } from '../lib/localDb';
 import { relayClient } from '../lib/relayClient';
 import { registerForPushNotifications, clearPushToken } from '../lib/push';
 import { normalizeUsername, usernameFormatError, isUsernameTaken } from '../lib/username';
@@ -42,6 +43,11 @@ interface AuthState {
    * or a user-facing error message. */
   uploadAvatar: (base64: string, mime: string) => Promise<string | null>;
   signOut: () => Promise<void>;
+  /** Permanently deletes the signed-in account (server data, then everything
+   * on this phone) and signs out. Resolves to null on success, or a
+   * user-facing error message — nothing is removed locally unless the server
+   * confirmed the deletion. */
+  deleteAccount: () => Promise<string | null>;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -199,5 +205,39 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     // (chat, contacts, groups, presence, sessions, call log), which is what
     // clears the previous account's in-memory data — see chatStore.wire().
     set({ session: null, profile: null, needsProfileSetup: false });
+  },
+
+  deleteAccount: async () => {
+    const session = get().session;
+    if (!session) return 'You are not signed in.';
+    const wsUrl = process.env.EXPO_PUBLIC_RELAY_WS_URL;
+    if (!wsUrl) return 'Account deletion is unavailable right now. Please try again later.';
+    const userId = session.user.id;
+    // Use a CURRENT token (the stored one may be about to expire).
+    const fresh = (await supabase.auth.getSession()).data.session?.access_token ?? session.access_token;
+    // Stop this phone's pushes while the session is still valid; harmless if
+    // it fails (the server removes the account's tokens anyway).
+    await clearPushToken(userId);
+    let res: Response;
+    try {
+      res = await fetch(wsUrl.replace(/^ws/, 'http').replace(/\/$/, '') + '/account/delete', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${fresh}` },
+      });
+    } catch {
+      return 'Could not reach the server. Check your connection and try again.';
+    }
+    if (!res.ok) {
+      const body: any = await res.json().catch(() => null);
+      return body?.error ? `${body.error}. Please try again.` : 'Could not delete your account. Please try again.';
+    }
+    // The server confirmed: now remove everything this account left on the phone.
+    relayClient.disconnect();
+    await deleteLocalAccountData(userId);
+    await deleteDeviceKeyPair(userId);
+    // The user no longer exists server-side, so only end the LOCAL session.
+    await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+    set({ session: null, profile: null, needsProfileSetup: false });
+    return null;
   },
 }));

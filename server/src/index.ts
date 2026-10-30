@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import { WebSocketServer, WebSocket } from 'ws';
 import type { ClientEvent, ServerEvent } from './protocol.js';
 import { relayState } from './state.js';
-import { verifyUserToken, areApprovedContacts, invalidateContactCache, hasContactRequest, isBlocked, getUsername, logTransfer } from './supabaseAdmin.js';
+import { verifyUserToken, areApprovedContacts, invalidateContactCache, hasContactRequest, getApprovedContactIds, deleteAccountData, isBlocked, getUsername, logTransfer } from './supabaseAdmin.js';
 import { pingOfflineRecipient, pingIncomingCall, pingContactRequest, pingSessionRequest } from './pushPing.js';
 
 // FILE PURPOSE: The relay server itself — HTTP health/ICE endpoints, the
@@ -77,9 +77,70 @@ const server = http.createServer((req, res) => {
     res.end(JSON.stringify({ iceServers: getIceServers() }));
     return;
   }
+  if (req.method === 'POST' && (req.url ?? '').split('?')[0] === '/account/delete') {
+    handleAccountDelete(req, res).catch((e) => {
+      console.error('[account-delete] unexpected error:', e instanceof Error ? e.message : e);
+      if (!res.headersSent) res.writeHead(500, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: 'Could not delete account' }));
+    });
+    return;
+  }
   res.writeHead(404);
   res.end();
 });
+
+// Accounts currently being deleted, so a double tap can't run it twice.
+const deletingAccounts = new Set<string>();
+
+// POST /account/delete with `Authorization: Bearer <the user's access token>`.
+// Deletes ONLY the account that token belongs to (there is no user id in the
+// request). See deleteAccountData for what that removes.
+async function handleAccountDelete(req: http.IncomingMessage, res: http.ServerResponse) {
+  const json = (status: number, body: unknown) => {
+    res.writeHead(status, { 'content-type': 'application/json' });
+    res.end(JSON.stringify(body));
+  };
+  const header = req.headers.authorization ?? '';
+  const token = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
+  if (!token) return json(401, { ok: false, error: 'Not signed in' });
+  const userId = await verifyUserToken(token);
+  if (!userId) return json(401, { ok: false, error: 'Invalid or expired session' });
+  if (deletingAccounts.has(userId)) return json(409, { ok: false, error: 'Deletion already in progress' });
+  deletingAccounts.add(userId);
+  try {
+    // Must be read before the delete: the contact rows go away with the account.
+    const contactIds = await getApprovedContactIds(userId);
+    const groupsBefore = relayState.getGroupsForUser(userId);
+
+    const result = await deleteAccountData(userId);
+    if (!result.ok) {
+      console.error('[account-delete] failed for', userId, ':', result.error);
+      return json(500, { ok: false, error: 'Could not delete account' });
+    }
+
+    // Tidy the live relay state so nobody keeps seeing a ghost: leave every
+    // group (telling the remaining members), then drop the connection.
+    for (const g of groupsBefore) {
+      relayState.removeGroupMember(g.id, userId);
+      const remaining = relayState.getGroup(g.id);
+      if (remaining) {
+        for (const memberId of remaining.memberIds) {
+          const s = relayState.getSocket(memberId);
+          if (s) send(s, { type: 'group:member_left', groupId: g.id, userId });
+        }
+      }
+    }
+    for (const contactId of contactIds) {
+      const s = relayState.getSocket(contactId);
+      if (s) send(s, { type: 'contact:refresh' });
+    }
+    relayState.getSocket(userId)?.close(1000, 'Account deleted');
+    console.log('[account-delete] account deleted');
+    return json(200, { ok: true });
+  } finally {
+    deletingAccounts.delete(userId);
+  }
+}
 
 // Size and rate limits. The relay buffers each incoming frame in memory
 // (Render free tier = 512 MB), and ws's default cap is 100 MiB per frame, so a

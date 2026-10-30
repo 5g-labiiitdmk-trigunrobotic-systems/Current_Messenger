@@ -44,6 +44,12 @@ export function getOrCreateDeviceKeyPair(userId: string): Promise<KeyPairB64> {
   return p;
 }
 
+/** Account deletion: removes this account's end-to-end secret key from this phone. */
+export async function deleteDeviceKeyPair(userId: string): Promise<void> {
+  keyPairInFlight.delete(userId);
+  await SecureStore.deleteItemAsync(`${SECRET_KEY_STORE_ID}.${userId}`).catch(() => {});
+}
+
 async function loadOrCreateDeviceKeyPair(userId: string): Promise<KeyPairB64> {
   // NOT a ':' separator — expo-secure-store validates keys against
   // /^[\w.-]+$/ (confirmed by reading its actual source,

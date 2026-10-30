@@ -49,9 +49,46 @@ export default function SettingsScreen() {
   const setWallpaper = useThemeStore((s) => s.setWallpaper);
   const { pushNotifications, showPreviews, toggle } = useSettingsStore();
   const storeSignOut = useAuthStore((s) => s.signOut);
+  const storeDeleteAccount = useAuthStore((s) => s.deleteAccount);
+  const [deleting, setDeleting] = useState(false);
   const profile = useAuthStore((s) => s.profile);
   const updateProfile = useAuthStore((s) => s.updateProfile);
   const statusVisibility = profile?.status_visibility ?? 'everyone';
+
+  // Two-step confirmation (permanent and not undoable), then the deletion
+  // itself; on success go straight back to the login screen like log out does.
+  const onDeleteAccount = () => {
+    appAlert(
+      'Delete your account?',
+      'This permanently deletes your account: your profile, contacts, blocked list and encryption keys are removed from our servers, and your chat history is erased from this phone. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Continue',
+          style: 'destructive',
+          onPress: () =>
+            appAlert('Are you absolutely sure?', 'Your account and all its data will be deleted for good.', [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Delete my account',
+                style: 'destructive',
+                onPress: async () => {
+                  setDeleting(true);
+                  const error = await storeDeleteAccount();
+                  setDeleting(false);
+                  if (error) {
+                    appAlert('Could not delete account', error);
+                    return;
+                  }
+                  router.dismissAll();
+                  router.replace('/(auth)/login');
+                },
+              },
+            ]),
+        },
+      ]
+    );
+  };
 
   // onLogOut(): signs out, then explicitly dismisses the whole
   // authenticated stack and routes to login — see the comment below on
@@ -173,6 +210,16 @@ export default function SettingsScreen() {
       <Pressable onPress={onLogOut} style={{ marginTop: 22 }}>
         <View style={{ height: 52, borderRadius: 18, backgroundColor: 'rgba(255,90,110,0.12)', borderWidth: 1, borderColor: 'rgba(255,90,110,0.3)', alignItems: 'center', justifyContent: 'center' }}>
           <Text style={{ color: '#ff5a6e', fontFamily: fontFamilies.bold, fontSize: 14.5 }}>Log out</Text>
+        </View>
+      </Pressable>
+
+      <Pressable onPress={onDeleteAccount} disabled={deleting} style={{ marginTop: 12 }}>
+        <View style={{ height: 52, borderRadius: 18, borderWidth: 1, borderColor: 'rgba(255,90,110,0.45)', alignItems: 'center', justifyContent: 'center', opacity: deleting ? 0.6 : 1 }}>
+          {deleting ? (
+            <ActivityIndicator color="#ff5a6e" />
+          ) : (
+            <Text style={{ color: '#ff5a6e', fontFamily: fontFamilies.semibold, fontSize: 14.5 }}>Delete account</Text>
+          )}
         </View>
       </Pressable>
 
