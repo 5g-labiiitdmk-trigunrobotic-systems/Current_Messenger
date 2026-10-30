@@ -341,6 +341,23 @@ export async function setPinned(userId: string, threadKey: string, messageId: st
   });
 }
 
+/**
+ * Account deletion: removes everything this account keeps on THIS phone — the
+ * encrypted chat database file and the key that opens it. Closes the open
+ * handle first. Best effort per step: a failure in one must not stop the rest.
+ */
+export async function deleteLocalAccountData(userId: string): Promise<void> {
+  try {
+    const pending = pendingOpens.get(userId);
+    const db = dbCache.get(userId) ?? (pending ? await pending.catch(() => null) : null);
+    dbCache.delete(userId);
+    pendingOpens.delete(userId);
+    if (db) await db.closeAsync().catch(() => {});
+  } catch {}
+  await SQLite.deleteDatabaseAsync(`current-chat-${userId}.db`).catch(() => {});
+  await SecureStore.deleteItemAsync(`current_localdb_key_${userId}`).catch(() => {});
+}
+
 /** Wipes this user's local history entirely — not currently wired to any UI, kept available (e.g. a future "clear local history" setting). */
 export async function clearLocalHistory(userId: string): Promise<void> {
   return withDbErrorAlert('clearing local history', async () => {

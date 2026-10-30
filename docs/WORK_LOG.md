@@ -81,7 +81,6 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 39 | Over-broad Android permissions; `ITSAppUsesNonExemptEncryption` not set | L | app config |
 | 40 | No calls to a closed app on iPhone (no CallKit / push-to-talk) | — | product limit |
 | 41 | A failed message shows only "Failed": no retry button, no reason | M | app (found while fixing 11) |
-| 43 | **No in-app account deletion.** Apple requires it for any app with account creation (guideline 5.1.1(v)) and the reviewer asked for it to be shown in the screen recording. The Terms in `legalText.ts` already say users can delete their account in the app. | **C for App Store** | app + relay (found 2026-10-30) |
 | 42 | Notifications go to a phone where the account was signed in earlier (one push token per account; a stale token stays after sign-out in the live app; no per-device tokens) | H | app + DB + relay (found 2026-10-28, reported by Krishna) |
 
 ### Suggested order
@@ -210,6 +209,18 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Finding:** the app has **no account deletion** (issue 43). Reporting and blocking exist (chat menu: Block contact, Report contact). Phone verification is not in the live sign-up flow (email + password only), so it must not be mentioned as a feature.
 - **Recommendation:** add account deletion (issue 43) first, ship it in build 8, then reply with a recording made from that build. A recording without account deletion will very likely be rejected under 5.1.1(v), and the Terms currently claim a feature that does not exist.
 
+### 2026-10-30: Issue 43 — in-app account deletion
+- **Why:** Apple requires any app that lets people create an account to let them delete it inside the app, and the review team asked for it to be shown in the screen recording. The Terms of Service already said this existed; it did not.
+- **Files:** `server/src/index.ts`, `server/src/supabaseAdmin.ts`, `app/src/state/authStore.ts`, `app/src/lib/localDb.ts`, `app/src/lib/keystore.ts`, `app/app/settings.tsx`.
+- **Change:**
+  - Relay: new `POST /account/delete` (login token in the `Authorization` header). It deletes only the account that token belongs to — there is no user id in the request, anything extra is ignored — by deleting the Supabase auth user, which cascades to the profile, contact requests, blocks, public keys, push tokens and the transfer log (every table already cascades). Avatar files are then removed (best effort). The user is removed from groups (remaining members are told), their contacts get a live refresh, and their connection is closed. A double tap is refused (409); a database failure returns an error and changes nothing.
+  - App: Settings gets a "Delete account" button below Log out with two confirmation steps (what will be deleted, then "Are you absolutely sure?"). On success, after the server confirms, it erases this phone's copy (chat database file, its encryption key, the end-to-end secret key), drops the connection, ends the local session and returns to the login screen. If the server or network fails, nothing is removed locally and the user is told.
+- **Tested:** relay against a mock Supabase, 12/12 (no/invalid token refused; deletes only the token's owner even when another id is supplied; avatars removed; connection closed; contacts and group members notified; database failure = 500 and nothing closed; double tap = one deletion; relay healthy); app `deleteAccount` with the real store, 15/15 (success, server error, no network, relay URL missing, not signed in; local wipe happens only after the server confirmed; chats cleared); phone wipe helpers 5/5 (right database file and key names, only this user's); relay regression and size/rate-limit suites pass; app and relay typecheck clean.
+- **Not covered by tests:** the real Supabase admin delete call (only a mock) and the Settings screen on a device. First real check: delete a throwaway account on a phone and confirm the row is gone in Supabase (Authentication and the `users` table).
+- **Limits:** messages already delivered to other people stay on their phones (the relay and database never held them); email and username become free to reuse. Users with the live Android app cannot delete their account until they update.
+- **For the App Review reply:** the recording can now include the Delete account step (from build 8).
+- **Shipped:** branch only.
+
 ---
 
 ## 5. Real-phone checks before releasing build 8
@@ -223,4 +234,5 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 7. Record a voice note, then place a voice call: the sound is normal.
 8. Create a group of three, send a message, leave it.
 9. Reset-password link on a fresh install.
+12. Create a throwaway account, add a contact, then Settings > Delete account (confirm twice): the app returns to login, signing in with that email fails, the row is gone in Supabase (Authentication and `users`), and the contact's phone refreshes without the account.
 10. Airplane mode on, send a message: it shows Failed within a second, not "sending".
