@@ -18,8 +18,8 @@ what is still open). Times are IST.
 |---|---|
 | Google Play | Live in India, v1.0.1 (does **not** have the app fixes below) |
 | App Store | Build 7 in TestFlight, **not submitted**. Wait for build 8. |
-| Relay (Render) | Live: `https://current-messenger-relay.onrender.com`. Has fix 3; fixes 13, 6, 14, 15, 19, 20 deploying. |
-| `main` branch | Fixes 3, 4, 5, 23/10, 11, 13, 6, 14, 15, 19, 20 merged. Nothing builds automatically. |
+| Relay (Render) | Live: `https://current-messenger-relay.onrender.com`. Has fix 3; fixes 13, 6, 14, 15, 19, 20, 43 deploying. |
+| `main` branch | Fixes 3, 4, 5, 23/10, 11, 13, 6, 14, 15, 19, 20, 43 merged (42 is on its own branch, not merged). Nothing builds automatically. |
 | Build 8 | Not made yet. Should include 4, 5, 11, 23/10, 22 and the rest of the app batch. |
 
 ---
@@ -219,7 +219,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Not covered by tests:** the real Supabase admin delete call (only a mock) and the Settings screen on a device. First real check: delete a throwaway account on a phone and confirm the row is gone in Supabase (Authentication and the `users` table).
 - **Limits:** messages already delivered to other people stay on their phones (the relay and database never held them); email and username become free to reuse. Users with the live Android app cannot delete their account until they update.
 - **For the App Review reply:** the recording can now include the Delete account step (from build 8).
-- **Shipped:** branch only.
+- **Shipped:** merged to `main`; relay endpoint deploys on Render, the Settings button needs build 8.
 
 ---
 
