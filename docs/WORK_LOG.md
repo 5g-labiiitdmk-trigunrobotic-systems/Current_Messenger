@@ -81,6 +81,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 39 | Over-broad Android permissions; `ITSAppUsesNonExemptEncryption` not set | L | app config |
 | 40 | No calls to a closed app on iPhone (no CallKit / push-to-talk) | — | product limit |
 | 41 | A failed message shows only "Failed": no retry button, no reason | M | app (found while fixing 11) |
+| 43 | **No in-app account deletion.** Apple requires it for any app with account creation (guideline 5.1.1(v)) and the reviewer asked for it to be shown in the screen recording. The Terms in `legalText.ts` already say users can delete their account in the app. | **C for App Store** | app + relay (found 2026-10-30) |
 | 42 | Notifications go to a phone where the account was signed in earlier (one push token per account; a stale token stays after sign-out in the live app; no per-device tokens) | H | app + DB + relay (found 2026-10-28, reported by Krishna) |
 
 ### Suggested order
@@ -203,6 +204,11 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Report:** an account that was signed in on Krishna's phone earlier is now signed in on another phone; texting it notifies both phones.
 - **Findings (code read only):** each account has ONE push token in `users.push_token`, the last device that registered wins; the relay sends one push to that token. The live Android app does not clear the token on sign-out (build 8 does, fix 22), so a phone that signed out can keep a token that is still on file, and a phone that is still signed in also shows its own in-app notification from the live connection. Not yet confirmed which of these happened on the two phones.
 - **Open:** answers needed (was the account signed OUT on the first phone, or just left signed in; which notification appeared on which phone). Candidate fixes: build 8 already covers the sign-out case; a proper fix is one token per device (new database table, app registers per device, relay sends to all of the account's devices and Expo drops dead tokens) and needs a build.
+
+### 2026-10-30: Apple review request (guideline 2.1, new-app information) — not a rejection yet
+- **What Apple asked for:** screen recording on a physical device (launch, sign-up, login, **account deletion**, content reporting and blocking), app purpose and audience, setup and demo login, list of external services, regional differences, regulated-industry documents. Reply in App Store Connect AND copy it into the App Review Information notes.
+- **Finding:** the app has **no account deletion** (issue 43). Reporting and blocking exist (chat menu: Block contact, Report contact). Phone verification is not in the live sign-up flow (email + password only), so it must not be mentioned as a feature.
+- **Recommendation:** add account deletion (issue 43) first, ship it in build 8, then reply with a recording made from that build. A recording without account deletion will very likely be rejected under 5.1.1(v), and the Terms currently claim a feature that does not exist.
 
 ---
 
