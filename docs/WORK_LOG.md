@@ -65,7 +65,6 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 21 | Audio recording mode never switched off after a voice note | H | app |
 | 24 | A failed contact refresh empties the lists | H | app |
 | 25 | Setup failure silently replaces the chosen username | H | app |
-| 26 | Local database deleted on any open failure | H | app |
 | 27 | App lock not tied to backgrounding; starts unlocked until settings load | H | app |
 | 28 | Incoming messages not de-duplicated | M | app |
 | 29 | Message-ping notification taps do not open the chat | M | app |
@@ -220,6 +219,14 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Limits:** messages already delivered to other people stay on their phones (the relay and database never held them); email and username become free to reuse. Users with the live Android app cannot delete their account until they update.
 - **For the App Review reply:** the recording can now include the Delete account step (from build 8).
 - **Shipped:** merged to `main`; relay endpoint deploys on Render, the Settings button needs build 8.
+
+### 2026-10-30: Issue 26 — local chat history wiped on any database error
+- **Root cause:** when the app prepared the local database and ANY error came back, it assumed the encryption key no longer matched the file and deleted the whole encrypted history file to start fresh. A full disk, a locked database, an I/O error, low memory or a native hiccup says nothing about the key; the history on disk was intact and got deleted anyway.
+- **File:** `app/src/lib/localDb.ts`.
+- **Change:** the delete-and-start-fresh recovery now runs only when SQLite says the file cannot be read with this key ("file is not a database" / "file is encrypted or is not a database", SQLITE_NOTADB code 26), once. Any other error is reported, the file is left untouched, and the next open simply tries again.
+- **Tested (simulated database errors, old vs new):** old code deletes the history on all 5 unrelated errors (disk full, locked, I/O, native hiccup, out of memory) and after a transient error followed by a retry; new code keeps it in every case (10/10). The real key-mismatch case still recovers exactly once (and stops after one reset if it keeps failing). Typecheck clean.
+- **Limit:** a genuine key/file mismatch (reinstall, device restore, invalidated key) still resets that account's history; the old history cannot be read without the original key. Not tested on a device.
+- **Shipped:** branch only.
 
 ---
 
