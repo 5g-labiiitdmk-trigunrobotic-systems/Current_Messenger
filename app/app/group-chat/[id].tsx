@@ -19,7 +19,7 @@ import { useContactStore } from '../../src/state/contactStore';
 import { useAuthStore } from '../../src/state/authStore';
 import { previewFor } from '../../src/data/conversations';
 import { appAlert } from '../../src/state/alertStore';
-import { pickImageBase64, pickVideoBase64, startVoiceRecording, stopVoiceRecording, MAX_VIDEO_DURATION_SECONDS, MAX_VIDEO_FILE_BYTES } from '../../src/lib/media';
+import { pickImageBase64, pickVideoBase64, startVoiceRecording, stopVoiceRecording, abortVoiceRecording, MAX_VIDEO_DURATION_SECONDS, MAX_VIDEO_FILE_BYTES } from '../../src/lib/media';
 import { useAudioRecorder, RecordingPresets } from 'expo-audio';
 
 // FILE PURPOSE: The group chat screen — parallel to (and structurally
@@ -53,6 +53,21 @@ export default function GroupChatScreen() {
   // instances can only be created via this hook, so the component owns
   // it and passes it into media.ts's start/stopVoiceRecording.
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  // If the user leaves this chat while a recording is running, stop it and put
+  // the phone's audio session back to normal (it would otherwise stay in
+  // record mode — see endRecordingAudioMode in media.ts). Only acts when THIS
+  // screen was actually recording, so it can't disturb an active call.
+  const recordingRef = useRef(false);
+  useEffect(() => {
+    recordingRef.current = recording;
+  }, [recording]);
+  useEffect(
+    () => () => {
+      if (recordingRef.current) abortVoiceRecording(recorder).catch(() => {});
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
 
   // Same reply feature as chat/[id].tsx's 1:1 screen, applied here — the
   // composer's reply banner and each sent bubble's quoted-reply strip both

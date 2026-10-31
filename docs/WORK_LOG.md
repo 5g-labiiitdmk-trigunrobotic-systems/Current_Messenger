@@ -62,7 +62,6 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 
 | # | Issue | Sev | Where |
 |---|---|---|---|
-| 21 | Audio recording mode never switched off after a voice note | H | app |
 | 24 | A failed contact refresh empties the lists | H | app |
 | 25 | Setup failure silently replaces the chosen username | H | app |
 | 26 | Local database deleted on any open failure | H | app |
@@ -221,6 +220,14 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **For the App Review reply:** the recording can now include the Delete account step (from build 8).
 - **Shipped:** merged to `main`; relay endpoint deploys on Render, the Settings button needs build 8.
 
+### 2026-11-01: Issue 21 — audio session left in recording mode
+- **Root cause:** starting a voice note switches the phone's audio session to a record-capable mode (on iPhone: play-and-record, which sends sound to the earpiece, plays quietly and can interfere with calls). Nothing ever switched it back, so after the first voice note the rest of the session (voice-note playback, calls) ran in the wrong mode. It also stayed on if recording failed to start or to stop, and if the user left the chat mid-recording.
+- **Files:** `app/src/lib/media.ts`, `app/app/chat/[id].tsx`, `app/app/group-chat/[id].tsx`.
+- **Change:** a helper restores normal playback mode (still audible with the silent switch on); it runs when a recording is stopped (saved or failed), when starting fails after the mode was switched on, and via a new `abortVoiceRecording` when a chat screen closes while recording. The close-while-recording cleanup acts only if that screen was actually recording, so it cannot disturb an active call. Permission-denied starts change nothing.
+- **Tested (real helper code, stubbed audio and file modules, old vs new):** old code fails 5 of 7 (mode never restored after stop, failed stop, failed start, record error, abandoned recording); new code passes 7/7. Typecheck clean.
+- **Limit:** the audio behaviour itself (earpiece vs speaker, volume) cannot be observed here; it needs the phone check below. The chat-screen cleanup is covered by typecheck and code reading, not by a rendered test.
+- **Shipped:** branch only.
+
 ---
 
 ## 5. Real-phone checks before releasing build 8
@@ -235,4 +242,5 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 8. Create a group of three, send a message, leave it.
 9. Reset-password link on a fresh install.
 12. Create a throwaway account, add a contact, then Settings > Delete account (confirm twice): the app returns to login, signing in with that email fails, the row is gone in Supabase (Authentication and `users`), and the contact's phone refreshes without the account.
+13. iPhone: record and send a voice note, then play a received voice note and place a call: playback is at normal loudness from the speaker (not the earpiece) and the call sounds normal; start a voice note, leave the chat without sending, then play a voice note: still normal.
 10. Airplane mode on, send a message: it shows Failed within a second, not "sending".
