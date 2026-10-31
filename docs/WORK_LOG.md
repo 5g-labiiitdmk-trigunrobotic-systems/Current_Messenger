@@ -48,6 +48,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 42 | Notifications went to a phone the account had left (one push token per account) | app + DB + relay | branch `fix/issue-42-device-push-tokens` | In `main`; run migration 0008 in Supabase; needs build 8 |
 | 1 | `contact_requests` RLS: a user could insert an already-approved request, or approve their own pending request, or rewrite its parties | DB | branch `fix/issue-1-contact-rls` (migration 0009) | In `main`; run migration 0009 in Supabase; no build needed |
 | 8 (email part) | Users could store `email_verified = true` without confirming their email | DB | branch `fix/issue-8-email-verified` (migration 0010) | In `main`; run migration 0010 in Supabase; no build needed |
+| 39 (iOS part) | `ITSAppUsesNonExemptEncryption` not set in the app config | app config | branch `fix/issue-39-config` | Pushed, waiting for "merge 39"; needs build 8. Android permission trimming deliberately NOT done (see log) |
 | 24 | A failed contact refresh (network drop, timeout) emptied Chats/Contacts and made blocked people reappear | app | branch `fix/issue-24-contact-refresh` | In `main`, needs build 8 |
 
 ### Open (original 20)
@@ -80,7 +81,6 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 36 | All chat history loaded at once at start-up | M | app |
 | 37 | Group call silently capped | M | app |
 | 38 | Test values left in phone-auth code | L | app |
-| 39 | Over-broad Android permissions; `ITSAppUsesNonExemptEncryption` not set | L | app config |
 | 40 | No calls to a closed app on iPhone (no CallKit / push-to-talk) | — | product limit |
 | 41 | A failed message shows only "Failed": no retry button, no reason | M | app (found while fixing 11) |
 
@@ -274,6 +274,12 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Not changed:** `phone_verified` (phone verification is not in the live flow, per your instruction), and the `email` column itself can still be set to any text. Existing rows are untouched; the migration ends with a query that lists rows marked verified without a confirmed email.
 - **Rollout:** run migration 0010 in the Supabase SQL editor.
 - **Shipped:** merged to `main`; migration still to be run in Supabase.
+
+### 2026-11-01: Issue 39 — encryption declaration (iOS); Android permissions left alone
+- **Change:** `app/app.json` now sets `ITSAppUsesNonExemptEncryption: true` for iOS. Reasoning: the app implements its own end-to-end encryption (TweetNaCl, X25519 + XSalsa20-Poly1305) rather than only using the phone's built-in encryption for HTTPS, so I declared "uses encryption that needs documentation", matching your plan to submit the signed encryption PDF. Setting `false` would be a legal statement that no documentation is needed; I did not choose that. **This is your decision as the publisher:** if your own export-compliance review says the app is exempt, change it to `false` before building. Apple may also give an `ITSEncryptionExportComplianceCode` after the documents are accepted; add it under the same `infoPlist` then.
+- **Not changed (on purpose):** the Android permission list. The live Play Store app depends on it, I cannot build or inspect the merged manifest here, and several entries look unneeded (`READ_EXTERNAL_STORAGE`, `BLUETOOTH`, `BLUETOOTH_ADMIN`, `USE_FINGERPRINT`) but some are used indirectly (Bluetooth headset routing in calls, photo picker on older Android). Trimming them blind could break calls or photo picking on some phones. Recommended: do it as a separate step with a test build and a check of the merged manifest.
+- **Tested:** the JSON is valid and the key is present. No code change.
+- **Shipped:** branch only; needs build 8 (iOS).
 
 ---
 
