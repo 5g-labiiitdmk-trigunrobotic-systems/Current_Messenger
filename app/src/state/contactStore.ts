@@ -49,6 +49,28 @@ interface ContactState {
 // so only the most-recently-issued call's response can ever apply.
 let refreshSeq = 0;
 
+// Consecutive failed refreshes, and how hard to retry them (see refresh()).
+const MAX_REFRESH_RETRIES = 3;
+const REFRESH_RETRY_DELAY_MS = 5000;
+let failedRefreshes = 0;
+
+// Reads this user's contact requests and block list. `error` is set if either
+// lookup failed.
+async function fetchContactRows(me: string) {
+  const [reqsRes, blocksRes] = await Promise.all([
+    supabase
+      .from('contact_requests')
+      .select('*, sender:sender_id(*), receiver:receiver_id(*)')
+      .or(`sender_id.eq.${me},receiver_id.eq.${me}`),
+    supabase.from('blocked_users').select('blocked_id').eq('blocker_id', me),
+  ]);
+  return {
+    reqs: reqsRes.data,
+    blocks: blocksRes.data,
+    error: reqsRes.error?.message ?? blocksRes.error?.message ?? null,
+  };
+}
+
 export const useContactStore = create<ContactState>((set, get) => ({
   approved: [],
   incoming: [],
@@ -121,15 +143,34 @@ export const useContactStore = create<ContactState>((set, get) => ({
     const mySeq = ++refreshSeq;
     set({ loading: true });
 
-    const [{ data: reqs }, { data: blocks }] = await Promise.all([
-      supabase
-        .from('contact_requests')
-        .select('*, sender:sender_id(*), receiver:receiver_id(*)')
-        .or(`sender_id.eq.${me},receiver_id.eq.${me}`),
-      supabase.from('blocked_users').select('blocked_id').eq('blocker_id', me),
-    ]);
+    let reqsResult: Awaited<ReturnType<typeof fetchContactRows>>;
+    try {
+      reqsResult = await fetchContactRows(me);
+    } catch (e: any) {
+      reqsResult = { reqs: null, blocks: null, error: e?.message ?? String(e) };
+    }
 
     if (mySeq !== refreshSeq) return; // a newer refresh() call has since started — this response is stale, drop it
+
+    // A failed lookup (network drop, timeout, server error) is NOT "you have no
+    // contacts": the old code treated the missing data as empty and replaced the
+    // lists with nothing — all contacts vanished until the next refresh — and a
+    // failed block lookup made blocked people reappear. Keep what is on screen,
+    // stop the spinner, and retry a few times in the background instead.
+    if (reqsResult.error || !reqsResult.reqs || !reqsResult.blocks) {
+      // eslint-disable-next-line no-console
+      console.error('[contacts] refresh failed, keeping current lists:', reqsResult.error ?? 'no data');
+      set({ loading: false });
+      if (failedRefreshes < MAX_REFRESH_RETRIES) {
+        failedRefreshes++;
+        setTimeout(() => {
+          if (mySeq === refreshSeq && useAuthStore.getState().session?.user.id === me) get().refresh();
+        }, REFRESH_RETRY_DELAY_MS);
+      }
+      return;
+    }
+    failedRefreshes = 0;
+    const { reqs, blocks } = reqsResult;
 
     const blockedIds = (blocks ?? []).map((b) => b.blocked_id);
     const all = (reqs ?? []) as any[];

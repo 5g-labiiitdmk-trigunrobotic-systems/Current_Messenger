@@ -43,6 +43,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 6 | Filter injection in `areApprovedContacts`: a crafted `to` value bypassed the contact check | relay | `5c989d9` | Merged to `main` 03:37 with 14; Render auto-deploys |
 | 15 | `group:create` with an existing group id silently replaced that group (members dropped, creator became owner) | relay | branch `fix/issue-15-group-overwrite` | Merged to `main` 04:41; Render auto-deploys |
 | 14 | Contact cache kept "not a contact" for 30 s after approval or a database hiccup; `isBlocked` failed open | relay | branch `fix/issue-14-contact-cache` | Merged to `main` 03:37 (includes 6); Render auto-deploys |
+| 24 | A failed contact refresh (network drop, timeout) emptied Chats/Contacts and made blocked people reappear | app | branch `fix/issue-24-contact-refresh` | Pushed, waiting for "merge 24"; needs build 8 |
 
 ### Open (original 20)
 
@@ -63,7 +64,6 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | # | Issue | Sev | Where |
 |---|---|---|---|
 | 21 | Audio recording mode never switched off after a voice note | H | app |
-| 24 | A failed contact refresh empties the lists | H | app |
 | 25 | Setup failure silently replaces the chosen username | H | app |
 | 26 | Local database deleted on any open failure | H | app |
 | 27 | App lock not tied to backgrounding; starts unlocked until settings load | H | app |
@@ -86,7 +86,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 ### Suggested order
 1. **Relay, no app release:** 9, 14, 15.
 2. **Database:** 1, 8, then 2 last (it breaks login-by-username until replaced, and the live Android app still reads `users` directly).
-3. **App (build 8):** 26, 21, 24, 25, 27, and the medium items.
+3. **App (build 8):** 26, 21, 24 (done, on branch), 25, 27, and the medium items.
 
 ---
 
@@ -221,6 +221,13 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **For the App Review reply:** the recording can now include the Delete account step (from build 8).
 - **Shipped:** merged to `main`; relay endpoint deploys on Render, the Settings button needs build 8.
 
+### 2026-11-01: Issue 24 — failed contact refresh emptied the lists
+- **Problem:** `contactStore.refresh` ignored the `error` of its two database lookups. On a network drop or server error the missing data was treated as "no contacts": Chats and Contacts went empty, pending requests vanished, and a failed block lookup made blocked people reappear, until the next successful refresh.
+- **Change:** `app/src/state/contactStore.ts`. A failed or thrown lookup now keeps the lists already on screen, stops the loading spinner and logs the error. It retries in the background up to 3 times, 5 seconds apart (only if no newer refresh started and the same user is still signed in). A successful refresh resets the retry count.
+- **Tested:** real store with a stubbed database, old vs new. Old code failed 3 of 6 checks (requests error empties lists, block error unblocks, thrown error crashes the refresh); new code passes 6/6, including success path unchanged and recovery on the next good refresh. App typecheck clean.
+- **Not covered:** retry timing on a real phone.
+- **Shipped:** branch `fix/issue-24-contact-refresh`, not merged; needs build 8.
+
 ---
 
 ## 5. Real-phone checks before releasing build 8
@@ -236,3 +243,4 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 9. Reset-password link on a fresh install.
 12. Create a throwaway account, add a contact, then Settings > Delete account (confirm twice): the app returns to login, signing in with that email fails, the row is gone in Supabase (Authentication and `users`), and the contact's phone refreshes without the account.
 10. Airplane mode on, send a message: it shows Failed within a second, not "sending".
+13. Open Contacts, turn on airplane mode, pull to refresh: the contact list stays as it was (not empty). Turn it off: it refreshes normally.
