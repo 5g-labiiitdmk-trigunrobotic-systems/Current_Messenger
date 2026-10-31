@@ -48,6 +48,8 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 42 | Notifications went to a phone the account had left (one push token per account) | app + DB + relay | branch `fix/issue-42-device-push-tokens` | In `main`; run migration 0008 in Supabase; needs build 8 |
 | 1 | `contact_requests` RLS: a user could insert an already-approved request, or approve their own pending request, or rewrite its parties | DB | branch `fix/issue-1-contact-rls` (migration 0009) | In `main`; run migration 0009 in Supabase; no build needed |
 | 8 (email part) | Users could store `email_verified = true` without confirming their email | DB | branch `fix/issue-8-email-verified` (migration 0010) | In `main`; run migration 0010 in Supabase; no build needed |
+| 35 | Expo push token printed to the log | app | branch `fix/issue-35-38-cleanup` | Pushed, waiting for "merge 35"; needs build 8 |
+| 38 | Mock phone-verification (test code) shipped in release builds, and its test screens were reachable by link | app | branch `fix/issue-35-38-cleanup` | Pushed, waiting for "merge 38"; needs build 8 |
 | 24 | A failed contact refresh (network drop, timeout) emptied Chats/Contacts and made blocked people reappear | app | branch `fix/issue-24-contact-refresh` | In `main`, needs build 8 |
 
 ### Open (original 20)
@@ -76,10 +78,8 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 32 | Group invite / forward lists cut at 6 people silently | M | app |
 | 33 | Denied photo / camera permission gives no message | M | app |
 | 34 | Reset-password screen spins forever without a valid session | M | app |
-| 35 | Push token printed to the log | L | app |
 | 36 | All chat history loaded at once at start-up | M | app |
 | 37 | Group call silently capped | M | app |
-| 38 | Test values left in phone-auth code | L | app |
 | 39 | Over-broad Android permissions; `ITSAppUsesNonExemptEncryption` not set | L | app config |
 | 40 | No calls to a closed app on iPhone (no CallKit / push-to-talk) | — | product limit |
 | 41 | A failed message shows only "Failed": no retry button, no reason | M | app (found while fixing 11) |
@@ -274,6 +274,12 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Not changed:** `phone_verified` (phone verification is not in the live flow, per your instruction), and the `email` column itself can still be set to any text. Existing rows are untouched; the migration ends with a query that lists rows marked verified without a confirmed email.
 - **Rollout:** run migration 0010 in the Supabase SQL editor.
 - **Shipped:** merged to `main`; migration still to be run in Supabase.
+
+### 2026-11-01: Issues 35 + 38 — push token log and phone-verification test code
+- **35:** `app/src/lib/push.ts` printed the full Expo push token to the device log; anyone able to read logs could send pushes to that phone. It now logs only "obtained an Expo push token".
+- **38:** `app/src/lib/otp.ts` is a mock phone-verification provider that generates a code, prints it to the log, and accepts it; its two test screens (`phone-auth/entry`, `phone-auth/verify`) were registered routes reachable by a link. Not part of the live sign-up flow, but shipping a fake phone check is wrong. Now the mock exists only in development builds (`__DEV__`); a release build gets a provider that refuses ("Phone verification is not available yet") and prints nothing, and the two screens redirect to the start screen in release builds.
+- **Tested:** OTP provider, real file with `__DEV__` on/off: release old code sends and logs the code (2 of 3 fail); release new code refuses and logs nothing (3/3); dev build still works (3/3). App typecheck clean. Push-token log change checked by code inspection.
+- **Shipped:** branch only; needs build 8.
 
 ---
 

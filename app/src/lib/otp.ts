@@ -93,7 +93,7 @@ export const mockOtpProvider: OtpProvider = {
     const code = randomSixDigitCode();
     pendingCodes.set(phoneNumber, { code, sentAt: Date.now() });
     // eslint-disable-next-line no-console
-    console.log(`[otp:mock] "Sent" ${OTP_CODE_LENGTH}-digit code ${code} to ${phoneNumber} (no real SMS — this is the mock provider, see src/lib/otp.ts)`);
+    if (__DEV__) console.log(`[otp:mock] "Sent" ${OTP_CODE_LENGTH}-digit code ${code} to ${phoneNumber} (no real SMS — this is the mock provider, see src/lib/otp.ts)`);
     return { ok: true };
   },
 
@@ -122,7 +122,19 @@ export const mockOtpProvider: OtpProvider = {
  * providers is exactly this one line — see the TODO block below for what
  * a real implementation needs to do before it can replace this.
  */
-const activeProvider: OtpProvider = mockOtpProvider;
+// Release builds never get the mock: it accepts the code it just generated
+// and prints that code to the log, which would be a fake phone check. Until a
+// real provider exists, a release build simply refuses.
+const disabledOtpProvider: OtpProvider = {
+  async sendOtp() {
+    return { ok: false, error: 'Phone verification is not available yet.' };
+  },
+  async verifyOtp() {
+    return { ok: false, error: 'Phone verification is not available yet.' };
+  },
+};
+
+const activeProvider: OtpProvider = __DEV__ ? mockOtpProvider : disabledOtpProvider;
 
 export async function sendOtp(phoneNumber: string): Promise<OtpSendResult> {
   return activeProvider.sendOtp(phoneNumber);
