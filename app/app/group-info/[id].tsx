@@ -84,7 +84,10 @@ export default function GroupInfoScreen() {
         text: 'Leave',
         style: 'destructive',
         onPress: () => {
-          leave(group.id);
+          if (!leave(group.id)) {
+            appAlert('You are offline', 'Reconnect to leave this group.');
+            return;
+          }
           router.replace('/(tabs)/chats');
         },
       },

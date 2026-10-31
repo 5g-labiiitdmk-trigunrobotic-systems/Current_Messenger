@@ -48,6 +48,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 42 | Notifications went to a phone the account had left (one push token per account) | app + DB + relay | branch `fix/issue-42-device-push-tokens` | In `main`; run migration 0008 in Supabase; needs build 8 |
 | 1 | `contact_requests` RLS: a user could insert an already-approved request, or approve their own pending request, or rewrite its parties | DB | branch `fix/issue-1-contact-rls` (migration 0009) | In `main`; run migration 0009 in Supabase; no build needed |
 | 8 (email part) | Users could store `email_verified = true` without confirming their email | DB | branch `fix/issue-8-email-verified` (migration 0010) | In `main`; run migration 0010 in Supabase; no build needed |
+| 31 | Leaving a group only sent the leave message; the group stayed on screen | app | branch `fix/issue-31-leave-group` | Pushed, waiting for "merge 31"; needs build 8 |
 | 24 | A failed contact refresh (network drop, timeout) emptied Chats/Contacts and made blocked people reappear | app | branch `fix/issue-24-contact-refresh` | In `main`, needs build 8 |
 
 ### Open (original 20)
@@ -72,7 +73,6 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 28 | Incoming messages not de-duplicated | M | app |
 | 29 | Message-ping notification taps do not open the chat | M | app |
 | 30 | A declined contact request can never be re-sent (error swallowed) | M | app |
-| 31 | Leaving a group only sends the leave message; group stays on screen | M | app |
 | 32 | Group invite / forward lists cut at 6 people silently | M | app |
 | 33 | Denied photo / camera permission gives no message | M | app |
 | 34 | Reset-password screen spins forever without a valid session | M | app |
@@ -275,6 +275,13 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Rollout:** run migration 0010 in the Supabase SQL editor.
 - **Shipped:** merged to `main`; migration still to be run in Supabase.
 
+### 2026-11-01: Issue 31 — leaving a group
+- **Root cause:** `leave()` sent `group:leave` and relied on follow-up events, but the relay only tells the OTHER members (the leaver is already out of the member list when it broadcasts `group:member_left`). The leaving phone kept showing the group until the next reconnect.
+- **Files:** `app/src/state/groupStore.ts`, `app/app/group-info/[id].tsx`.
+- **Change:** once the leave request has actually been sent, the group is also removed from this phone's list. If it could not be sent (offline), nothing changes and the screen says "You are offline — Reconnect to leave this group" instead of silently leaving the user in the chat list.
+- **Tested (real store, old vs new):** old code keeps the group (1 of 5 fails); new code passes 5/5: leave sends the event, group disappears at once, other groups untouched, offline keeps the group and reports false.
+- **Shipped:** branch only; needs build 8.
+
 ---
 
 ## 5. Real-phone checks before releasing build 8
@@ -293,3 +300,4 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 11. Sign the same account in on two phones, close the app on one of them, send it a message from a third account: only the phone that is signed in notifies; sign out on one phone and confirm it stops notifying.
 10. Airplane mode on, send a message: it shows Failed within a second, not "sending".
 14. Open Contacts, turn on airplane mode, pull to refresh: the contact list stays as it was (not empty). Turn it off: it refreshes normally.
+18. Create a group of three, leave it from one phone: it disappears from that phone's chat list at once, and the others see the member gone. Try leaving in airplane mode: you are told you are offline and stay in the group.

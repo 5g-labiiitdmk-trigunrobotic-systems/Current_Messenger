@@ -45,7 +45,8 @@ interface GroupState {
   createGroup: (name: string, memberIds: string[], isBroadcast?: boolean) => string;
   invite: (groupId: string, userId: string) => void;
   respondToInvite: (groupId: string, accept: boolean) => void;
-  leave: (groupId: string) => void;
+  /** Returns false (and changes nothing) if the request could not be sent. */
+  leave: (groupId: string) => boolean;
 }
 
 // Tracks which groupId the currently-shown incoming-invite alert (if any)
@@ -209,8 +210,20 @@ export const useGroupStore = create<GroupState>((set, get) => ({
     relayClient.send({ type: 'group:invite_respond', groupId, accept });
   },
 
-  // Leaves a group — no optimistic local update; relies on the relay's
-  // own follow-up events (group:member_left for other members, a future
-  // group:snapshot for this device) to reflect it.
-  leave: (groupId) => relayClient.send({ type: 'group:leave', groupId }),
+  // Leaves a group. The relay only tells the OTHER members (the leaver is
+  // already out of its list when it broadcasts group:member_left), so this
+  // device used to keep showing the group until the next reconnect. Once the
+  // request has actually been sent, drop the group locally too; if it could
+  // not be sent (offline) nothing changes and the caller can say so.
+  leave: (groupId) => {
+    const sent = relayClient.send({ type: 'group:leave', groupId });
+    if (!sent) return false;
+    set((s) => {
+      if (!s.groups[groupId] && !s.incomingInvites[groupId]) return s;
+      const groups = { ...s.groups };
+      delete groups[groupId];
+      return { groups };
+    });
+    return true;
+  },
 }));
