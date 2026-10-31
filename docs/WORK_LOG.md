@@ -46,13 +46,13 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 26 | Local chat database deleted on any open error (disk full, locked, I/O), losing all history | app | branch `fix/issue-26-db-open-wipe` | In `main`, needs build 8 |
 | 21 | Audio session left in recording mode after a voice note (earpiece / low volume afterwards) | app | branch `fix/issue-21-audio-mode` | In `main`, needs build 8 |
 | 42 | Notifications went to a phone the account had left (one push token per account) | app + DB + relay | branch `fix/issue-42-device-push-tokens` | In `main`; run migration 0008 in Supabase; needs build 8 |
+| 1 | `contact_requests` RLS: a user could insert an already-approved request, or approve their own pending request, or rewrite its parties | DB | branch `fix/issue-1-contact-rls` (migration 0009) | Pushed, waiting for "merge 1"; run migration in Supabase; no build needed |
 | 24 | A failed contact refresh (network drop, timeout) emptied Chats/Contacts and made blocked people reappear | app | branch `fix/issue-24-contact-refresh` | In `main`, needs build 8 |
 
 ### Open (original 20)
 
 | # | Issue | Sev | Where |
 |---|---|---|---|
-| 1 | `contact_requests` RLS lets a user approve their own request | C | DB |
 | 2 | `users` table readable by everyone (login-by-username, signup check, contact search, QR depend on it) | C | DB + app |
 | 7 | Edit / delete / poll vote not checked against the original sender | H | app |
 | 8 | Users can set their own `email_verified` / `phone_verified` | H | DB |
@@ -255,6 +255,15 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Rollout order:** (1) run migration 0008 in the Supabase SQL editor; (2) merge, which deploys the relay (it works before and after the migration); (3) the app part reaches phones with build 8.
 - **Limits:** a phone running the live (old) app still writes only the single profile token and never removes it on sign-out, so that stale-token case stays until those phones update; a stale old-style token is also cleaned up when Expo reports it dead. Android push still needs the FCM credentials on the Expo project (existing note in docs/SETUP.md).
 - **Shipped:** merged to `main`. The relay part is safe to deploy first; the migration (0008) must be run in Supabase for per-device tokens to take effect; the app part needs build 8. The migration self-test script now lives in `supabase/tests/device_push_tokens_selftest.sql`.
+
+### 2026-11-01: Issue 1 — nobody may approve their own contact request
+- **Root cause:** the INSERT rule only checked "you are the sender", so a user could insert a row that was already `approved`; the UPDATE rule let either side change the row, so a sender could flip their own pending request to `approved` (and rewrite `sender_id` / `receiver_id`). The relay treats `approved` as permission to message, call and group with someone, so this bypassed consent.
+- **File:** new `supabase/migrations/0009_contact_requests_rls_tighten.sql`.
+- **Change:** a new request must be `pending` with no response time; only the receiver can answer, and only while it is still pending; a trigger freezes `sender_id`, `receiver_id` and `created_at`. The app already does exactly this (sender inserts pending, receiver updates), so no app release. The relay never writes this table. Delete (unfriend) is unchanged.
+- **Tested:** real Postgres engine with the real table and policies from migrations 0001/0006/0007, before vs after: before, a sender can approve their own request, insert an approved row and rewrite the parties; after, all 10 checks pass (normal request, receiver approves/declines, sender cannot approve, no pre-approved insert, no impersonated sender, parties frozen, delete works, outsider blocked, an answered request cannot be changed again).
+- **Not covered:** the real Supabase project (policy behaviour is standard Postgres RLS). Optional clean-up: the migration ends with a query listing `approved` rows with no `responded_at`, which the app never creates; review those by hand.
+- **Rollout:** run migration 0009 in the Supabase SQL editor. Takes effect immediately for the live Android app too.
+- **Shipped:** branch only.
 
 ---
 
