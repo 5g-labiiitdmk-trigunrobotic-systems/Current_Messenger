@@ -48,6 +48,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 42 | Notifications went to a phone the account had left (one push token per account) | app + DB + relay | branch `fix/issue-42-device-push-tokens` | In `main`; run migration 0008 in Supabase; needs build 8 |
 | 1 | `contact_requests` RLS: a user could insert an already-approved request, or approve their own pending request, or rewrite its parties | DB | branch `fix/issue-1-contact-rls` (migration 0009) | In `main`; run migration 0009 in Supabase; no build needed |
 | 8 (email part) | Users could store `email_verified = true` without confirming their email | DB | branch `fix/issue-8-email-verified` (migration 0010) | In `main`; run migration 0010 in Supabase; no build needed |
+| 37 | Group call cap (4 people) did not say who would be left out | app | branch `fix/issue-37-group-call-cap` | Pushed, waiting for "merge 37"; needs build 8. The 4-person limit itself stays (see log) |
 | 24 | A failed contact refresh (network drop, timeout) emptied Chats/Contacts and made blocked people reappear | app | branch `fix/issue-24-contact-refresh` | In `main`, needs build 8 |
 
 ### Open (original 20)
@@ -78,7 +79,6 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 34 | Reset-password screen spins forever without a valid session | M | app |
 | 35 | Push token printed to the log | L | app |
 | 36 | All chat history loaded at once at start-up | M | app |
-| 37 | Group call silently capped | M | app |
 | 38 | Test values left in phone-auth code | L | app |
 | 39 | Over-broad Android permissions; `ITSAppUsesNonExemptEncryption` not set | L | app config |
 | 40 | No calls to a closed app on iPhone (no CallKit / push-to-talk) | — | product limit |
@@ -274,6 +274,13 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Not changed:** `phone_verified` (phone verification is not in the live flow, per your instruction), and the `email` column itself can still be set to any text. Existing rows are untouched; the migration ends with a query that lists rows marked verified without a confirmed email.
 - **Rollout:** run migration 0010 in the Supabase SQL editor.
 - **Shipped:** merged to `main`; migration still to be run in Supabase.
+
+### 2026-11-01: Issue 37 — group call cap now names who is and is not called
+- **Situation:** group calls are a direct phone-to-phone mesh limited to 4 people (`GROUP_CALL_CAP`, see docs/GROUP_CALLING.md). The group chat already warned "Group calls are limited to 4 people", but only said the first three would be rung, not who they were; the others were left out without being named. Raising the limit is a product / performance decision (every extra person multiplies each phone's connections and bandwidth), so I left the number alone.
+- **Files:** new `app/src/lib/groupCallCap.ts`, `app/app/group-chat/[id].tsx`.
+- **Change:** the heads-up now reads, for example, "This group has 6 members. This call will ring: A, B, C. Not called: D, E." with Cancel / Call anyway. Members who are not in your contacts appear as "Member".
+- **Tested:** message builder 6/6 (no warning at 4, names the called and the not-called, correct member count). App typecheck clean.
+- **Shipped:** branch only; needs build 8.
 
 ---
 
