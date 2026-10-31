@@ -48,6 +48,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 42 | Notifications went to a phone the account had left (one push token per account) | app + DB + relay | branch `fix/issue-42-device-push-tokens` | In `main`; run migration 0008 in Supabase; needs build 8 |
 | 1 | `contact_requests` RLS: a user could insert an already-approved request, or approve their own pending request, or rewrite its parties | DB | branch `fix/issue-1-contact-rls` (migration 0009) | In `main`; run migration 0009 in Supabase; no build needed |
 | 8 (email part) | Users could store `email_verified = true` without confirming their email | DB | branch `fix/issue-8-email-verified` (migration 0010) | In `main`; run migration 0010 in Supabase; no build needed |
+| 41 | A failed message showed only "Failed": no reason, no retry | app | branch `fix/issue-41-retry` | Pushed, waiting for "merge 41"; needs build 8 |
 | 24 | A failed contact refresh (network drop, timeout) emptied Chats/Contacts and made blocked people reappear | app | branch `fix/issue-24-contact-refresh` | In `main`, needs build 8 |
 
 ### Open (original 20)
@@ -82,7 +83,6 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 38 | Test values left in phone-auth code | L | app |
 | 39 | Over-broad Android permissions; `ITSAppUsesNonExemptEncryption` not set | L | app config |
 | 40 | No calls to a closed app on iPhone (no CallKit / push-to-talk) | — | product limit |
-| 41 | A failed message shows only "Failed": no retry button, no reason | M | app (found while fixing 11) |
 
 ### Suggested order
 1. **Relay, no app release:** 9, 14, 15.
@@ -275,6 +275,14 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Rollout:** run migration 0010 in the Supabase SQL editor.
 - **Shipped:** merged to `main`; migration still to be run in Supabase.
 
+### 2026-11-01: Issue 41 — retry and reason for failed messages
+- **Problem:** after fix 11 a message that could not be sent shows "Failed", but nothing explained why and there was no way to send it again short of retyping it.
+- **Files:** `app/src/state/chatStore.ts` (`retryMessage`, `discardFailed`), `app/src/lib/localDb.ts` (`deleteMessageRow`), new `app/src/lib/failReason.ts`, `app/src/components/MessageBubble.tsx`, `app/app/chat/[id].tsx`, `app/app/group-chat/[id].tsx`.
+- **Change:** "Failed" on one of my messages is now tappable ("Failed · tap"). It opens "Message not sent" with a plain-language reason (they are offline, you are not connected, connection dropped, server did not confirm, app closed, no security key yet, ...) and three buttons: Try again (sends it as a new message and removes the failed one, works for text and for photos / voice / location / polls etc.), Delete (removes it completely, no "deleted" placeholder), Cancel. Only my own failed messages can be retried or discarded.
+- **Tested (real store, old vs new):** old version has neither feature; new passes 10/10: failed text message retried exactly once, goes to the relay, old row removed from the saved history; retry/discard ignore messages that did not fail; a location message is retried with its content; every failure reason has a readable text. App typecheck clean.
+- **Limit:** a retried message gets the time of the retry (it moves to the bottom), not its original position.
+- **Shipped:** branch only; needs build 8.
+
 ---
 
 ## 5. Real-phone checks before releasing build 8
@@ -293,3 +301,4 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 11. Sign the same account in on two phones, close the app on one of them, send it a message from a third account: only the phone that is signed in notifies; sign out on one phone and confirm it stops notifying.
 10. Airplane mode on, send a message: it shows Failed within a second, not "sending".
 14. Open Contacts, turn on airplane mode, pull to refresh: the contact list stays as it was (not empty). Turn it off: it refreshes normally.
+22. Airplane mode, send a message and a photo: both show 'Failed · tap'. Tap one: the reason is shown. Turn airplane mode off and tap Try again: it sends once and the failed copy is gone. Delete removes a failed message completely.

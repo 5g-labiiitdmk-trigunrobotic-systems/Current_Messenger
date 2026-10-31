@@ -19,6 +19,7 @@ import { useCallStore } from '../../src/state/callStore';
 import { useAuthStore } from '../../src/state/authStore';
 import { useChatSessionStore } from '../../src/state/chatSessionStore';
 import { appAlert } from '../../src/state/alertStore';
+import { failReasonText } from '../../src/lib/failReason';
 import { isPresenceVisible } from '../../src/lib/presencePolicy';
 import { pickImageBase64, pickVideoBase64, getCurrentLocationOnce, startVoiceRecording, stopVoiceRecording, abortVoiceRecording, playAudioBase64, MAX_VIDEO_DURATION_SECONDS, MAX_VIDEO_FILE_BYTES } from '../../src/lib/media';
 import { withDateSeparators } from '../../src/lib/dateSeparators';
@@ -54,7 +55,7 @@ export default function ChatScreen() {
   const presence = usePresenceStore((s) => s.byUser[id ?? '']);
   const threads = useChatStore((s) => s.threads);
   const typingMap = useChatStore((s) => s.typing);
-  const { sendText, sendRich, forwardMessage, setTyping, markRead, react, editMessage, deleteLocal, deleteForEveryone, togglePin, votePoll, pinned, clearThread } = useChatStore();
+  const { sendText, sendRich, forwardMessage, setTyping, markRead, react, editMessage, deleteLocal, deleteForEveryone, togglePin, votePoll, pinned, clearThread, retryMessage, discardFailed } = useChatStore();
   const { block, report, removeContact } = useContactStore();
   const ring = useCallStore((s) => s.ring);
   const approved = useContactStore((s) => s.approved);
@@ -328,6 +329,15 @@ export default function ChatScreen() {
     setPollQuestion('');
     setPollOptA('');
     setPollOptB('');
+  };
+
+  // Tapping "Failed" on one of my messages: say why, and offer to try again or discard it.
+  const onFailedMessage = (messageId: string, reason?: string) => {
+    appAlert('Message not sent', failReasonText(reason), [
+      { text: 'Try again', onPress: () => { retryMessage(id ?? '', false, messageId); } },
+      { text: 'Delete', style: 'destructive', onPress: () => discardFailed(id ?? '', false, messageId) },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
   };
 
   // onForward(): offers up to the first 6 approved contacts as forward
@@ -669,6 +679,7 @@ export default function ChatScreen() {
                 meId={me}
                 onLongPress={() => onLongPressMessage(item.id, item.from === me, item.text)}
                 onVote={(optionIndex) => votePoll(id ?? '', false, item.id, optionIndex)}
+                onFailedPress={item.from === me && item.status === 'failed' ? () => onFailedMessage(item.id, item.failReason) : undefined}
                 replyPreview={repliedTo ? { senderLabel: repliedTo.from === me ? 'You' : contact.display_name || contact.username, text: previewFor(repliedTo) } : null}
               />
             );

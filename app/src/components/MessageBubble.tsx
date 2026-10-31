@@ -33,6 +33,8 @@ interface MessageBubbleProps {
   senderName?: string;
   onLongPress?: () => void;
   onVote?: (optionIndex: number) => void;
+  /** Tapping "Failed" on one of my messages (to offer retry / delete). */
+  onFailedPress?: () => void;
   // The replied-to message's sender label + content preview — looked up by
   // the parent (which has the full thread) from message.replyToId, since
   // this component only ever sees the one message. Undefined/null means
@@ -45,7 +47,7 @@ interface MessageBubbleProps {
 // group-chat sender-name label, long-press menu trigger, and the shared
 // footer row (edited flag, timestamp, read receipt, reactions) around
 // whatever BubbleContent renders for this message's kind.
-export function MessageBubble({ message: m, isMe, meId, senderName, onLongPress, onVote, replyPreview }: MessageBubbleProps) {
+export function MessageBubble({ message: m, isMe, meId, senderName, onLongPress, onVote, onFailedPress, replyPreview }: MessageBubbleProps) {
   const { tokens, a1, a2 } = useTheme();
   if (m.deleted) {
     return (
@@ -69,7 +71,7 @@ export function MessageBubble({ message: m, isMe, meId, senderName, onLongPress,
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 4, justifyContent: isMe ? 'flex-end' : 'flex-start' }}>
           {m.edited && <Text style={{ fontSize: 10, color: tokens.text3, fontFamily: fontFamilies.medium }}>edited</Text>}
           <Text style={{ fontSize: 10.5, color: tokens.text3, fontFamily: fontFamilies.semibold }}>{timeLabel(m.sentAt)}</Text>
-          {isMe && <ReadReceipt status={m.status} color={a1} />}
+          {isMe && <ReadReceipt status={m.status} color={a1} onFailedPress={onFailedPress} />}
         </View>
         {reactionEntries.length > 0 && (
           <View style={{ flexDirection: 'row', gap: 2, marginTop: 3, alignSelf: isMe ? 'flex-end' : 'flex-start' }}>
@@ -597,9 +599,14 @@ function VoiceRow({ color, playBg, playFill, dur, durCol }: any) {
 // a hollow circle while sending, red "Failed" text on failure, or a
 // double-checkmark (colored to indicate read vs. delivered-but-unread)
 // once it's left the device.
-function ReadReceipt({ status, color }: { status: ChatMessage['status']; color: string }) {
+function ReadReceipt({ status, color, onFailedPress }: { status: ChatMessage['status']; color: string; onFailedPress?: () => void }) {
   if (status === 'sending') return <Text style={{ fontSize: 10, color }}>○</Text>;
-  if (status === 'failed') return <Text style={{ fontSize: 11, color: '#ff5a6e', fontFamily: fontFamilies.bold }}>Failed</Text>;
+  if (status === 'failed')
+    return (
+      <Pressable onPress={onFailedPress} hitSlop={8} disabled={!onFailedPress}>
+        <Text style={{ fontSize: 11, color: '#ff5a6e', fontFamily: fontFamilies.bold }}>{onFailedPress ? 'Failed · tap' : 'Failed'}</Text>
+      </Pressable>
+    );
   const readColor = status === 'read' ? color : 'rgba(150,150,160,0.6)';
   return (
     <Svg width={15} height={11} viewBox="0 0 24 16" fill="none" stroke={readColor} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
