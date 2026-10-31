@@ -48,6 +48,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 42 | Notifications went to a phone the account had left (one push token per account) | app + DB + relay | branch `fix/issue-42-device-push-tokens` | In `main`; run migration 0008 in Supabase; needs build 8 |
 | 1 | `contact_requests` RLS: a user could insert an already-approved request, or approve their own pending request, or rewrite its parties | DB | branch `fix/issue-1-contact-rls` (migration 0009) | In `main`; run migration 0009 in Supabase; no build needed |
 | 8 (email part) | Users could store `email_verified = true` without confirming their email | DB | branch `fix/issue-8-email-verified` (migration 0010) | In `main`; run migration 0010 in Supabase; no build needed |
+| 7 | Edit / delete / poll vote not checked against the original sender | app | branch `fix/issue-7-sender-check` | Pushed, waiting for "merge 7"; needs build 8 |
 | 24 | A failed contact refresh (network drop, timeout) emptied Chats/Contacts and made blocked people reappear | app | branch `fix/issue-24-contact-refresh` | In `main`, needs build 8 |
 
 ### Open (original 20)
@@ -55,7 +56,6 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | # | Issue | Sev | Where |
 |---|---|---|---|
 | 2 | `users` table readable by everyone (login-by-username, signup check, contact search, QR depend on it) | C | DB + app |
-| 7 | Edit / delete / poll vote not checked against the original sender | H | app |
 | 8 | Users can set their own `phone_verified` (the `email_verified` part is fixed, see below; phone verification is not in the live flow) | H | DB |
 | 9 | Public `/ice-servers` exposes TURN credentials | H | relay |
 | 12 | Presence visibility setting is cosmetic | H | app + relay |
@@ -274,6 +274,14 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Not changed:** `phone_verified` (phone verification is not in the live flow, per your instruction), and the `email` column itself can still be set to any text. Existing rows are untouched; the migration ends with a query that lists rows marked verified without a confirmed email.
 - **Rollout:** run migration 0010 in the Supabase SQL editor.
 - **Shipped:** merged to `main`; migration still to be run in Supabase.
+
+### 2026-11-01: Issue 7 — edits, deletes and votes are checked
+- **Root cause:** when a message arrived with kind edit, delete, poll vote or reaction, the app applied it to whatever message id it named, without checking who sent it. So the other person in a chat (or any group member) could rewrite or delete YOUR messages on your phone, vote on something that is not a poll, or store a huge "reaction".
+- **File:** `app/src/state/chatStore.ts`.
+- **Change:** an edit or delete applies only if the sender of the event is the original sender of the message; a poll vote applies only to a poll message and a valid option; a reaction must be a short emoji (16 characters at most). Everything else is ignored.
+- **Tested (real store, old vs new):** old code fails 5 of 9 (other person edits and deletes my message, votes on a non-poll, votes for an option that does not exist, 500-character reaction); new code passes 9/9 including the normal cases (own edit, own delete, valid vote, normal reaction). App typecheck clean.
+- **Not changed:** the relay still forwards these events as before (it cannot read them; they are encrypted).
+- **Shipped:** branch only; needs build 8.
 
 ---
 
