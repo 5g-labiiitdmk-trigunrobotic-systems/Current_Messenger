@@ -1,3 +1,4 @@
+import { Linking } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -5,11 +6,28 @@ import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import type { AudioRecorder } from 'expo-audio';
 import { createAudioPlayer, requestRecordingPermissionsAsync, setAudioModeAsync } from 'expo-audio';
+import { appAlert } from '../state/alertStore';
 import { VideoTrimNative, showVideoTrimEditorNative, compressVideoNative, type VideoTrimSpec } from './videoTrim';
 
 // FILE PURPOSE: Every media capture/pick/process helper used by the
 // composer — photos (with crop), avatar photos, videos (with trim +
 // compress), device location, and voice-message recording/playback.
+
+/**
+ * Tells the user why nothing happened when a permission was refused, and
+ * offers to open the app's settings — a denied photo / camera / location
+ * request used to just return null, which the callers treat as "cancelled",
+ * so tapping the button did nothing at all.
+ */
+export function explainPermissionDenied(feature: 'camera' | 'photos' | 'location') {
+  const what = feature === 'camera' ? 'Camera' : feature === 'photos' ? 'Photo' : 'Location';
+  const use = feature === 'camera' ? 'take photos' : feature === 'photos' ? 'choose photos' : 'share your location';
+  appAlert(`${what} access is off`, `Allow ${what.toLowerCase()} access for Current in your phone's Settings to ${use}.`, [
+    { text: 'Open Settings', onPress: () => { Linking.openSettings().catch(() => {}); } },
+    { text: 'Not now', style: 'cancel' },
+  ]);
+}
+
 /**
  * source: 'library' (default, unchanged for every existing call site —
  * none of them pass this) opens the photo gallery; 'camera' launches a
@@ -29,7 +47,10 @@ import { VideoTrimNative, showVideoTrimEditorNative, compressVideoNative, type V
  */
 export async function pickImageBase64(source: 'camera' | 'library' = 'library'): Promise<{ base64: string; mime: string } | null> {
   const perm = source === 'camera' ? await ImagePicker.requestCameraPermissionsAsync() : await ImagePicker.requestMediaLibraryPermissionsAsync();
-  if (!perm.granted) return null;
+  if (!perm.granted) {
+    explainPermissionDenied(source === 'camera' ? 'camera' : 'photos');
+    return null;
+  }
   const launch = source === 'camera' ? ImagePicker.launchCameraAsync : ImagePicker.launchImageLibraryAsync;
   const result = await launch({
     mediaTypes: ['images'],
@@ -52,7 +73,10 @@ export async function pickImageBase64(source: 'camera' | 'library' = 'library'):
 export async function pickAvatarImage(source: 'camera' | 'library'): Promise<{ base64: string; mime: string } | null> {
   const perm =
     source === 'camera' ? await ImagePicker.requestCameraPermissionsAsync() : await ImagePicker.requestMediaLibraryPermissionsAsync();
-  if (!perm.granted) return null;
+  if (!perm.granted) {
+    explainPermissionDenied(source === 'camera' ? 'camera' : 'photos');
+    return null;
+  }
 
   const launch = source === 'camera' ? ImagePicker.launchCameraAsync : ImagePicker.launchImageLibraryAsync;
   const result = await launch({
@@ -358,7 +382,10 @@ export async function pickVideoBase64(source: 'camera' | 'library' = 'library'):
 // one-time-share-only claim.
 export async function getCurrentLocationOnce(): Promise<{ lat: number; lng: number } | null> {
   const perm = await Location.requestForegroundPermissionsAsync();
-  if (perm.status !== 'granted') return null;
+  if (perm.status !== 'granted') {
+    explainPermissionDenied('location');
+    return null;
+  }
   const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
   return { lat: pos.coords.latitude, lng: pos.coords.longitude };
 }

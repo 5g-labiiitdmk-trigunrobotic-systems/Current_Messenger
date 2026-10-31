@@ -48,6 +48,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 42 | Notifications went to a phone the account had left (one push token per account) | app + DB + relay | branch `fix/issue-42-device-push-tokens` | In `main`; run migration 0008 in Supabase; needs build 8 |
 | 1 | `contact_requests` RLS: a user could insert an already-approved request, or approve their own pending request, or rewrite its parties | DB | branch `fix/issue-1-contact-rls` (migration 0009) | In `main`; run migration 0009 in Supabase; no build needed |
 | 8 (email part) | Users could store `email_verified = true` without confirming their email | DB | branch `fix/issue-8-email-verified` (migration 0010) | In `main`; run migration 0010 in Supabase; no build needed |
+| 33 | Denied photo / camera / location permission gave no message | app | branch `fix/issue-33-permission-messages` | Pushed, waiting for "merge 33"; needs build 8 |
 | 24 | A failed contact refresh (network drop, timeout) emptied Chats/Contacts and made blocked people reappear | app | branch `fix/issue-24-contact-refresh` | In `main`, needs build 8 |
 
 ### Open (original 20)
@@ -74,7 +75,6 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 30 | A declined contact request can never be re-sent (error swallowed) | M | app |
 | 31 | Leaving a group only sends the leave message; group stays on screen | M | app |
 | 32 | Group invite / forward lists cut at 6 people silently | M | app |
-| 33 | Denied photo / camera permission gives no message | M | app |
 | 34 | Reset-password screen spins forever without a valid session | M | app |
 | 35 | Push token printed to the log | L | app |
 | 36 | All chat history loaded at once at start-up | M | app |
@@ -275,6 +275,13 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Rollout:** run migration 0010 in the Supabase SQL editor.
 - **Shipped:** merged to `main`; migration still to be run in Supabase.
 
+### 2026-11-01: Issue 33 — permission denied gave no message
+- **Root cause:** when photo, camera or location permission was refused, the helpers returned `null`, which the screens treat as "cancelled", so the button just did nothing. (Voice and video already showed a message.)
+- **File:** `app/src/lib/media.ts` (new `explainPermissionDenied`).
+- **Change:** a refused permission now shows "Photo / Camera / Location access is off" with the reason and an "Open Settings" button (opens the app's settings page) or "Not now". Covers chat photos, the camera option, profile photo and share location.
+- **Tested (real helpers, stubbed pickers and settings, old vs new):** old code shows nothing (5 of 7 fail); new code passes 7/7: each denial shows the right message, the button opens settings, and granted permissions return the photo/location with no alert. App typecheck clean.
+- **Shipped:** branch only; needs build 8.
+
 ---
 
 ## 5. Real-phone checks before releasing build 8
@@ -293,3 +300,4 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 11. Sign the same account in on two phones, close the app on one of them, send it a message from a third account: only the phone that is signed in notifies; sign out on one phone and confirm it stops notifying.
 10. Airplane mode on, send a message: it shows Failed within a second, not "sending".
 14. Open Contacts, turn on airplane mode, pull to refresh: the contact list stays as it was (not empty). Turn it off: it refreshes normally.
+20. In phone settings turn off Photos / Camera / Location for Current, then try attaching a photo, the camera, a profile photo and share location: each shows a message with Open Settings.
