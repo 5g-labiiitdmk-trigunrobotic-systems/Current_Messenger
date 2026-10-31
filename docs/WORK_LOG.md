@@ -48,6 +48,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 42 | Notifications went to a phone the account had left (one push token per account) | app + DB + relay | branch `fix/issue-42-device-push-tokens` | In `main`; run migration 0008 in Supabase; needs build 8 |
 | 1 | `contact_requests` RLS: a user could insert an already-approved request, or approve their own pending request, or rewrite its parties | DB | branch `fix/issue-1-contact-rls` (migration 0009) | In `main`; run migration 0009 in Supabase; no build needed |
 | 8 (email part) | Users could store `email_verified = true` without confirming their email | DB | branch `fix/issue-8-email-verified` (migration 0010) | In `main`; run migration 0010 in Supabase; no build needed |
+| 25 | Setup failure silently replaced the chosen username with a random one | app | branch `fix/issue-25-username-setup` | Pushed, waiting for "merge 25"; needs build 8 |
 | 24 | A failed contact refresh (network drop, timeout) emptied Chats/Contacts and made blocked people reappear | app | branch `fix/issue-24-contact-refresh` | In `main`, needs build 8 |
 
 ### Open (original 20)
@@ -67,7 +68,6 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 
 | # | Issue | Sev | Where |
 |---|---|---|---|
-| 25 | Setup failure silently replaces the chosen username | H | app |
 | 27 | App lock not tied to backgrounding; starts unlocked until settings load | H | app |
 | 28 | Incoming messages not de-duplicated | M | app |
 | 29 | Message-ping notification taps do not open the chat | M | app |
@@ -275,6 +275,14 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Rollout:** run migration 0010 in the Supabase SQL editor.
 - **Shipped:** merged to `main`; migration still to be run in Supabase.
 
+### 2026-11-01: Issue 25 — chosen username silently replaced after a setup failure
+- **Root cause:** `finish-setup.tsx` created the profile in a 3-try loop and, on ANY error (a network blip, a server error), swapped in a random username for the next try. A bad connection could leave someone with a name they never chose, with no message.
+- **Files:** `app/src/lib/account.ts` (new `finalizeAccountWithRetry`, `isUsernameCollision`), `app/app/(auth)/finish-setup.tsx`.
+- **Change:** the chosen username is replaced only when the database says that username is taken (unique violation on `username`); then a random one is used AND the user is told ("Username changed ... you were given @x, change it in Settings"). Any other error retries the same username (1.5 s apart); if it keeps failing the user sees "check your connection and try signing in again", and the chosen name is kept (it is stored in the account and picked up on the next sign-in).
+- **Tested (real code, stubbed database, old loop vs new):** old code renames after a single network blip; new code keeps the name (6/6): blip, persistent outage (3 tries, never renamed), real collision (renamed + flagged), other unique violations not treated as name collisions, normal path unchanged. App typecheck clean.
+- **Not covered:** the alert on a device.
+- **Shipped:** branch only; needs build 8.
+
 ---
 
 ## 5. Real-phone checks before releasing build 8
@@ -293,3 +301,4 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 11. Sign the same account in on two phones, close the app on one of them, send it a message from a third account: only the phone that is signed in notifies; sign out on one phone and confirm it stops notifying.
 10. Airplane mode on, send a message: it shows Failed within a second, not "sending".
 14. Open Contacts, turn on airplane mode, pull to refresh: the contact list stays as it was (not empty). Turn it off: it refreshes normally.
+15. Sign up with a username, tap the email link while in airplane mode, then turn it off: the account ends up with the username you chose (not a random one).

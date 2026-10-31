@@ -7,7 +7,7 @@ import { useTheme } from '../../src/theme/useTheme';
 import { fontFamilies } from '../../src/theme/tokens';
 import { useAuthStore } from '../../src/state/authStore';
 import { useSignupStore } from '../../src/state/signupStore';
-import { finalizeAccount } from '../../src/lib/account';
+import { finalizeAccountWithRetry } from '../../src/lib/account';
 import { generateFriendlyUsername } from '../../src/lib/usernameGen';
 import { appAlert } from '../../src/state/alertStore';
 
@@ -59,21 +59,24 @@ export default function FinishSetupScreen() {
         // (e.g. an account from before this fix, or signup was somehow
         // skipped entirely).
         const pendingUsername = useSignupStore.getState().username || (session.user.user_metadata?.username as string | undefined);
-        let username = pendingUsername || generateFriendlyUsername();
-        let succeeded = false;
-        for (let attempt = 0; attempt < 3 && !succeeded; attempt++) {
-          try {
-            await finalizeAccount({ userId: session.user.id, username, email: session.user.email ?? '' });
-            succeeded = true;
-          } catch {
-            username = generateFriendlyUsername(); // likely a username collision — try a fresh one
-          }
+        let result: { username: string; replaced: boolean } | null = null;
+        try {
+          result = await finalizeAccountWithRetry({
+            userId: session.user.id,
+            username: pendingUsername || generateFriendlyUsername(),
+            email: session.user.email ?? '',
+          });
+        } catch {
+          result = null;
         }
         finalizing.current = false;
-        if (!succeeded) {
-          appAlert('Could not finish setup', 'Please try signing in again.');
+        if (!result) {
+          appAlert('Could not finish setup', 'Please check your connection and try signing in again. Your chosen username is kept.');
           router.replace('/(auth)/onboarding');
           return;
+        }
+        if (result.replaced) {
+          appAlert('Username changed', `The username you picked was taken a moment ago, so you were given @${result.username}. You can change it in Settings.`);
         }
         await useAuthStore.getState().refreshProfile();
         useSignupStore.getState().reset();
