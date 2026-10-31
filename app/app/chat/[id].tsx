@@ -20,7 +20,7 @@ import { useAuthStore } from '../../src/state/authStore';
 import { useChatSessionStore } from '../../src/state/chatSessionStore';
 import { appAlert } from '../../src/state/alertStore';
 import { isPresenceVisible } from '../../src/lib/presencePolicy';
-import { pickImageBase64, pickVideoBase64, getCurrentLocationOnce, startVoiceRecording, stopVoiceRecording, playAudioBase64, MAX_VIDEO_DURATION_SECONDS, MAX_VIDEO_FILE_BYTES } from '../../src/lib/media';
+import { pickImageBase64, pickVideoBase64, getCurrentLocationOnce, startVoiceRecording, stopVoiceRecording, abortVoiceRecording, playAudioBase64, MAX_VIDEO_DURATION_SECONDS, MAX_VIDEO_FILE_BYTES } from '../../src/lib/media';
 import { withDateSeparators } from '../../src/lib/dateSeparators';
 import { useAudioRecorder, RecordingPresets } from 'expo-audio';
 import type { RejectReason } from '../../src/state/chatSessionStore';
@@ -102,6 +102,21 @@ export default function ChatScreen() {
   const listRef = useRef<FlatList>(null);
   const typingTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  // If the user leaves this chat while a recording is running, stop it and put
+  // the phone's audio session back to normal (it would otherwise stay in
+  // record mode — see endRecordingAudioMode in media.ts). Only acts when THIS
+  // screen was actually recording, so it can't disturb an active call.
+  const recordingRef = useRef(false);
+  useEffect(() => {
+    recordingRef.current = recording;
+  }, [recording]);
+  useEffect(
+    () => () => {
+      if (recordingRef.current) abortVoiceRecording(recorder).catch(() => {});
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
 
   const messages = searchQuery.trim() ? allMessages.filter((m) => m.text?.toLowerCase().includes(searchQuery.trim().toLowerCase())) : allMessages;
 

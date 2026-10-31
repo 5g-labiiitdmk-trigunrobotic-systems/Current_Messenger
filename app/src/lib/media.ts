@@ -389,19 +389,51 @@ export type StartRecordingResult = 'started' | 'permission_denied' | 'start_fail
  * (which was already wrong for a genuine native start failure, not a
  * permission denial).
  */
+// Puts the audio session back to normal playback. Turning on
+// `allowsRecording` switches the whole phone audio session to a
+// record-capable mode (on iPhone: play-and-record, which routes sound to the
+// earpiece, plays quietly and can interfere with calls); it was switched on
+// when a recording started and NEVER switched off again. Must be called on
+// every way a recording can end — stopped, failed to start, failed to stop,
+// or abandoned. Never throws.
+async function endRecordingAudioMode(): Promise<void> {
+  try {
+    await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
+  } catch (e: any) {
+    // eslint-disable-next-line no-console
+    console.error('[media] could not restore playback audio mode:', e?.message ?? e);
+  }
+}
+
 export async function startVoiceRecording(recorder: AudioRecorder): Promise<StartRecordingResult> {
+  let recordModeOn = false;
   try {
     const perm = await requestRecordingPermissionsAsync();
     if (!perm.granted) return 'permission_denied';
     await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+    recordModeOn = true;
     await recorder.prepareToRecordAsync();
     recorder.record();
     return 'started';
   } catch (e: any) {
     // eslint-disable-next-line no-console
     console.error('[media] startVoiceRecording failed:', e?.message ?? e);
+    if (recordModeOn) await endRecordingAudioMode(); // don't leave the session in record mode after a failed start
     return 'start_failed';
   }
+}
+
+/**
+ * Abandons a recording that is in progress without sending it (e.g. the user
+ * left the chat while recording). Best effort; always restores playback mode.
+ */
+export async function abortVoiceRecording(recorder: AudioRecorder): Promise<void> {
+  try {
+    await recorder.stop();
+  } catch {
+    // already stopped / never started — fine
+  }
+  await endRecordingAudioMode();
 }
 
 export async function stopVoiceRecording(recorder: AudioRecorder): Promise<{ base64: string; mime: string; durationLabel: string } | null> {
@@ -420,6 +452,9 @@ export async function stopVoiceRecording(recorder: AudioRecorder): Promise<{ bas
     // eslint-disable-next-line no-console
     console.error('[media] stopVoiceRecording failed:', e?.message ?? e);
     return null;
+  } finally {
+    // Whether the recording was saved or not, the session is no longer recording.
+    await endRecordingAudioMode();
   }
 }
 
