@@ -48,6 +48,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 42 | Notifications went to a phone the account had left (one push token per account) | app + DB + relay | branch `fix/issue-42-device-push-tokens` | In `main`; run migration 0008 in Supabase; needs build 8 |
 | 1 | `contact_requests` RLS: a user could insert an already-approved request, or approve their own pending request, or rewrite its parties | DB | branch `fix/issue-1-contact-rls` (migration 0009) | In `main`; run migration 0009 in Supabase; no build needed |
 | 8 (email part) | Users could store `email_verified = true` without confirming their email | DB | branch `fix/issue-8-email-verified` (migration 0010) | In `main`; run migration 0010 in Supabase; no build needed |
+| 30 | A declined contact request could never be re-sent; the error was swallowed | app | branch `fix/issue-30-declined-resend` | Pushed, waiting for "merge 30"; needs build 8 |
 | 24 | A failed contact refresh (network drop, timeout) emptied Chats/Contacts and made blocked people reappear | app | branch `fix/issue-24-contact-refresh` | In `main`, needs build 8 |
 
 ### Open (original 20)
@@ -71,7 +72,6 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 27 | App lock not tied to backgrounding; starts unlocked until settings load | H | app |
 | 28 | Incoming messages not de-duplicated | M | app |
 | 29 | Message-ping notification taps do not open the chat | M | app |
-| 30 | A declined contact request can never be re-sent (error swallowed) | M | app |
 | 31 | Leaving a group only sends the leave message; group stays on screen | M | app |
 | 32 | Group invite / forward lists cut at 6 people silently | M | app |
 | 33 | Denied photo / camera permission gives no message | M | app |
@@ -274,6 +274,14 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Not changed:** `phone_verified` (phone verification is not in the live flow, per your instruction), and the `email` column itself can still be set to any text. Existing rows are untouched; the migration ends with a query that lists rows marked verified without a confirmed email.
 - **Rollout:** run migration 0010 in the Supabase SQL editor.
 - **Shipped:** merged to `main`; migration still to be run in Supabase.
+
+### 2026-11-01: Issue 30 — re-sending a declined contact request
+- **Root cause:** a declined request keeps its row, which occupies the (sender, receiver) slot (`contact_requests_unique_pair`). A new request hit a unique-violation (23505), and the app treated that as "already covered" and returned silently, so nothing was sent and nothing was shown.
+- **File:** `app/src/state/contactStore.ts`.
+- **Change:** before inserting, the sender's own declined row to that person is deleted (a sender may delete a row they are part of), then a fresh pending request is inserted and the recipient notified as usual. A failed delete or any other insert error now shows "Could not send request" instead of failing silently. Compatible with the contact-request security fix (migration 0009: inserts must be pending, delete still allowed for participants).
+- **Tested (real store, stubbed database that enforces the unique pair, old vs new):** old code fails the re-send (3 of 6 fail); new code passes 6/6: re-send after decline creates a pending request, notifies, shows as outgoing; first request, duplicate send while pending and mutual-request handling unchanged.
+- **Limit:** a person who declined can be asked again; they can block the sender to stop it. A cool-down could be added if it gets abused.
+- **Shipped:** branch only; needs build 8.
 
 ---
 
