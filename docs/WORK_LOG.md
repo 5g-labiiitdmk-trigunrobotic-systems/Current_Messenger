@@ -48,6 +48,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 42 | Notifications went to a phone the account had left (one push token per account) | app + DB + relay | branch `fix/issue-42-device-push-tokens` | In `main`; run migration 0008 in Supabase; needs build 8 |
 | 1 | `contact_requests` RLS: a user could insert an already-approved request, or approve their own pending request, or rewrite its parties | DB | branch `fix/issue-1-contact-rls` (migration 0009) | In `main`; run migration 0009 in Supabase; no build needed |
 | 8 (email part) | Users could store `email_verified = true` without confirming their email | DB | branch `fix/issue-8-email-verified` (migration 0010) | In `main`; run migration 0010 in Supabase; no build needed |
+| 28 | Incoming messages not de-duplicated (a re-sent copy showed twice) | app | branch `fix/issue-28-dedupe` | Pushed, waiting for "merge 28"; needs build 8 |
 | 24 | A failed contact refresh (network drop, timeout) emptied Chats/Contacts and made blocked people reappear | app | branch `fix/issue-24-contact-refresh` | In `main`, needs build 8 |
 
 ### Open (original 20)
@@ -69,7 +70,6 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 |---|---|---|---|
 | 25 | Setup failure silently replaces the chosen username | H | app |
 | 27 | App lock not tied to backgrounding; starts unlocked until settings load | H | app |
-| 28 | Incoming messages not de-duplicated | M | app |
 | 29 | Message-ping notification taps do not open the chat | M | app |
 | 30 | A declined contact request can never be re-sent (error swallowed) | M | app |
 | 31 | Leaving a group only sends the leave message; group stays on screen | M | app |
@@ -274,6 +274,13 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Not changed:** `phone_verified` (phone verification is not in the live flow, per your instruction), and the `email` column itself can still be set to any text. Existing rows are untouched; the migration ends with a query that lists rows marked verified without a confirmed email.
 - **Rollout:** run migration 0010 in the Supabase SQL editor.
 - **Shipped:** merged to `main`; migration still to be run in Supabase.
+
+### 2026-11-01: Issue 28 — duplicate incoming messages
+- **Root cause:** the receive handler appended every `message:receive` to the thread without checking whether a message with that id was already there, so a copy re-sent by the relay (e.g. around a reconnect) or a duplicate frame appeared twice and was saved twice.
+- **File:** `app/src/state/chatStore.ts`.
+- **Change:** the append now checks the id inside the state update (so copies arriving at the same instant cannot both pass) and skips both showing and saving a message that is already in the thread. Applies to direct and group chats.
+- **Tested (real store, old vs new):** old code adds a repeated copy (5 of 6 checks fail); new code passes 6/6: first copy saved once, repeat ignored, three simultaneous copies give one message, distinct messages unaffected, groups covered. App typecheck clean.
+- **Shipped:** branch only; needs build 8.
 
 ---
 
