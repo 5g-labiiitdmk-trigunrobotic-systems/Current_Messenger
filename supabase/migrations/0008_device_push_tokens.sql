@@ -1,48 +1,73 @@
-do $$
-declare
-  a uuid; b uuid; n int; owner uuid; failed boolean;
-  t1 text := 'ExponentPushToken[sqltest-phone-one-xxxx]';
-  t2 text := 'ExponentPushToken[sqltest-phone-two-xxxx]';
+-- One push token PER DEVICE (issue 42).
+--
+-- Until now each account had a single `users.push_token`: whichever phone
+-- registered last owned it, and a phone that signed out (or an account signed
+-- in on two phones) kept getting — or stole — the notifications. This table
+-- gives every device its own row. The relay (service role) sends to every
+-- token of the account; the old `users.push_token` column stays in place and
+-- is still honoured by the relay, so apps that predate this keep working.
+--
+-- A push token identifies a physical app install, so it is the primary key:
+-- when someone signs in on a phone another account used before, the row simply
+-- moves to the new account instead of leaving a stale copy behind.
+--
+-- Tokens are credentials for pushing to a device, so clients get NO direct
+-- table access (row level security on, no policies). They go through the two
+-- functions below, which can only ever act on the caller's own account.
+
+create table if not exists public.device_push_tokens (
+  token text primary key,
+  user_id uuid not null references public.users (id) on delete cascade,
+  platform text,
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists device_push_tokens_user_idx on public.device_push_tokens (user_id);
+
+alter table public.device_push_tokens enable row level security;
+-- (deliberately no policies: only the service role and the functions below)
+
+-- Registers this device's token for the signed-in account. If the token was
+-- registered to a different account (the phone changed hands / accounts), it
+-- moves to the caller.
+create or replace function public.register_push_token(p_token text, p_platform text default null)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
 begin
-  select id into a from public.users order by created_at limit 1;
-  select id into b from public.users where id <> a order by created_at limit 1;
-  if a is null or b is null then raise exception 'Need at least two rows in public.users to run this test'; end if;
+  if auth.uid() is null then
+    raise exception 'not authenticated';
+  end if;
+  if p_token is null or length(p_token) < 10 or length(p_token) > 300 then
+    raise exception 'invalid token';
+  end if;
+  insert into public.device_push_tokens (token, user_id, platform, updated_at)
+  values (p_token, auth.uid(), p_platform, now())
+  on conflict (token) do update
+    set user_id = excluded.user_id,
+        platform = excluded.platform,
+        updated_at = now();
+end;
+$$;
 
-  perform set_config('request.jwt.claim.sub', a::text, true);
-  perform set_config('request.jwt.claims', json_build_object('sub', a)::text, true);
-  perform public.register_push_token(t1, 'android');
-  perform public.register_push_token(t2, 'ios');
-  perform public.register_push_token(t2, 'ios');
-  select count(*) into n from public.device_push_tokens where user_id = a and token in (t1, t2);
-  if n <> 2 then raise exception 'FAIL 1: expected 2 device tokens for A, got %', n; end if;
+-- Removes this device's token, but only if it belongs to the caller.
+create or replace function public.unregister_push_token(p_token text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'not authenticated';
+  end if;
+  delete from public.device_push_tokens where token = p_token and user_id = auth.uid();
+end;
+$$;
 
-  perform set_config('request.jwt.claim.sub', b::text, true);
-  perform set_config('request.jwt.claims', json_build_object('sub', b)::text, true);
-  perform public.register_push_token(t1, 'android');
-  select user_id into owner from public.device_push_tokens where token = t1;
-  if owner is distinct from b then raise exception 'FAIL 2: token did not move to the new account'; end if;
-
-  perform set_config('request.jwt.claim.sub', a::text, true);
-  perform set_config('request.jwt.claims', json_build_object('sub', a)::text, true);
-  perform public.unregister_push_token(t1);
-  select count(*) into n from public.device_push_tokens where token = t1;
-  if n <> 1 then raise exception 'FAIL 3: A was able to remove B''s token'; end if;
-
-  perform set_config('request.jwt.claim.sub', b::text, true);
-  perform set_config('request.jwt.claims', json_build_object('sub', b)::text, true);
-  perform public.unregister_push_token(t1);
-  select count(*) into n from public.device_push_tokens where token = t1;
-  if n <> 0 then raise exception 'FAIL 4: owner could not remove own token'; end if;
-
-  perform set_config('request.jwt.claim.sub', '', true);
-  perform set_config('request.jwt.claims', '', true);
-  failed := false;
-  begin
-    perform public.register_push_token(t2, 'ios');
-  exception when others then
-    failed := true;
-  end;
-  if not failed then raise exception 'FAIL 5: call without a signed-in user was allowed'; end if;
-
-  raise exception 'ALL 5 CHECKS PASSED - nothing was saved (this message is expected)';
-end $$;
+revoke all on function public.register_push_token(text, text) from public;
+revoke all on function public.unregister_push_token(text) from public;
+grant execute on function public.register_push_token(text, text) to authenticated;
+grant execute on function public.unregister_push_token(text) to authenticated;

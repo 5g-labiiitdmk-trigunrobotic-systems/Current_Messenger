@@ -45,6 +45,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 14 | Contact cache kept "not a contact" for 30 s after approval or a database hiccup; `isBlocked` failed open | relay | branch `fix/issue-14-contact-cache` | Merged to `main` 03:37 (includes 6); Render auto-deploys |
 | 26 | Local chat database deleted on any open error (disk full, locked, I/O), losing all history | app | branch `fix/issue-26-db-open-wipe` | In `main`, needs build 8 |
 | 21 | Audio session left in recording mode after a voice note (earpiece / low volume afterwards) | app | branch `fix/issue-21-audio-mode` | In `main`, needs build 8 |
+| 42 | Notifications went to a phone the account had left (one push token per account) | app + DB + relay | branch `fix/issue-42-device-push-tokens` | In `main`; run migration 0008 in Supabase; needs build 8 |
 | 24 | A failed contact refresh (network drop, timeout) emptied Chats/Contacts and made blocked people reappear | app | branch `fix/issue-24-contact-refresh` | In `main`, needs build 8 |
 
 ### Open (original 20)
@@ -81,7 +82,6 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 39 | Over-broad Android permissions; `ITSAppUsesNonExemptEncryption` not set | L | app config |
 | 40 | No calls to a closed app on iPhone (no CallKit / push-to-talk) | — | product limit |
 | 41 | A failed message shows only "Failed": no retry button, no reason | M | app (found while fixing 11) |
-| 42 | Notifications go to a phone where the account was signed in earlier (one push token per account; a stale token stays after sign-out in the live app; no per-device tokens) | H | app + DB + relay (found 2026-10-28, reported by Krishna) |
 
 ### Suggested order
 1. **Relay, no app release:** 9, 14, 15.
@@ -244,6 +244,18 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Not covered:** retry timing on a real phone.
 - **Shipped:** merged to `main`; needs build 8.
 
+### 2026-10-28: Issue 42 — one push token per account (per-device tokens)
+- **Root cause:** each account had a single push token (`users.push_token`); the last phone to register won, and the live app never removed a phone's token when it signed out (and the sign-out in `main` cleared the column even if the account's other phone had since registered). So a phone the account had left could keep getting notifications, or a second phone would silently take them over.
+- **Files:** new `supabase/migrations/0008_device_push_tokens.sql`; `server/src/pushPing.ts`; `app/src/lib/push.ts`.
+- **Change:**
+  - Database: new `device_push_tokens` table, one row per physical install (the token is the key, so it moves to whoever signs in on that phone). Clients have no direct table access; they call `register_push_token` / `unregister_push_token`, which can only act on the caller's own account. Safe to run twice.
+  - Relay: a push goes to every token of the account (one request, de-duplicated with the old single token); tokens Expo reports as dead (`DeviceNotRegistered`) are deleted; if the new table does not exist yet it falls back to the old token alone, so nothing breaks before the migration is run.
+  - App: registers this device through the new function (falls back to the old column if the function is missing); on sign-out removes only THIS device's token, and clears the profile column only if it holds this device's token.
+- **Tested:** the migration on a real Postgres engine with roles (13/13: moves tokens between accounts, cannot remove or read others', no direct writes, junk and unauthenticated calls refused, safe twice); app registration code old vs new (old fails 5, new passes 7/7); relay old vs new (old fails the multi-device checks; new passes 7/7, including legacy-only accounts, de-duplication, dead-token pruning, and the missing-table fallback); regression and size/rate-limit suites pass; app and relay typecheck clean.
+- **Rollout order:** (1) run migration 0008 in the Supabase SQL editor; (2) merge, which deploys the relay (it works before and after the migration); (3) the app part reaches phones with build 8.
+- **Limits:** a phone running the live (old) app still writes only the single profile token and never removes it on sign-out, so that stale-token case stays until those phones update; a stale old-style token is also cleaned up when Expo reports it dead. Android push still needs the FCM credentials on the Expo project (existing note in docs/SETUP.md).
+- **Shipped:** merged to `main`. The relay part is safe to deploy first; the migration (0008) must be run in Supabase for per-device tokens to take effect; the app part needs build 8. The migration self-test script now lives in `supabase/tests/device_push_tokens_selftest.sql`.
+
 ---
 
 ## 5. Real-phone checks before releasing build 8
@@ -259,5 +271,6 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 9. Reset-password link on a fresh install.
 12. Create a throwaway account, add a contact, then Settings > Delete account (confirm twice): the app returns to login, signing in with that email fails, the row is gone in Supabase (Authentication and `users`), and the contact's phone refreshes without the account.
 13. iPhone: record and send a voice note, then play a received voice note and place a call: playback is at normal loudness from the speaker (not the earpiece) and the call sounds normal; start a voice note, leave the chat without sending, then play a voice note: still normal.
+11. Sign the same account in on two phones, close the app on one of them, send it a message from a third account: only the phone that is signed in notifies; sign out on one phone and confirm it stops notifying.
 10. Airplane mode on, send a message: it shows Failed within a second, not "sending".
-13. Open Contacts, turn on airplane mode, pull to refresh: the contact list stays as it was (not empty). Turn it off: it refreshes normally.
+14. Open Contacts, turn on airplane mode, pull to refresh: the contact list stays as it was (not empty). Turn it off: it refreshes normally.

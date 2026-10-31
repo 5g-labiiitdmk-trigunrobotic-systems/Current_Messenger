@@ -42,6 +42,10 @@ let tokenListenerRegistered = false;
 // this variable at the moment the token rotates.
 let pushUserId: string | null = null;
 
+// This install's own Expo push token, once known. Used on sign-out to remove
+// exactly THIS device's token (not other devices' — see clearPushToken).
+let deviceToken: string | null = null;
+
 // Obtains this device's Expo push token and saves it on the user's profile
 // row so the relay knows where to send offline-ping notifications.
 async function fetchAndStoreToken(userId: string): Promise<void> {
@@ -66,10 +70,25 @@ async function fetchAndStoreToken(userId: string): Promise<void> {
   }
   // eslint-disable-next-line no-console
   console.log('[push] obtained Expo push token:', token);
-  const { error } = await supabase.from('users').update({ push_token: token }).eq('id', userId);
-  if (error) {
+  deviceToken = token;
+  // Per-device registration (migration 0008): this device gets its own row, so
+  // an account signed in on several phones notifies each of them, and a phone
+  // that signs out can remove just its own token. The database function moves
+  // the token to this account if another account used this phone before.
+  const { error } = await supabase.rpc('register_push_token', { p_token: token, p_platform: Platform.OS });
+  if (!error) {
     // eslint-disable-next-line no-console
-    console.error('[push] failed to store push token:', error.message);
+    console.log('[push] push token registered for user', userId);
+    return;
+  }
+  // eslint-disable-next-line no-console
+  console.warn('[push] per-device registration unavailable, falling back to profile token:', error.message);
+  // Fallback for a database that doesn't have migration 0008 yet: the old
+  // single-token column (relay still honours it), so push never regresses.
+  const { error: legacyError } = await supabase.from('users').update({ push_token: token }).eq('id', userId);
+  if (legacyError) {
+    // eslint-disable-next-line no-console
+    console.error('[push] failed to store push token:', legacyError.message);
   } else {
     // eslint-disable-next-line no-console
     console.log('[push] push token stored for user', userId);
@@ -146,9 +165,27 @@ export async function registerForPushNotifications(userId: string) {
  */
 export async function clearPushToken(userId: string): Promise<void> {
   pushUserId = null;
+  const token = deviceToken;
+  deviceToken = null;
+  const work = async () => {
+    if (token) {
+      // Remove only THIS device's token. Other phones signed in to the same
+      // account keep theirs. (The profile column is cleared only if it holds
+      // this device's token — it used to be wiped unconditionally, which also
+      // silenced the account's other phone.)
+      await Promise.all([
+        supabase.rpc('unregister_push_token', { p_token: token }),
+        supabase.from('users').update({ push_token: null }).eq('id', userId).eq('push_token', token),
+      ]);
+    } else {
+      // This run never learned the device's token — fall back to the old
+      // behaviour so a signed-out account can't keep notifying this phone.
+      await supabase.from('users').update({ push_token: null }).eq('id', userId);
+    }
+  };
   try {
     await Promise.race([
-      supabase.from('users').update({ push_token: null }).eq('id', userId),
+      work(),
       new Promise((resolve) => setTimeout(resolve, 3000)), // don't hang sign-out on a bad network
     ]);
   } catch (e: any) {
