@@ -150,6 +150,17 @@ const SCHEMA_SQL = `
  * right now — which is why it can look like "works for new accounts,
  * broken for old ones" even though the code path is identical for both.
  */
+// True only when SQLite/SQLCipher is saying the file cannot be read with the
+// key we hold — "file is not a database" / "file is encrypted or is not a
+// database" (SQLITE_NOTADB, code 26). That is the one error that means the key
+// and the file no longer belong together. Anything else (disk full, database
+// locked, I/O error, out of memory, a native-module hiccup) says nothing about
+// the key: the history on disk is intact and must NOT be deleted over it.
+function isWrongKeyError(err: unknown): boolean {
+  const message = String((err as { message?: unknown })?.message ?? err);
+  return /not a database|file is encrypted|SQLITE_NOTADB|\(code 26\)|code 26\b/i.test(message);
+}
+
 async function openAndInitDb(userId: string, dbName: string, isRecoveryAttempt = false): Promise<SQLite.SQLiteDatabase> {
   const db = await withDbErrorAlert('opening local database', () => SQLite.openDatabaseAsync(dbName));
 
@@ -169,6 +180,13 @@ async function openAndInitDb(userId: string, dbName: string, isRecoveryAttempt =
     // file's real content, which is this statement, not the one above.
     await db.execAsync(SCHEMA_SQL);
   } catch (err) {
+    if (!isWrongKeyError(err)) {
+      // Not a key problem — leave the file alone and let the error surface;
+      // the next open simply tries again (getDb caches nothing on failure).
+      reportDbError(`initializing "${dbName}" (not a key problem — local history left untouched)`, err);
+      await db.closeAsync().catch(() => {});
+      throw err;
+    }
     if (isRecoveryAttempt) {
       reportDbError(`initializing "${dbName}" (still failing after resetting the local file once)`, err);
       throw err; // already tried a fresh file once — something else is wrong, let it surface for real
