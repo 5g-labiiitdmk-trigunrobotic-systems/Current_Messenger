@@ -4,6 +4,8 @@ import { Platform } from 'react-native';
 import { router } from 'expo-router';
 import { supabase } from './supabase';
 import { useCallStore } from '../state/callStore';
+import { useAuthStore } from '../state/authStore';
+import { routeForNotification } from './notificationRoute';
 
 // FILE PURPOSE: Ordinary (non-call) push notification setup — permission
 // request, Expo push token registration/rotation, and tap-to-route
@@ -213,6 +215,29 @@ function handleCallNotificationTap(data: Record<string, unknown> | undefined) {
   }
 }
 
+// A tapped message / chat-request / contact-request notification. If the app
+// is already signed in and running it opens straight away; on a cold start the
+// auth check has not finished, so the destination is kept and opened right
+// after the app lands on the chat list (see app/index.tsx).
+let pendingNotificationRoute: string | null = null;
+
+export function takePendingNotificationRoute(): string | null {
+  const r = pendingNotificationRoute;
+  pendingNotificationRoute = null;
+  return r;
+}
+
+function handleNavigationNotificationTap(data: Record<string, unknown> | undefined) {
+  const route = routeForNotification(data);
+  if (!route) return;
+  const auth = useAuthStore.getState();
+  if (!auth.initializing && auth.session && !auth.needsProfileSetup) {
+    router.push(route as any);
+  } else if (auth.initializing) {
+    pendingNotificationRoute = route;
+  }
+}
+
 let notificationRoutingInitialized = false;
 
 /**
@@ -238,12 +263,16 @@ export function initNotificationRouting() {
   // it has to be fetched explicitly.
   const lastResponse = Notifications.getLastNotificationResponse();
   if (lastResponse) {
-    handleCallNotificationTap(lastResponse.notification.request.content.data as Record<string, unknown> | undefined);
+    const lastData = lastResponse.notification.request.content.data as Record<string, unknown> | undefined;
+    handleCallNotificationTap(lastData);
+    handleNavigationNotificationTap(lastData);
     Notifications.clearLastNotificationResponse();
   }
 
   // Warm tap: app already running (foreground or backgrounded, JS alive).
   Notifications.addNotificationResponseReceivedListener((response) => {
-    handleCallNotificationTap(response.notification.request.content.data as Record<string, unknown> | undefined);
+    const tapData = response.notification.request.content.data as Record<string, unknown> | undefined;
+    handleCallNotificationTap(tapData);
+    handleNavigationNotificationTap(tapData);
   });
 }

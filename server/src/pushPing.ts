@@ -119,13 +119,15 @@ const PING_COOLDOWN_MS = 60_000;
  * way the recipient finds out to come back online — the notification itself
  * carries the sender's username at most, never message content.
  */
-export async function pingOfflineRecipient(recipientId: string, senderUsername: string | null) {
+export async function pingOfflineRecipient(recipientId: string, senderUsername: string | null, senderId?: string) {
   const last = lastPingAt.get(recipientId) ?? 0;
   if (Date.now() - last < PING_COOLDOWN_MS) return;
   lastPingAt.set(recipientId, Date.now());
   await sendExpoPush(recipientId, {
     title: 'Current',
     body: senderUsername ? `@${senderUsername} tried to reach you` : 'Someone tried to reach you',
+    // Lets a tap open that person's chat (older apps ignore unknown data).
+    data: { kind: 'message', ...(senderId ? { senderId } : {}) },
   });
 }
 
@@ -208,7 +210,7 @@ const SESSION_PING_COOLDOWN_MS = 5_000;
  * to be loud enough to notice, since it's subject to the same
  * SESSION_REQUEST_TIMEOUT_MS window as any other pending request.
  */
-export async function pingSessionRequest(recipientId: string, requesterUsername: string | null) {
+export async function pingSessionRequest(recipientId: string, requesterUsername: string | null, requesterId?: string) {
   const last = lastSessionPingAt.get(recipientId) ?? 0;
   if (Date.now() - last < SESSION_PING_COOLDOWN_MS) return;
   lastSessionPingAt.set(recipientId, Date.now());
@@ -216,7 +218,7 @@ export async function pingSessionRequest(recipientId: string, requesterUsername:
     title: 'Chat request',
     body: requesterUsername ? `@${requesterUsername} wants to chat` : 'Someone wants to chat',
     sound: 'default',
-    data: { kind: 'session_request', requesterUsername: requesterUsername ?? null },
+    data: { kind: 'session_request', requesterUsername: requesterUsername ?? null, ...(requesterId ? { requesterId } : {}) },
   });
 }
 
@@ -239,5 +241,6 @@ export async function pingContactRequest(recipientId: string, senderUsername: st
   await sendExpoPush(recipientId, {
     title: 'New contact request',
     body: senderUsername ? `@${senderUsername} wants to add you` : 'Someone wants to add you as a contact',
+    data: { kind: 'contact_request' },
   });
 }

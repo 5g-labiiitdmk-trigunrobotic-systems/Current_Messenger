@@ -707,7 +707,7 @@ async function handleMessageSend(userId: string, event: Extract<ClientEvent, { t
     // actionable reason instead of a technically-true-but-less-useful one.
     send(socket, { type: 'message:failed', tempId: event.tempId, reason: 'recipient_offline' });
     getUsername(userId)
-      .then((senderUsername) => pingOfflineRecipient(to, senderUsername))
+      .then((senderUsername) => pingOfflineRecipient(to, senderUsername, userId))
       .catch(() => {});
     return;
   }
@@ -784,7 +784,7 @@ async function handleSessionRequest(userId: string, to: string) {
     // recipient_offline branch) is effectively unreachable for a normal
     // "text someone who isn't currently around" attempt.
     getUsername(userId)
-      .then((requesterUsername) => pingOfflineRecipient(to, requesterUsername))
+      .then((requesterUsername) => pingOfflineRecipient(to, requesterUsername, userId))
       .catch(() => {});
     return;
   }
@@ -807,7 +807,7 @@ async function handleSessionRequest(userId: string, to: string) {
   // silently vanished. Same not-gated-on-offline pattern pingIncomingCall
   // already uses for calls.
   getUsername(userId)
-    .then((requesterUsername) => pingSessionRequest(to, requesterUsername))
+    .then((requesterUsername) => pingSessionRequest(to, requesterUsername, userId))
     .catch(() => {});
 
   setTimeout(() => {

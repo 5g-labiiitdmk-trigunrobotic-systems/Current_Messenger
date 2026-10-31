@@ -48,6 +48,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 42 | Notifications went to a phone the account had left (one push token per account) | app + DB + relay | branch `fix/issue-42-device-push-tokens` | In `main`; run migration 0008 in Supabase; needs build 8 |
 | 1 | `contact_requests` RLS: a user could insert an already-approved request, or approve their own pending request, or rewrite its parties | DB | branch `fix/issue-1-contact-rls` (migration 0009) | In `main`; run migration 0009 in Supabase; no build needed |
 | 8 (email part) | Users could store `email_verified = true` without confirming their email | DB | branch `fix/issue-8-email-verified` (migration 0010) | In `main`; run migration 0010 in Supabase; no build needed |
+| 29 | Tapping a message / chat-request / contact-request notification did not open the chat | app + relay | branch `fix/issue-29-notification-tap` | Pushed, waiting for "merge 29"; relay part deploys safely first; needs build 8 |
 | 24 | A failed contact refresh (network drop, timeout) emptied Chats/Contacts and made blocked people reappear | app | branch `fix/issue-24-contact-refresh` | In `main`, needs build 8 |
 
 ### Open (original 20)
@@ -70,7 +71,6 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 25 | Setup failure silently replaces the chosen username | H | app |
 | 27 | App lock not tied to backgrounding; starts unlocked until settings load | H | app |
 | 28 | Incoming messages not de-duplicated | M | app |
-| 29 | Message-ping notification taps do not open the chat | M | app |
 | 30 | A declined contact request can never be re-sent (error swallowed) | M | app |
 | 31 | Leaving a group only sends the leave message; group stays on screen | M | app |
 | 32 | Group invite / forward lists cut at 6 people silently | M | app |
@@ -275,6 +275,14 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Rollout:** run migration 0010 in the Supabase SQL editor.
 - **Shipped:** merged to `main`; migration still to be run in Supabase.
 
+### 2026-11-01: Issue 29 — notification taps open the right screen
+- **Root cause:** only call notifications were routed on tap. The relay's message, chat-request and contact-request pushes carried no data at all, so a tap just opened the app wherever it last was.
+- **Files:** relay `server/src/pushPing.ts` and `server/src/index.ts`; app `app/src/lib/push.ts`, new `app/src/lib/notificationRoute.ts`, `app/app/index.tsx`.
+- **Change:** the relay now adds `data` to those pushes (`kind` plus the sender's id for messages and chat requests). The app maps a tap to the sender's chat (`/chat/<id>`) or the Contacts tab; only a real UUID can become part of a route. If the app is already signed in the tap opens it at once; on a cold start the destination is remembered and opened right after the app reaches the chat list. Old apps ignore the extra data, so the relay can deploy before build 8.
+- **Tested:** relay push payloads against a stub (old vs new: old carries no data, new passes 4/4); route rules 6/6 (message, chat request, contact request, calls left to their own handler, missing data, crafted id rejected). Typechecks clean for app and relay.
+- **Not covered:** the actual notification tap on a device (warm and cold start).
+- **Shipped:** branch only.
+
 ---
 
 ## 5. Real-phone checks before releasing build 8
@@ -293,3 +301,4 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 11. Sign the same account in on two phones, close the app on one of them, send it a message from a third account: only the phone that is signed in notifies; sign out on one phone and confirm it stops notifying.
 10. Airplane mode on, send a message: it shows Failed within a second, not "sending".
 14. Open Contacts, turn on airplane mode, pull to refresh: the contact list stays as it was (not empty). Turn it off: it refreshes normally.
+17. Close the app on phone A, send A a message from B: tap the notification on A: it opens B's chat (also test with the app in the background). Send a contact request and tap its notification: it opens Contacts.
