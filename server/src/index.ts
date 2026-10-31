@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import { WebSocketServer, WebSocket } from 'ws';
 import type { ClientEvent, ServerEvent } from './protocol.js';
 import { relayState } from './state.js';
-import { verifyUserToken, areApprovedContacts, invalidateContactCache, hasContactRequest, getApprovedContactIds, deleteAccountData, isBlocked, getUsername, logTransfer } from './supabaseAdmin.js';
+import { verifyUserToken, areApprovedContacts, invalidateContactCache, hasContactRequest, getApprovedContactIds, getStatusVisibility, getStatusVisibilities, deleteAccountData, isBlocked, getUsername, logTransfer } from './supabaseAdmin.js';
 import { pingOfflineRecipient, pingIncomingCall, pingContactRequest, pingSessionRequest } from './pushPing.js';
 
 // FILE PURPOSE: The relay server itself — HTTP health/ICE endpoints, the
@@ -173,14 +173,38 @@ function send(socket: WebSocket, event: ServerEvent) {
   if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(event));
 }
 
-// Tells every other online user this user's presence just changed.
-function broadcastPresence(userId: string, status: 'online' | 'offline') {
+// Tells this user's approved contacts that their presence just changed — and
+// nobody else. It used to go to every connected socket, so any signed-in
+// stranger could watch when anyone was online, and the "Nobody" visibility
+// setting was only a hint the app applied on its own screen. Now a user set to
+// "Nobody" is not announced at all.
+async function broadcastPresence(userId: string, status: 'online' | 'offline') {
+  const visibility = await getStatusVisibility(userId);
+  if (visibility === 'nobody') return;
+  const contacts = new Set(await getApprovedContactIds(userId));
+  if (contacts.size === 0) return;
   const event: ServerEvent = { type: 'presence', userId, status, lastSeenAt: new Date().toISOString() };
   for (const id of relayState.onlineUserIds()) {
-    if (id === userId) continue;
+    if (id === userId || !contacts.has(id)) continue;
     const s = relayState.getSocket(id);
     if (s) send(s, event);
   }
+}
+
+// Sent to a user right after they connect: which of THEIR approved contacts
+// are online now (skipping anyone whose visibility is "Nobody").
+async function sendPresenceSnapshot(socket: WebSocket, userId: string) {
+  const online = relayState.onlineUserIds().filter((id) => id !== userId);
+  let visible: string[] = [];
+  if (online.length > 0) {
+    const contacts = new Set(await getApprovedContactIds(userId));
+    const candidates = online.filter((id) => contacts.has(id));
+    if (candidates.length > 0) {
+      const visibility = await getStatusVisibilities(candidates);
+      visible = candidates.filter((id) => visibility.get(id) !== 'nobody');
+    }
+  }
+  send(socket, { type: 'presence:snapshot', onlineUserIds: visible });
 }
 
 // Shape checks for every ClientEvent, run BEFORE any handler touches the
@@ -344,7 +368,7 @@ wss.on('connection', (socket) => {
       // this the newly-connecting client would have no way to learn who
       // was already online until each of those contacts' presence next
       // changes for some unrelated reason.
-      send(socket, { type: 'presence:snapshot', onlineUserIds: relayState.onlineUserIds().filter((id) => id !== userId) });
+      sendPresenceSnapshot(socket, userId).catch(() => send(socket, { type: 'presence:snapshot', onlineUserIds: [] }));
       // Same idiom as presence:snapshot above — without this, groups
       // "disappeared" on every reconnect/app relaunch, since neither the
       // relay nor the client ever persists group membership anywhere; the
@@ -361,7 +385,7 @@ wss.on('connection', (socket) => {
           isBroadcast: g.isBroadcast,
         })),
       });
-      broadcastPresence(userId, 'online');
+      broadcastPresence(userId, 'online').catch(() => {});
       // Replay a still-pending incoming ring, if any — the original 'ring'
       // signal is only ever forwarded live (see the call:signal case
       // below), so a client that was fully closed when it was sent would
@@ -401,7 +425,7 @@ wss.on('connection', (socket) => {
         break;
       }
       case 'presence:set': {
-        broadcastPresence(userId, event.status === 'online' ? 'online' : 'offline');
+        broadcastPresence(userId, event.status === 'online' ? 'online' : 'offline').catch(() => {});
         break;
       }
       case 'group:create': {
@@ -560,7 +584,7 @@ wss.on('connection', (socket) => {
     // stale — its belated close must not evict the newer live connection
     // or tell everyone else the (still-online) user went offline.
     if (userId && relayState.removeConnection(userId, socket)) {
-      broadcastPresence(userId, 'offline');
+      broadcastPresence(userId, 'offline').catch(() => {});
       const { notifyWithdrawn, notifyRejected } = relayState.clearSessionsFor(userId);
       for (const targetId of notifyWithdrawn) {
         const s = relayState.getSocket(targetId);

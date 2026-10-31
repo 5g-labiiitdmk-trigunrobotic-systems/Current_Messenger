@@ -48,6 +48,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 42 | Notifications went to a phone the account had left (one push token per account) | app + DB + relay | branch `fix/issue-42-device-push-tokens` | In `main`; run migration 0008 in Supabase; needs build 8 |
 | 1 | `contact_requests` RLS: a user could insert an already-approved request, or approve their own pending request, or rewrite its parties | DB | branch `fix/issue-1-contact-rls` (migration 0009) | In `main`; run migration 0009 in Supabase; no build needed |
 | 8 (email part) | Users could store `email_verified = true` without confirming their email | DB | branch `fix/issue-8-email-verified` (migration 0010) | In `main`; run migration 0010 in Supabase; no build needed |
+| 12 | Presence visibility setting was cosmetic: online status went to every connected user, and "Nobody" was only hidden by the app | relay | branch `fix/issue-12-presence-relay` | Pushed, waiting for "merge 12"; relay only, no build needed (deploys on Render) |
 | 24 | A failed contact refresh (network drop, timeout) emptied Chats/Contacts and made blocked people reappear | app | branch `fix/issue-24-contact-refresh` | In `main`, needs build 8 |
 
 ### Open (original 20)
@@ -58,7 +59,6 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 7 | Edit / delete / poll vote not checked against the original sender | H | app |
 | 8 | Users can set their own `phone_verified` (the `email_verified` part is fixed, see below; phone verification is not in the live flow) | H | DB |
 | 9 | Public `/ice-servers` exposes TURN credentials | H | relay |
-| 12 | Presence visibility setting is cosmetic | H | app + relay |
 | 16 | Groups lost when the relay restarts | M | relay |
 | 17 | Transfer log kept forever | M | DB |
 | 18 | Docs and encryption PDF say "libsodium"; the app uses TweetNaCl | M | docs |
@@ -274,6 +274,14 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Not changed:** `phone_verified` (phone verification is not in the live flow, per your instruction), and the `email` column itself can still be set to any text. Existing rows are untouched; the migration ends with a query that lists rows marked verified without a confirmed email.
 - **Rollout:** run migration 0010 in the Supabase SQL editor.
 - **Shipped:** merged to `main`; migration still to be run in Supabase.
+
+### 2026-11-01: Issue 12 — online status is now enforced by the relay
+- **Root cause:** the relay announced "X is online / offline" to EVERY connected socket, so any signed-in stranger could watch when anyone was online, and the "Nobody" setting was only a hint the app applied on its own screens (the code comment said so).
+- **Files:** `server/src/index.ts`, `server/src/supabaseAdmin.ts`. No app change and no build needed.
+- **Change:** a user's online/offline status is sent only to their approved contacts; a user whose setting is "Nobody" is not announced to anyone; the snapshot sent when you connect lists only your approved contacts who are online and not on "Nobody". The setting is read from the database and cached 30 seconds, so a changed setting takes effect within about half a minute; if it cannot be read, status is treated as "contacts" (never wider). The app already only shows presence for approved contacts, so "Everyone" and "Contacts only" look the same as before; "Nobody" now really hides you.
+- **Tested (relay on a mock database, old vs new):** old relay fails 5 of 11 checks (stranger sees A online and offline, snapshot lists a Nobody contact and a stranger, a Nobody user is announced when connecting); new relay passes 11/11: contacts see each other, strangers see nothing, Nobody user never announced, snapshots filtered. Relay regression (messages, groups, calls, pings) and size/rate-limit suites pass. Relay typecheck clean.
+- **Limit:** "last seen" times already known to the app are not retracted; and a user who set "Nobody" can still see their contacts' status (the setting hides you, it does not hide others).
+- **Shipped:** branch only; relay deploys on Render after merge.
 
 ---
 
