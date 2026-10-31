@@ -46,7 +46,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 26 | Local chat database deleted on any open error (disk full, locked, I/O), losing all history | app | branch `fix/issue-26-db-open-wipe` | In `main`, needs build 8 |
 | 21 | Audio session left in recording mode after a voice note (earpiece / low volume afterwards) | app | branch `fix/issue-21-audio-mode` | In `main`, needs build 8 |
 | 42 | Notifications went to a phone the account had left (one push token per account) | app + DB + relay | branch `fix/issue-42-device-push-tokens` | In `main`; run migration 0008 in Supabase; needs build 8 |
-| 1 | `contact_requests` RLS: a user could insert an already-approved request, or approve their own pending request, or rewrite its parties | DB | branch `fix/issue-1-contact-rls` (migration 0009) | Pushed, waiting for "merge 1"; run migration in Supabase; no build needed |
+| 1 | `contact_requests` RLS: a user could insert an already-approved request, or approve their own pending request, or rewrite its parties | DB | branch `fix/issue-1-contact-rls` (migration 0009) | In `main`; run migration 0009 in Supabase; no build needed |
 | 24 | A failed contact refresh (network drop, timeout) emptied Chats/Contacts and made blocked people reappear | app | branch `fix/issue-24-contact-refresh` | In `main`, needs build 8 |
 
 ### Open (original 20)
@@ -263,7 +263,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Tested:** real Postgres engine with the real table and policies from migrations 0001/0006/0007, before vs after: before, a sender can approve their own request, insert an approved row and rewrite the parties; after, all 10 checks pass (normal request, receiver approves/declines, sender cannot approve, no pre-approved insert, no impersonated sender, parties frozen, delete works, outsider blocked, an answered request cannot be changed again).
 - **Not covered:** the real Supabase project (policy behaviour is standard Postgres RLS). Optional clean-up: the migration ends with a query listing `approved` rows with no `responded_at`, which the app never creates; review those by hand.
 - **Rollout:** run migration 0009 in the Supabase SQL editor. Takes effect immediately for the live Android app too.
-- **Shipped:** branch only.
+- **Shipped:** merged to `main`; migration still to be run in Supabase.
 
 ---
 
