@@ -48,6 +48,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 42 | Notifications went to a phone the account had left (one push token per account) | app + DB + relay | branch `fix/issue-42-device-push-tokens` | In `main`; run migration 0008 in Supabase; needs build 8 |
 | 1 | `contact_requests` RLS: a user could insert an already-approved request, or approve their own pending request, or rewrite its parties | DB | branch `fix/issue-1-contact-rls` (migration 0009) | In `main`; run migration 0009 in Supabase; no build needed |
 | 8 (email part) | Users could store `email_verified = true` without confirming their email | DB | branch `fix/issue-8-email-verified` (migration 0010) | In `main`; run migration 0010 in Supabase; no build needed |
+| 32 | Group invite / forward lists silently cut at 6 people | app | branch `fix/issue-32-list-cut` | Pushed, waiting for "merge 32"; needs build 8 |
 | 24 | A failed contact refresh (network drop, timeout) emptied Chats/Contacts and made blocked people reappear | app | branch `fix/issue-24-contact-refresh` | In `main`, needs build 8 |
 
 ### Open (original 20)
@@ -73,7 +74,6 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 29 | Message-ping notification taps do not open the chat | M | app |
 | 30 | A declined contact request can never be re-sent (error swallowed) | M | app |
 | 31 | Leaving a group only sends the leave message; group stays on screen | M | app |
-| 32 | Group invite / forward lists cut at 6 people silently | M | app |
 | 33 | Denied photo / camera permission gives no message | M | app |
 | 34 | Reset-password screen spins forever without a valid session | M | app |
 | 35 | Push token printed to the log | L | app |
@@ -275,6 +275,12 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Rollout:** run migration 0010 in the Supabase SQL editor.
 - **Shipped:** merged to `main`; migration still to be run in Supabase.
 
+### 2026-11-01: Issue 32 — invite and forward lists cut at 6
+- **Root cause:** "Invite to group" (`group-info/[id].tsx`) and "Forward to" (`chat/[id].tsx`) built their menus from `.slice(0, 6)`, so anyone beyond the sixth contact could not be invited or forwarded to, with no hint that the list was cut.
+- **Change:** removed the cut. The menus go through the app's own alert component, whose button list already scrolls (max height 400), so every contact is reachable.
+- **Tested:** app typecheck clean; code inspection that no `slice(0, 6)` remains in those two places and that the alert list scrolls. Not unit-tested (screen code); the phone check below covers it.
+- **Shipped:** branch only; needs build 8.
+
 ---
 
 ## 5. Real-phone checks before releasing build 8
@@ -293,3 +299,4 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 11. Sign the same account in on two phones, close the app on one of them, send it a message from a third account: only the phone that is signed in notifies; sign out on one phone and confirm it stops notifying.
 10. Airplane mode on, send a message: it shows Failed within a second, not "sending".
 14. Open Contacts, turn on airplane mode, pull to refresh: the contact list stays as it was (not empty). Turn it off: it refreshes normally.
+19. With more than 6 contacts: Group info > Add member and long-press a message > Forward both list every contact (scroll the list).

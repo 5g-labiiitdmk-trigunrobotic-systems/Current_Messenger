@@ -63,7 +63,6 @@ export default function GroupInfoScreen() {
       'Invite to group',
       undefined,
       invitable
-        .slice(0, 6)
         .map((c) => ({
           text: c.display_name || c.username,
           onPress: () => {
