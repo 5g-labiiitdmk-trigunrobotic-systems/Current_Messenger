@@ -48,6 +48,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 42 | Notifications went to a phone the account had left (one push token per account) | app + DB + relay | branch `fix/issue-42-device-push-tokens` | In `main`; run migration 0008 in Supabase; needs build 8 |
 | 1 | `contact_requests` RLS: a user could insert an already-approved request, or approve their own pending request, or rewrite its parties | DB | branch `fix/issue-1-contact-rls` (migration 0009) | In `main`; run migration 0009 in Supabase; no build needed |
 | 8 (email part) | Users could store `email_verified = true` without confirming their email | DB | branch `fix/issue-8-email-verified` (migration 0010) | In `main`; run migration 0010 in Supabase; no build needed |
+| 27 | App lock started unlocked until settings loaded, and never re-locked when the app went to the background | app | branch `fix/issue-27-app-lock` | Pushed, waiting for "merge 27"; needs build 8 |
 | 24 | A failed contact refresh (network drop, timeout) emptied Chats/Contacts and made blocked people reappear | app | branch `fix/issue-24-contact-refresh` | In `main`, needs build 8 |
 
 ### Open (original 20)
@@ -68,7 +69,6 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | # | Issue | Sev | Where |
 |---|---|---|---|
 | 25 | Setup failure silently replaces the chosen username | H | app |
-| 27 | App lock not tied to backgrounding; starts unlocked until settings load | H | app |
 | 28 | Incoming messages not de-duplicated | M | app |
 | 29 | Message-ping notification taps do not open the chat | M | app |
 | 30 | A declined contact request can never be re-sent (error swallowed) | M | app |
@@ -275,6 +275,15 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Rollout:** run migration 0010 in the Supabase SQL editor.
 - **Shipped:** merged to `main`; migration still to be run in Supabase.
 
+### 2026-11-01: Issue 27 — app lock bypass
+- **Root cause:** `AppLockGate` decided "unlocked" at the first render from the lock setting, but the saved setting loads asynchronously, so a cold start read the default (off) and showed the app unlocked; it also never reacted to the app going to the background, so a user who switched away and back was never asked again.
+- **Files:** `app/src/components/AppLockGate.tsx`, new `app/src/lib/appLockLogic.ts`.
+- **Change:** the gate waits until the saved settings have loaded (shows only the background until then, never the app); lock off opens immediately, lock on prompts automatically; the app re-locks every time it goes to the background and prompts again on return; the system prompt's own background blip is ignored, and two prompts cannot start at once.
+- **Tested:** the rules (old behaviour as on `main` vs new), 9/9: not-loaded no longer counts as unlocked, lock-on stays locked, lock-off opens, background re-locks, prompt blip ignored. App typecheck clean.
+- **Not covered by tests:** the real Face ID / fingerprint prompt and the app-state events on a device (the checklist item below covers this).
+- **Limit:** re-lock happens immediately on background (no grace period); a delay setting could be added later.
+- **Shipped:** branch only; needs build 8.
+
 ---
 
 ## 5. Real-phone checks before releasing build 8
@@ -293,3 +302,4 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 11. Sign the same account in on two phones, close the app on one of them, send it a message from a third account: only the phone that is signed in notifies; sign out on one phone and confirm it stops notifying.
 10. Airplane mode on, send a message: it shows Failed within a second, not "sending".
 14. Open Contacts, turn on airplane mode, pull to refresh: the contact list stays as it was (not empty). Turn it off: it refreshes normally.
+16. Turn on the biometric lock, fully close the app, open it: the lock screen shows first and the app is never visible before unlocking. Then press Home for a few seconds and return: it asks again. Cancel the prompt: the Unlock button works.
