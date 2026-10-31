@@ -47,6 +47,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 21 | Audio session left in recording mode after a voice note (earpiece / low volume afterwards) | app | branch `fix/issue-21-audio-mode` | In `main`, needs build 8 |
 | 42 | Notifications went to a phone the account had left (one push token per account) | app + DB + relay | branch `fix/issue-42-device-push-tokens` | In `main`; run migration 0008 in Supabase; needs build 8 |
 | 1 | `contact_requests` RLS: a user could insert an already-approved request, or approve their own pending request, or rewrite its parties | DB | branch `fix/issue-1-contact-rls` (migration 0009) | In `main`; run migration 0009 in Supabase; no build needed |
+| 8 (email part) | Users could store `email_verified = true` without confirming their email | DB | branch `fix/issue-8-email-verified` (migration 0010) | In `main`; run migration 0010 in Supabase; no build needed |
 | 24 | A failed contact refresh (network drop, timeout) emptied Chats/Contacts and made blocked people reappear | app | branch `fix/issue-24-contact-refresh` | In `main`, needs build 8 |
 
 ### Open (original 20)
@@ -55,7 +56,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 |---|---|---|---|
 | 2 | `users` table readable by everyone (login-by-username, signup check, contact search, QR depend on it) | C | DB + app |
 | 7 | Edit / delete / poll vote not checked against the original sender | H | app |
-| 8 | Users can set their own `email_verified` / `phone_verified` | H | DB |
+| 8 | Users can set their own `phone_verified` (the `email_verified` part is fixed, see below; phone verification is not in the live flow) | H | DB |
 | 9 | Public `/ice-servers` exposes TURN credentials | H | relay |
 | 12 | Presence visibility setting is cosmetic | H | app + relay |
 | 16 | Groups lost when the relay restarts | M | relay |
@@ -263,6 +264,15 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Tested:** real Postgres engine with the real table and policies from migrations 0001/0006/0007, before vs after: before, a sender can approve their own request, insert an approved row and rewrite the parties; after, all 10 checks pass (normal request, receiver approves/declines, sender cannot approve, no pre-approved insert, no impersonated sender, parties frozen, delete works, outsider blocked, an answered request cannot be changed again).
 - **Not covered:** the real Supabase project (policy behaviour is standard Postgres RLS). Optional clean-up: the migration ends with a query listing `approved` rows with no `responded_at`, which the app never creates; review those by hand.
 - **Rollout:** run migration 0009 in the Supabase SQL editor. Takes effect immediately for the live Android app too.
+- **Shipped:** merged to `main`; migration still to be run in Supabase.
+
+### 2026-11-01: Issue 8 (email part) — email_verified now comes from Supabase Auth
+- **Root cause:** after the user confirmed their email, the app wrote `email_verified: true` into `public.users` itself (`finalizeAccount`), and the row rules accepted any value, so anyone could create or edit their profile row with `email_verified = true` without confirming an email. The app uses that flag to decide whether the profile setup is finished.
+- **File:** new `supabase/migrations/0010_users_email_verified_from_auth.sql`.
+- **Change:** a trigger on `public.users` (insert and update) sets `email_verified` from `auth.users.email_confirmed_at`, ignoring what the client sent. The live Android app is unchanged: after a real confirmation it sends true and true is stored; otherwise it is forced to false.
+- **Tested:** real Postgres engine with the real table and policies, before vs after: before, an unconfirmed account could store true (insert and update); after, it is forced false, and the same update succeeds after the real confirmation; confirmed accounts and ordinary profile edits are unaffected (5/5).
+- **Not changed:** `phone_verified` (phone verification is not in the live flow, per your instruction), and the `email` column itself can still be set to any text. Existing rows are untouched; the migration ends with a query that lists rows marked verified without a confirmed email.
+- **Rollout:** run migration 0010 in the Supabase SQL editor.
 - **Shipped:** merged to `main`; migration still to be run in Supabase.
 
 ---
