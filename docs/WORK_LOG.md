@@ -441,6 +441,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Finding:** the app encrypts with the TweetNaCl library (`app/package.json`: `tweetnacl`, `tweetnacl-util`; `app/src/lib/crypto.ts`), not libsodium. The only repo text that said otherwise was the README ("libsodium-equivalent primitives"). While there I corrected three more stale README claims: sign-up is email only (phone OTP is not in the live flow), groups are now saved to Postgres as names and member ids (fix 16), and calls do use WebRTC with TURN fallback. The relay line now says no message content is stored, rather than "in-memory only".
 - **Files:** `README.md` only. No code change.
 - **Wording for the encryption PDF (not in the repo, so edit it by hand):** "Messages are end-to-end encrypted on the device with NaCl box (Curve25519/X25519 key agreement, XSalsa20-Poly1305 authenticated encryption), implemented by the open-source TweetNaCl library. Each message uses a fresh random 24-byte nonce. Each device holds its own key pair; the private key never leaves the device. The server relays encrypted payloads and does not store message content. There is no forward secrecy or key ratcheting." Library name should be TweetNaCl wherever the PDF says libsodium.
+- **Shipped:** merged to `main` (documentation only).
 
 ### 2026-11-01: Issue 8 (phone part) — phone_verified can only be set by the server
 - **Root cause:** the insert/update rules on `users` only check "it is your row", so the app's own sign-in could write `phone_verified = true`. Nothing reads it in the live app (phone verification is not part of sign-up and no user has a phone number stored), so this is closed before it can ever be trusted.
@@ -448,7 +449,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Change:** a trigger forces `phone_verified` to false on insert and keeps it unchanged on update for the app's roles (`anon`, `authenticated`); changing the phone number resets it to false. Only the server side (service role / SQL editor) can set it true, which is what a future verify-by-code flow would do after checking the code.
 - **Tested (real Postgres, 9 checks, all pass):** app insert of true becomes false; app update to true ignored; server side can set true; app cannot un-verify; changing the number resets it; re-saving the same number keeps it; anon insert forced false; applies twice; trigger function not callable by the app.
 - **Rollout:** run migration 0015 in the Supabase SQL editor (not yet applied).
-- **Shipped:** branch only.
+- **Shipped:** merged to `main`; migration 0015 not yet applied to Supabase.
 
 ### 2026-11-01: Issue 39 (Android permissions) — analysed, deliberately NOT changed
 - **What I checked:** the permissions in `app.json` and the ones each library adds in its own Android manifest (read from `node_modules`).
@@ -457,7 +458,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
   - READ_EXTERNAL_STORAGE / WRITE_EXTERNAL_STORAGE look like the removable ones, but are not removable safely: `expo-file-system` and `expo-image-picker` add them in their own manifests, so deleting the line from `app.json` does nothing, and blocking them would need `android.blockedPermissions`. Worse, `app/src/lib/media.ts` calls `ImagePicker.requestMediaLibraryPermissionsAsync()` before picking a photo and reports failure if refused, so the app depends on that permission on some Android versions.
 - **Not changed:** no code or config. The only safe route is: stop asking for the library permission on Android (the system picker needs none), add `blockedPermissions` for READ/WRITE_EXTERNAL_STORAGE, make an internal test build, open the merged manifest (`aapt dump permissions`) and test attaching a photo on an Android 11 or 12 phone and an Android 13+ phone. That needs a device and a build, so it is a separate step after build 8.
 - **Impact if left:** none functional. Play may show the storage permissions on the store page; they do not need a declaration form.
-- **Shipped:** documentation only (branch).
+- **Shipped:** merged to `main` (documentation only).
 
 ---
 
