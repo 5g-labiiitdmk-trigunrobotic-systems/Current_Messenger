@@ -74,6 +74,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 16 | Groups lost when the relay restarts | relay + DB | branch `fix/issue-16-persist-groups` | Needs migration 0012 first, then relay deploy; no app build |
 | 2 | `users` table readable by everyone (emails and push tokens of all 133 users reachable with the public app key) | DB + app | branch `fix/issue-2-users-read` | Step 1 (functions, migration 0013) is safe any time; app uses them from build 8; step 2 (close the table) is HELD in `supabase/pending/0014_users_restrict_read.sql` until old builds are gone |
 | 18 | README said "libsodium" (and several other stale claims); the app uses TweetNaCl | docs | branch `fix/issue-18-docs-tweetnacl` | The repo is corrected; the encryption PDF is not in the repo and must be corrected by hand (wording in the entry) |
+| 8 (phone part) | Users could store `phone_verified = true` for their own phone without any code | DB | branch `fix/issue-8-phone-verified` (migration 0015) | Run migration 0015 in Supabase; no build needed |
 | 36 | All chat history loaded at once at start-up | app | branch `fix/issue-36-paged-history` | Needs build 8 |
 | 37 | Group call cap (4 people) did not say who would be left out | app | branch `fix/issue-37-group-call-cap` | In `main`; needs build 8. The 4-person limit itself stays (see log) |
 | 12 | Presence visibility setting was cosmetic: online status went to every connected user, and "Nobody" was only hidden by the app | relay | branch `fix/issue-12-presence-relay` | In `main`; relay only, no build needed (deploys on Render) |
@@ -83,7 +84,6 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 
 | # | Issue | Sev | Where |
 |---|---|---|---|
-| 8 | Users can set their own `phone_verified` (the `email_verified` part is fixed, see below; phone verification is not in the live flow) | H | DB |
 
 ### Open (found in the broader audit)
 
@@ -441,6 +441,13 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Finding:** the app encrypts with the TweetNaCl library (`app/package.json`: `tweetnacl`, `tweetnacl-util`; `app/src/lib/crypto.ts`), not libsodium. The only repo text that said otherwise was the README ("libsodium-equivalent primitives"). While there I corrected three more stale README claims: sign-up is email only (phone OTP is not in the live flow), groups are now saved to Postgres as names and member ids (fix 16), and calls do use WebRTC with TURN fallback. The relay line now says no message content is stored, rather than "in-memory only".
 - **Files:** `README.md` only. No code change.
 - **Wording for the encryption PDF (not in the repo, so edit it by hand):** "Messages are end-to-end encrypted on the device with NaCl box (Curve25519/X25519 key agreement, XSalsa20-Poly1305 authenticated encryption), implemented by the open-source TweetNaCl library. Each message uses a fresh random 24-byte nonce. Each device holds its own key pair; the private key never leaves the device. The server relays encrypted payloads and does not store message content. There is no forward secrecy or key ratcheting." Library name should be TweetNaCl wherever the PDF says libsodium.
+
+### 2026-11-01: Issue 8 (phone part) — phone_verified can only be set by the server
+- **Root cause:** the insert/update rules on `users` only check "it is your row", so the app's own sign-in could write `phone_verified = true`. Nothing reads it in the live app (phone verification is not part of sign-up and no user has a phone number stored), so this is closed before it can ever be trusted.
+- **File:** new `supabase/migrations/0015_users_phone_verified_server_only.sql`. No app or relay change.
+- **Change:** a trigger forces `phone_verified` to false on insert and keeps it unchanged on update for the app's roles (`anon`, `authenticated`); changing the phone number resets it to false. Only the server side (service role / SQL editor) can set it true, which is what a future verify-by-code flow would do after checking the code.
+- **Tested (real Postgres, 9 checks, all pass):** app insert of true becomes false; app update to true ignored; server side can set true; app cannot un-verify; changing the number resets it; re-saving the same number keeps it; anon insert forced false; applies twice; trigger function not callable by the app.
+- **Rollout:** run migration 0015 in the Supabase SQL editor (not yet applied).
 - **Shipped:** branch only.
 
 ---
