@@ -70,8 +70,10 @@ async function fetchAndStoreToken(userId: string): Promise<void> {
     console.error('[push] getExpoPushTokenAsync threw — no token obtained:', e?.message ?? e);
     return;
   }
+  // The token itself is deliberately not logged: anyone who can read device
+  // logs could otherwise send pushes to this phone.
   // eslint-disable-next-line no-console
-  console.log('[push] obtained Expo push token:', token);
+  console.log('[push] obtained an Expo push token');
   deviceToken = token;
   // Per-device registration (migration 0008): this device gets its own row, so
   // an account signed in on several phones notifies each of them, and a phone

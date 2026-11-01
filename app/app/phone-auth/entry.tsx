@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, Pressable, Modal, FlatList } from 'react-native';
-import { router } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import { ScreenScaffold } from '../../src/components/ScreenScaffold';
 import { AuthHeader } from '../../src/components/AuthHeader';
 import { GlassField } from '../../src/components/GlassField';
@@ -29,7 +29,7 @@ import { COUNTRY_CODES, DEFAULT_COUNTRY_CODE, NATIONAL_NUMBER_LENGTH, DEFAULT_NA
  * this is just enough client-side validation to avoid an obviously-wrong
  * number wasting a send attempt.
  */
-export default function PhoneEntryScreen() {
+function PhoneEntryScreenInner() {
   const { tokens } = useTheme();
   const [country, setCountry] = useState<CountryCode>(DEFAULT_COUNTRY_CODE);
   const [nationalNumber, setNationalNumber] = useState('');
@@ -155,4 +155,11 @@ function CountryPickerModal({
       </View>
     </Modal>
   );
+}
+
+// Standalone test screen (mock provider): reachable only in development
+// builds. A release build sends anyone who opens its link to the start screen.
+export default function PhoneEntryScreen() {
+  if (!__DEV__) return <Redirect href="/" />;
+  return <PhoneEntryScreenInner />;
 }

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { ScreenScaffold } from '../../src/components/ScreenScaffold';
 import { AuthHeader } from '../../src/components/AuthHeader';
 import { GlassButton } from '../../src/components/Buttons';
@@ -29,7 +29,7 @@ const ERROR_RESET_DELAY_MS = 650;
  * would just be one extra tap standing between a correct code and being
  * done, the same UX real messaging/banking apps' OTP screens already use.
  */
-export default function OtpVerifyScreen() {
+function OtpVerifyScreenInner() {
   const { tokens, a1 } = useTheme();
   const { phone } = useLocalSearchParams<{ phone?: string }>();
   const phoneNumber = phone ?? '+91XXXXXXXXXX';
@@ -118,4 +118,11 @@ export default function OtpVerifyScreen() {
       )}
     </ScreenScaffold>
   );
+}
+
+// Standalone test screen (mock provider): reachable only in development
+// builds. A release build sends anyone who opens its link to the start screen.
+export default function OtpVerifyScreen() {
+  if (!__DEV__) return <Redirect href="/" />;
+  return <OtpVerifyScreenInner />;
 }

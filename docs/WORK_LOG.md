@@ -67,6 +67,9 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 33 | Denied photo / camera / location permission gave no message | app | branch `fix/issue-33-permission-messages` | Pushed, waiting for "merge 33"; needs build 8 |
 
 | 34 | Reset-password screen spun forever without a valid session | app | branch `fix/issue-34-reset-spinner` | Pushed, waiting for "merge 34"; needs build 8 |
+
+| 35 | Expo push token printed to the log | app | branch `fix/issue-35-38-cleanup` | Pushed, waiting for "merge 35"; needs build 8 |
+| 38 | Mock phone-verification (test code) shipped in release builds, and its test screens were reachable by link | app | branch `fix/issue-35-38-cleanup` | Pushed, waiting for "merge 38"; needs build 8 |
 | 24 | A failed contact refresh (network drop, timeout) emptied Chats/Contacts and made blocked people reappear | app | branch `fix/issue-24-contact-refresh` | In `main`, needs build 8 |
 
 ### Open (original 20)
@@ -103,9 +106,9 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 34 | Reset-password screen spins forever without a valid session | M | app |
 
 | 35 | Push token printed to the log | L | app |
+
 | 36 | All chat history loaded at once at start-up | M | app |
 | 37 | Group call silently capped | M | app |
-| 38 | Test values left in phone-auth code | L | app |
 | 39 | Over-broad Android permissions; `ITSAppUsesNonExemptEncryption` not set | L | app config |
 | 40 | No calls to a closed app on iPhone (no CallKit / push-to-talk) | — | product limit |
 | 41 | A failed message shows only "Failed": no retry button, no reason | M | app (found while fixing 11) |
@@ -371,6 +374,11 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **File:** `app/app/(auth)/reset-password.tsx`.
 - **Change:** after 12 seconds without a session the screen shows "This reset link did not work — it may have expired or already been used" with a "Back to login" button. If the session arrives later the form appears as before.
 - **Tested:** app typecheck clean. Not unit-tested (screen code); covered by the phone check below.
+
+### 2026-11-01: Issues 35 + 38 — push token log and phone-verification test code
+- **35:** `app/src/lib/push.ts` printed the full Expo push token to the device log; anyone able to read logs could send pushes to that phone. It now logs only "obtained an Expo push token".
+- **38:** `app/src/lib/otp.ts` is a mock phone-verification provider that generates a code, prints it to the log, and accepts it; its two test screens (`phone-auth/entry`, `phone-auth/verify`) were registered routes reachable by a link. Not part of the live sign-up flow, but shipping a fake phone check is wrong. Now the mock exists only in development builds (`__DEV__`); a release build gets a provider that refuses ("Phone verification is not available yet") and prints nothing, and the two screens redirect to the start screen in release builds.
+- **Tested:** OTP provider, real file with `__DEV__` on/off: release old code sends and logs the code (2 of 3 fail); release new code refuses and logs nothing (3/3); dev build still works (3/3). App typecheck clean. Push-token log change checked by code inspection.
 - **Shipped:** branch only; needs build 8.
 
 ---
