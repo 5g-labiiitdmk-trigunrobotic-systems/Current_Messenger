@@ -435,7 +435,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Step 2 (HELD):** `supabase/pending/0014_users_restrict_read.sql` removes the open rule and adds one so a pending request still shows who it is from. After it, a signed-in user reads only their own row, approved contacts and people on a request with them. Not in `migrations/` on purpose. Run it only when nearly everyone is on build 8 or later.
 - **Tested (real Postgres with the same rules and roles, 21 checks, all pass):** after 0013 the old direct lookups still work and the functions return only public fields, reject signed-out search/profile calls and treat `%` and `_` literally; after 0014 a signed-out caller reads nothing, a signed-in user sees only self, contacts and request senders (strangers are invisible), and login lookup, search, profiles and username check still work. App typecheck clean.
 - **Limits:** `login_email_for_username` still returns the email for a username someone already knows; that is how login-by-username works, and nothing can list users in bulk through it. An approved contact can still read the other side's email and push token through the existing contacts rule. Guessing usernames one at a time is not rate-limited.
-- **Shipped:** merged to `main` (code and the held file only). Migration 0013 not yet applied to Supabase; 0014 not to be run until old builds are gone.
+- **Shipped:** merged to `main` (code and the held file only). Migration 0013 applied to Supabase on 2026-11-01 (with 0016, which removes the signed-out grant on search_users and get_profiles); 0014 not to be run until old builds are gone.
 
 ### 2026-11-01: Issue 18 — README corrected (TweetNaCl, not libsodium)
 - **Finding:** the app encrypts with the TweetNaCl library (`app/package.json`: `tweetnacl`, `tweetnacl-util`; `app/src/lib/crypto.ts`), not libsodium. The only repo text that said otherwise was the README ("libsodium-equivalent primitives"). While there I corrected three more stale README claims: sign-up is email only (phone OTP is not in the live flow), groups are now saved to Postgres as names and member ids (fix 16), and calls do use WebRTC with TURN fallback. The relay line now says no message content is stored, rather than "in-memory only".
@@ -449,7 +449,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Change:** a trigger forces `phone_verified` to false on insert and keeps it unchanged on update for the app's roles (`anon`, `authenticated`); changing the phone number resets it to false. Only the server side (service role / SQL editor) can set it true, which is what a future verify-by-code flow would do after checking the code.
 - **Tested (real Postgres, 9 checks, all pass):** app insert of true becomes false; app update to true ignored; server side can set true; app cannot un-verify; changing the number resets it; re-saving the same number keeps it; anon insert forced false; applies twice; trigger function not callable by the app.
 - **Rollout:** run migration 0015 in the Supabase SQL editor (not yet applied).
-- **Shipped:** merged to `main`; migration 0015 not yet applied to Supabase.
+- **Shipped:** merged to `main`; migration 0015 applied to Supabase on 2026-11-01.
 
 ### 2026-11-01: Issue 39 (Android permissions) — analysed, deliberately NOT changed
 - **What I checked:** the permissions in `app.json` and the ones each library adds in its own Android manifest (read from `node_modules`).
