@@ -71,6 +71,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 41 | A failed message showed only "Failed": no reason, no retry | app | branch `fix/issue-41-retry` | In `main`; needs build 8 |
 
 | 9 | Public `/ice-servers` exposed TURN credentials to anyone | relay + app | branch `fix/issue-9-ice-servers-auth` | Relay part works alone; app sends its token from build 8 |
+| 16 | Groups lost when the relay restarts | relay + DB | branch `fix/issue-16-persist-groups` | Needs migration 0012 first, then relay deploy; no app build |
 | 36 | All chat history loaded at once at start-up | app | branch `fix/issue-36-paged-history` | Needs build 8 |
 | 37 | Group call cap (4 people) did not say who would be left out | app | branch `fix/issue-37-group-call-cap` | In `main`; needs build 8. The 4-person limit itself stays (see log) |
 | 12 | Presence visibility setting was cosmetic: online status went to every connected user, and "Nobody" was only hidden by the app | relay | branch `fix/issue-12-presence-relay` | In `main`; relay only, no build needed (deploys on Render) |
@@ -82,7 +83,6 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 |---|---|---|---|
 | 2 | `users` table readable by everyone (login-by-username, signup check, contact search, QR depend on it) | C | DB + app |
 | 8 | Users can set their own `phone_verified` (the `email_verified` part is fixed, see below; phone verification is not in the live flow) | H | DB |
-| 16 | Groups lost when the relay restarts | M | relay |
 | 18 | Docs and encryption PDF say "libsodium"; the app uses TweetNaCl | M | docs |
 
 ### Open (found in the broader audit)
@@ -419,7 +419,14 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Change:** the relay now requires `Authorization: Bearer <Supabase access token>` and checks it with Supabase, same as `/account/delete`. A missing or bad token gets 401. The app sends its token when it asks. **Old app builds** (Play v1.0.1, TestFlight 7) send no token, so they now get a 401 and fall back to STUN only: calls still connect on normal networks but lose the TURN fallback on strict NATs. To keep old builds on STUN while they exist, set `ICE_ALLOW_ANONYMOUS=1` on Render: tokenless callers then get STUN only (never TURN); remove it once old builds are gone. Responses are `no-store`.
 - **Tested (relay on a mock Supabase, old vs new):** old `main` returns the TURN secret for no token, a bad token and a good token; new returns 401 / 401 / TURN for a good token; with `ICE_ALLOW_ANONYMOUS=1` a tokenless call gets STUN only and a bad token is still 401. Relay and app typecheck clean.
 - **Limit:** the Metered credential itself is still one static value that any signed-in user can fetch. If it ever leaks, rotate it in Metered and in Render's `TURN_*` variables.
-- **Shipped:** branch only.
+- **Shipped:** merged to `main`; relay deploys on Render.
+
+### 2026-11-01: Issue 16 — groups survive a relay restart
+- **Root cause:** groups (name, owner, members) lived only in the relay's memory, so every deploy or Render restart emptied every group chat. The original "zero persistence" design note covered messages, but group membership was swept in with it.
+- **Files:** new `supabase/migrations/0012_relay_groups.sql`, new `server/src/groupStore.ts`, `server/src/state.ts`, `server/src/index.ts`. No app change and no build needed.
+- **Change:** two tables, `relay_groups` and `relay_group_members`, hold only names, owner and member ids (no messages). Row level security is on with no policies and access is revoked from the app keys, so only the relay (service role) can touch them. The relay writes every create, join, leave and group removal through a single queue (so writes land in order) and loads all groups at start-up; clients already receive their groups in the `group:snapshot` sent right after sign-in, so after a restart they get their groups back as soon as they reconnect. If the database cannot be read at start-up, the relay keeps running, retries every 15 seconds, and does not write anything until the load succeeds (so a failed read can never overwrite stored groups); groups made during that outage are written once it recovers. A group whose owner deletes their account stays for the other members. Pending (not yet answered) group invites are still in memory only and are lost on restart; the inviter can invite again.
+- **Tested:** migration on Postgres (applies twice, signed-in and anonymous users denied on both tables, user delete removes memberships, owner delete keeps the group, group delete removes members) all pass. Relay on a mock Supabase, end to end: create a group with two members, restart the relay, both users see the group with the right owner; one leaves, restart, still gone for them; the last member leaving deletes the stored rows. Old `main` loses the group on restart (fails as expected). Database outage at start-up: group works in memory, nothing is written during the outage, and it is written after recovery. Relay typecheck and build clean.
+- **Shipped:** merged to `main`. **Order:** run migration 0012 in Supabase first, then let Render deploy (without the tables the relay logs `[groups] ... failed` and groups stay in-memory as before; nothing breaks).
 
 ---
 
@@ -456,3 +463,5 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 22. Airplane mode, send a message and a photo: both show 'Failed · tap'. Tap one: the reason is shown. Turn airplane mode off and tap Try again: it sends once and the failed copy is gone. Delete removes a failed message completely.
 
 22. Open a chat with more than 300 messages: it opens at the newest; scroll up to the top and older messages load without jumping or duplicates. A pinned old message still shows in the pin bar.
+
+23. Create a group of three and send a message. In Render press Manual Deploy (restart) and wait for it to come up: all three phones still list the group within a few seconds of reconnecting and keep sending in it.
