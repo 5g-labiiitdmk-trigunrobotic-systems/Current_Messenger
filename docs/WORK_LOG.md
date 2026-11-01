@@ -73,6 +73,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 9 | Public `/ice-servers` exposed TURN credentials to anyone | relay + app | branch `fix/issue-9-ice-servers-auth` | Relay part works alone; app sends its token from build 8 |
 | 16 | Groups lost when the relay restarts | relay + DB | branch `fix/issue-16-persist-groups` | Needs migration 0012 first, then relay deploy; no app build |
 | 2 | `users` table readable by everyone (emails and push tokens of all 133 users reachable with the public app key) | DB + app | branch `fix/issue-2-users-read` | Step 1 (functions, migration 0013) is safe any time; app uses them from build 8; step 2 (close the table) is HELD in `supabase/pending/0014_users_restrict_read.sql` until old builds are gone |
+| 8 (phone part) | Users could store `phone_verified = true` for their own phone without any code | DB | branch `fix/issue-8-phone-verified` (migration 0015) | Run migration 0015 in Supabase; no build needed |
 | 36 | All chat history loaded at once at start-up | app | branch `fix/issue-36-paged-history` | Needs build 8 |
 | 37 | Group call cap (4 people) did not say who would be left out | app | branch `fix/issue-37-group-call-cap` | In `main`; needs build 8. The 4-person limit itself stays (see log) |
 | 12 | Presence visibility setting was cosmetic: online status went to every connected user, and "Nobody" was only hidden by the app | relay | branch `fix/issue-12-presence-relay` | In `main`; relay only, no build needed (deploys on Render) |
@@ -436,6 +437,14 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Tested (real Postgres with the same rules and roles, 21 checks, all pass):** after 0013 the old direct lookups still work and the functions return only public fields, reject signed-out search/profile calls and treat `%` and `_` literally; after 0014 a signed-out caller reads nothing, a signed-in user sees only self, contacts and request senders (strangers are invisible), and login lookup, search, profiles and username check still work. App typecheck clean.
 - **Limits:** `login_email_for_username` still returns the email for a username someone already knows; that is how login-by-username works, and nothing can list users in bulk through it. An approved contact can still read the other side's email and push token through the existing contacts rule. Guessing usernames one at a time is not rate-limited.
 - **Shipped:** merged to `main` (code and the held file only). Migration 0013 not yet applied to Supabase; 0014 not to be run until old builds are gone.
+
+### 2026-11-01: Issue 8 (phone part) — phone_verified can only be set by the server
+- **Root cause:** the insert/update rules on `users` only check "it is your row", so the app's own sign-in could write `phone_verified = true`. Nothing reads it in the live app (phone verification is not part of sign-up and no user has a phone number stored), so this is closed before it can ever be trusted.
+- **File:** new `supabase/migrations/0015_users_phone_verified_server_only.sql`. No app or relay change.
+- **Change:** a trigger forces `phone_verified` to false on insert and keeps it unchanged on update for the app's roles (`anon`, `authenticated`); changing the phone number resets it to false. Only the server side (service role / SQL editor) can set it true, which is what a future verify-by-code flow would do after checking the code.
+- **Tested (real Postgres, 9 checks, all pass):** app insert of true becomes false; app update to true ignored; server side can set true; app cannot un-verify; changing the number resets it; re-saving the same number keeps it; anon insert forced false; applies twice; trigger function not callable by the app.
+- **Rollout:** run migration 0015 in the Supabase SQL editor (not yet applied).
+- **Shipped:** branch only.
 
 ---
 
