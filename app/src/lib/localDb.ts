@@ -289,6 +289,82 @@ export async function loadAllThreads(userId: string): Promise<Record<string, Cha
   });
 }
 
+/** Newest messages kept in memory per chat at start-up; older ones load on demand. */
+export const HISTORY_PAGE_SIZE = 300;
+
+/**
+ * Start-up load: only the newest `limit` messages of each chat (plus, for a
+ * chat that has pinned messages, everything back to its oldest pinned one so
+ * pins never point at a message that is not loaded). `hasMore[threadKey]` says
+ * older messages remain in the database. Replaces loading the entire history
+ * of every chat into memory at once on every launch.
+ */
+export async function loadRecentThreads(
+  userId: string,
+  pinnedByThread: Record<string, string[]> = {},
+  limit: number = HISTORY_PAGE_SIZE
+): Promise<{ threads: Record<string, ChatMessage[]>; hasMore: Record<string, boolean> }> {
+  return withDbErrorAlert('loading chat history', async () => {
+    const db = await getDb(userId);
+    const rows = await db.getAllAsync<any>(
+      `select * from (
+         select m.*, row_number() over (partition by thread_key order by sent_at desc, id desc) as rn
+         from messages m
+       ) where rn <= ? order by sent_at asc, id asc`,
+      [limit]
+    );
+    const threads: Record<string, ChatMessage[]> = {};
+    for (const row of rows) (threads[row.thread_key] ??= []).push(rowToMessage(row));
+
+    // Make sure every pinned message is inside the loaded window.
+    for (const [threadKey, ids] of Object.entries(pinnedByThread)) {
+      if (ids.length === 0) continue;
+      const loaded = threads[threadKey] ?? [];
+      const have = new Set(loaded.map((m) => m.id));
+      if (ids.every((id) => have.has(id))) continue;
+      const marks = ids.map(() => '?').join(',');
+      const oldest = await db.getFirstAsync<{ t: string | null }>(`select min(sent_at) as t from messages where thread_key = ? and id in (${marks})`, [threadKey, ...ids]);
+      if (!oldest?.t) continue;
+      const older = await db.getAllAsync<any>('select * from messages where thread_key = ? and sent_at >= ? order by sent_at asc', [threadKey, oldest.t]);
+      const merged = new Map<string, ChatMessage>();
+      for (const row of older) merged.set(row.id, rowToMessage(row));
+      for (const m of loaded) merged.set(m.id, m);
+      threads[threadKey] = [...merged.values()].sort((a, b) => a.sentAt.localeCompare(b.sentAt));
+    }
+
+    const hasMore: Record<string, boolean> = {};
+    const counts = await db.getAllAsync<{ thread_key: string; c: number }>('select thread_key, count(*) as c from messages group by thread_key');
+    for (const row of counts) hasMore[row.thread_key] = row.c > (threads[row.thread_key]?.length ?? 0);
+    return { threads, hasMore };
+  });
+}
+
+/** One page of messages older than the given (time, id) position in a chat (id breaks ties between messages with the same time), oldest first, and whether still older ones remain. */
+export async function loadEarlierMessages(
+  userId: string,
+  threadKey: string,
+  beforeSentAt: string,
+  beforeId: string,
+  limit: number = HISTORY_PAGE_SIZE
+): Promise<{ messages: ChatMessage[]; hasMore: boolean }> {
+  return withDbErrorAlert('loading earlier messages', async () => {
+    const db = await getDb(userId);
+    const rows = await db.getAllAsync<any>('select * from messages where thread_key = ? and (sent_at < ? or (sent_at = ? and id < ?)) order by sent_at desc, id desc limit ?', [threadKey, beforeSentAt, beforeSentAt, beforeId, limit + 1]);
+    const hasMore = rows.length > limit;
+    const messages = rows.slice(0, limit).map(rowToMessage).reverse();
+    return { messages, hasMore };
+  });
+}
+
+/** A single stored message (used to apply an edit / delete / reaction to a message that is not in memory). */
+export async function loadMessageById(userId: string, threadKey: string, messageId: string): Promise<ChatMessage | null> {
+  return withDbErrorAlert('reading message', async () => {
+    const db = await getDb(userId);
+    const row = await db.getFirstAsync<any>('select * from messages where id = ? and thread_key = ?', [messageId, threadKey]);
+    return row ? rowToMessage(row) : null;
+  });
+}
+
 export async function loadPinned(userId: string): Promise<Record<string, string[]>> {
   return withDbErrorAlert('loading pinned messages', async () => {
     const db = await getDb(userId);

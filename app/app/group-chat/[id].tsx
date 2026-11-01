@@ -346,6 +346,10 @@ export default function GroupChatScreen() {
           inverted
           data={rowsWithSeparators}
           keyExtractor={(m) => m.id}
+          // Inverted list: the "end" is the OLDEST message. Reaching it loads the
+          // next page of older history (only the newest page is kept in memory).
+          onEndReached={() => { useChatStore.getState().loadEarlier(key); }}
+          onEndReachedThreshold={0.5}
           contentContainerStyle={{ padding: 16, gap: 11 }}
           // Was ListHeaderComponent (visual top) before inverting — with
           // `inverted`, RN renders header/footer cells at opposite visual

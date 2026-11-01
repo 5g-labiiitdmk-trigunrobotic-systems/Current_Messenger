@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { relayClient } from '../lib/relayClient';
 import { decryptPayload, type KeyPairB64 } from '../lib/crypto';
 import { getOrCreateDeviceKeyPair, fetchActivePublicKeysWithRetry, encryptForUser } from '../lib/keystore';
-import { loadAllThreads, loadPinned, saveMessage, renameMessageId, setPinned, deleteThreadLocal, deleteMessageRow } from '../lib/localDb';
+import { loadRecentThreads, loadEarlierMessages, loadMessageById, loadPinned, saveMessage, renameMessageId, setPinned, deleteThreadLocal, deleteMessageRow } from '../lib/localDb';
 import type { ClientEvent, MessageKind, ServerEvent, EncryptedPayload } from '../types/relay';
 import { useAuthStore } from './authStore';
 import { useGroupStore } from './groupStore';
@@ -33,6 +33,8 @@ export interface ChatMessage {
 
 // Namespaces a thread key by type so a 1:1 peerId and a group id can never
 // collide in the `threads`/`pinned` maps below.
+const loadingEarlier = new Set<string>(); // chat keys with a page load in flight
+
 function chatKey(peerOrGroupId: string, isGroup: boolean) {
   return isGroup ? `group:${peerOrGroupId}` : `dm:${peerOrGroupId}`;
 }
@@ -78,6 +80,10 @@ interface ChatState {
   threads: Record<string, ChatMessage[]>; // hydrated from + kept in sync with on-device SQLite (localDb.ts) — see hydrateFromLocal
   typing: Record<string, boolean>; // session-only, never persisted — a stale "is typing" on relaunch would be actively wrong, not just stale
   pinned: Record<string, string[]>;
+  /** Per chat: older messages exist on this phone beyond what is loaded (see loadEarlier). */
+  hasEarlier: Record<string, boolean>;
+  /** Loads the next page of older messages for a chat into memory. */
+  loadEarlier: (key: string) => Promise<void>;
   wired: boolean;
   wire: () => void;
   sendText: (targetId: string, isGroup: boolean, text: string, opts?: { replyToId?: string; kind?: MessageKind; meta?: Record<string, unknown> }) => Promise<void>;
@@ -130,7 +136,11 @@ async function hydrateFromLocal(userId: string) {
   // the user why, indistinguishable from "there was never anything to
   // load" even though messages really had been sent/received before.
   try {
-    const [localThreads, localPinned] = await Promise.all([loadAllThreads(userId), loadPinned(userId)]);
+    // Only the newest page of each chat is loaded now (the rest on demand —
+    // see loadEarlier); loading every message of every chat at launch made
+    // start-up slower and used more memory the longer the app was used.
+    const localPinned = await loadPinned(userId);
+    const { threads: localThreads, hasMore } = await loadRecentThreads(userId, localPinned);
     // The account may have changed while the (async) load was running; never
     // put one account's history into another account's store.
     if (useAuthStore.getState().session?.user.id !== userId) return;
@@ -153,7 +163,7 @@ async function hydrateFromLocal(userId: string) {
         const existingIds = new Set((threads[key] ?? []).map((m) => m.id));
         threads[key] = [...(threads[key] ?? []), ...list.filter((m) => !existingIds.has(m.id))].sort((a, b) => a.sentAt.localeCompare(b.sentAt));
       }
-      return { threads, pinned: { ...localPinned, ...s.pinned } };
+      return { threads, pinned: { ...localPinned, ...s.pinned }, hasEarlier: { ...hasMore } };
     });
   } catch (err: any) {
     console.error('[chatStore] failed to load local chat history:', err);
@@ -218,6 +228,7 @@ function failAllPendingSends(reason: string) {
 
 export const useChatStore = create<ChatState>((set, get) => ({
   threads: {},
+  hasEarlier: {},
   typing: {},
   pinned: {},
   wired: false,
@@ -240,7 +251,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // belonged to the previous one before anything of the new account loads.
       if (prevUserId) {
         hydrated = false;
-        set({ threads: {}, typing: {}, pinned: {} });
+        set({ threads: {}, typing: {}, pinned: {}, hasEarlier: {} });
       }
       if (userId) hydrateFromLocal(userId);
     });
@@ -353,79 +364,70 @@ export const useChatStore = create<ChatState>((set, get) => ({
           reactions: {},
         };
 
-        if (event.kind === 'reaction' && event.meta?.targetMessageId) {
-          let updatedMsg: ChatMessage | null = null;
-          set((s) => ({
-            threads: {
-              ...s.threads,
-              [key]: (s.threads[key] ?? []).map((m) => {
-                if (m.id !== event.meta!.targetMessageId) return m;
-                const emoji = String(event.meta!.emoji ?? '');
-                if (!emoji || emoji.length > 16) return m; // a reaction is one short emoji, never long text
-                updatedMsg = { ...m, reactions: { ...m.reactions, [event.from]: emoji } };
-                return updatedMsg;
-              }),
-            },
-          }));
-          if (updatedMsg) saveMessage(me, key, updatedMsg).catch(() => {});
+        // Reactions, edits, deletes and poll votes change an EXISTING message.
+        // Only the newest part of each chat is kept in memory (older pages load
+        // on demand), so if the target is not loaded it is read from, changed
+        // and saved back to the on-device database instead of being dropped.
+        const targetId = event.meta?.targetMessageId as string | undefined;
+        const applyToTarget = async (change: (m: ChatMessage) => ChatMessage | null) => {
+          let updated: ChatMessage | null = null;
+          let inMemory = false;
+          set((s) => {
+            const list = s.threads[key] ?? [];
+            if (!list.some((m) => m.id === targetId)) return s;
+            inMemory = true;
+            return {
+              threads: {
+                ...s.threads,
+                [key]: list.map((m) => {
+                  if (m.id !== targetId) return m;
+                  const next = change(m);
+                  if (!next) return m;
+                  updated = next;
+                  return next;
+                }),
+              },
+            };
+          });
+          if (!inMemory && targetId) {
+            const stored = await loadMessageById(me, key, targetId).catch(() => null);
+            const next = stored ? change(stored) : null;
+            if (next) updated = next;
+          }
+          if (updated) saveMessage(me, key, updated).catch(() => {});
+        };
+
+        if (event.kind === 'reaction' && targetId) {
+          await applyToTarget((m) => {
+            const emoji = String(event.meta!.emoji ?? '');
+            if (!emoji || emoji.length > 16) return null; // a reaction is one short emoji, never long text
+            return { ...m, reactions: { ...m.reactions, [event.from]: emoji } };
+          });
           return;
         }
-        if (event.kind === 'edit' && event.meta?.targetMessageId) {
-          let updatedMsg: ChatMessage | null = null;
-          set((s) => ({
-            threads: {
-              ...s.threads,
-              [key]: (s.threads[key] ?? []).map((m) => {
-                if (m.id !== event.meta!.targetMessageId) return m;
-                // Only the original sender may edit a message. The relay
-                // does not check this, so without it anyone in the chat
-                // could rewrite the other person's messages.
-                if (m.from !== event.from) return m;
-                updatedMsg = { ...m, text, edited: true };
-                return updatedMsg;
-              }),
-            },
-          }));
-          if (updatedMsg) saveMessage(me, key, updatedMsg).catch(() => {});
+        if (event.kind === 'edit' && targetId) {
+          // Only the original sender may edit a message. The relay does not
+          // check this, so without it anyone in the chat could rewrite the
+          // other person's messages.
+          await applyToTarget((m) => (m.from !== event.from ? null : { ...m, text, edited: true }));
           return;
         }
-        if (event.kind === 'delete' && event.meta?.targetMessageId) {
-          // "Delete for everyone" — the sender's own copy was already
-          // marked deleted locally at send time (see deleteForEveryone);
-          // this applies the same tombstone on the recipient's side.
-          let updatedMsg: ChatMessage | null = null;
-          set((s) => ({
-            threads: {
-              ...s.threads,
-              [key]: (s.threads[key] ?? []).map((m) => {
-                if (m.id !== event.meta!.targetMessageId) return m;
-                // Only the original sender may delete for everyone.
-                if (m.from !== event.from) return m;
-                updatedMsg = { ...m, deleted: true, text: undefined };
-                return updatedMsg;
-              }),
-            },
-          }));
-          if (updatedMsg) saveMessage(me, key, updatedMsg).catch(() => {});
+        if (event.kind === 'delete' && targetId) {
+          // "Delete for everyone" — the sender's own copy was already marked
+          // deleted locally at send time (see deleteForEveryone); this applies
+          // the same tombstone on the recipient's side. Only the original
+          // sender may do it.
+          await applyToTarget((m) => (m.from !== event.from ? null : { ...m, deleted: true, text: undefined }));
           return;
         }
-        if (event.kind === 'poll_vote' && event.meta?.targetMessageId) {
-          const optionIndex = Number(event.meta.optionIndex);
-          let updatedMsg: ChatMessage | null = null;
-          set((s) => ({
-            threads: {
-              ...s.threads,
-              [key]: (s.threads[key] ?? []).map((m) => {
-                if (m.id !== event.meta!.targetMessageId) return m;
-                // A vote only applies to a real poll, for one of its options.
-                const pollOptions = (m.meta?.options as unknown[] | undefined) ?? [];
-                if (m.kind !== 'poll' || !Number.isInteger(optionIndex) || optionIndex < 0 || optionIndex >= pollOptions.length) return m;
-                updatedMsg = { ...m, meta: { ...m.meta, votes: { ...(m.meta?.votes as Record<string, number> | undefined), [event.from]: optionIndex } } };
-                return updatedMsg;
-              }),
-            },
-          }));
-          if (updatedMsg) saveMessage(me, key, updatedMsg).catch(() => {});
+        if (event.kind === 'poll_vote' && targetId) {
+          const optionIndex = Number(event.meta!.optionIndex);
+          await applyToTarget((m) => {
+            // A vote only applies to a real poll, for one of its options.
+            const pollOptions = (m.meta?.options as unknown[] | undefined) ?? [];
+            if (m.kind !== 'poll' || !Number.isInteger(optionIndex) || optionIndex < 0 || optionIndex >= pollOptions.length) return null;
+            return { ...m, meta: { ...m.meta, votes: { ...(m.meta?.votes as Record<string, number> | undefined), [event.from]: optionIndex } } };
+          });
           return;
         }
 
@@ -897,11 +899,38 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (me) setPinned(me, key, messageId, nowPinned).catch(() => {});
   },
 
+  loadEarlier: async (key) => {
+    const me = useAuthStore.getState().session?.user.id;
+    if (!me || loadingEarlier.has(key) || !get().hasEarlier[key]) return;
+    const oldest = (get().threads[key] ?? [])[0];
+    if (!oldest) return;
+    loadingEarlier.add(key);
+    try {
+      const { messages, hasMore } = await loadEarlierMessages(me, key, oldest.sentAt, oldest.id);
+      // The account may have changed while loading.
+      if (useAuthStore.getState().session?.user.id !== me) return;
+      set((s) => {
+        const current = s.threads[key] ?? [];
+        const have = new Set(current.map((m) => m.id));
+        const older = messages.filter((m) => !have.has(m.id));
+        return {
+          threads: { ...s.threads, [key]: [...older, ...current] },
+          hasEarlier: { ...s.hasEarlier, [key]: hasMore },
+        };
+      });
+    } catch {
+      // The database layer already showed the error; leave the flag so the user can try again.
+    } finally {
+      loadingEarlier.delete(key);
+    }
+  },
+
   clearThread: (key) => {
     const me = useAuthStore.getState().session?.user.id;
     set((s) => ({
       threads: { ...s.threads, [key]: [] },
       pinned: { ...s.pinned, [key]: [] },
+      hasEarlier: { ...s.hasEarlier, [key]: false },
     }));
     // Without this, the "cleared" messages were only ever wiped from
     // in-memory state — reopening the app would reload them right back
