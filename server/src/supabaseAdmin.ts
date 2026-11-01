@@ -173,6 +173,47 @@ export async function getApprovedContactIds(userId: string): Promise<string[]> {
   return [...new Set(data.map((r: any) => (r.sender_id === userId ? r.receiver_id : r.sender_id)))];
 }
 
+export type StatusVisibility = 'everyone' | 'contacts' | 'nobody';
+
+const visibilityCache = new Map<string, { value: StatusVisibility; at: number }>();
+const VISIBILITY_TTL_MS = 30_000;
+const VISIBILITY_CACHE_MAX = 5000;
+
+function normalizeVisibility(v: unknown): StatusVisibility {
+  return v === 'nobody' || v === 'everyone' ? v : 'contacts';
+}
+
+/**
+ * The user's "who can see my online status" setting (users.status_visibility),
+ * read fresh from the database at most every 30 s. If it cannot be read the
+ * answer is 'contacts' (not 'everyone'): a hiccup must never widen who sees
+ * someone's status, and 'contacts' is what the relay delivers to anyway.
+ */
+export async function getStatusVisibility(userId: string): Promise<StatusVisibility> {
+  if (!UUID_RE.test(userId)) return 'nobody';
+  const hit = visibilityCache.get(userId);
+  if (hit && Date.now() - hit.at < VISIBILITY_TTL_MS) return hit.value;
+  const { data, error } = await supabaseAdmin.from('users').select('status_visibility').eq('id', userId).maybeSingle();
+  if (error) return 'contacts';
+  const value = normalizeVisibility((data as any)?.status_visibility);
+  if (visibilityCache.size >= VISIBILITY_CACHE_MAX) visibilityCache.clear();
+  visibilityCache.set(userId, { value, at: Date.now() });
+  return value;
+}
+
+/** Visibility settings for several users at once (ids that fail the UUID check are treated as 'nobody'). */
+export async function getStatusVisibilities(userIds: string[]): Promise<Map<string, StatusVisibility>> {
+  const out = new Map<string, StatusVisibility>();
+  const valid = userIds.filter((id) => UUID_RE.test(id));
+  for (const id of userIds) if (!UUID_RE.test(id)) out.set(id, 'nobody');
+  if (valid.length === 0) return out;
+  const { data, error } = await supabaseAdmin.from('users').select('id, status_visibility').in('id', valid);
+  for (const id of valid) out.set(id, 'contacts');
+  if (error || !data) return out;
+  for (const row of data as any[]) out.set(row.id, normalizeVisibility(row.status_visibility));
+  return out;
+}
+
 /**
  * Permanently deletes the account: the auth user, which cascades to the
  * profile row, contact requests, blocks, published public keys, push tokens

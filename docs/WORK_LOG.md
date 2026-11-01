@@ -78,6 +78,8 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 41 | A failed message showed only "Failed": no reason, no retry | app | branch `fix/issue-41-retry` | Pushed, waiting for "merge 41"; needs build 8 |
 
 | 37 | Group call cap (4 people) did not say who would be left out | app | branch `fix/issue-37-group-call-cap` | Pushed, waiting for "merge 37"; needs build 8. The 4-person limit itself stays (see log) |
+
+| 12 | Presence visibility setting was cosmetic: online status went to every connected user, and "Nobody" was only hidden by the app | relay | branch `fix/issue-12-presence-relay` | Pushed, waiting for "merge 12"; relay only, no build needed (deploys on Render) |
 | 24 | A failed contact refresh (network drop, timeout) emptied Chats/Contacts and made blocked people reappear | app | branch `fix/issue-24-contact-refresh` | In `main`, needs build 8 |
 
 ### Open (original 20)
@@ -87,7 +89,6 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 2 | `users` table readable by everyone (login-by-username, signup check, contact search, QR depend on it) | C | DB + app |
 | 8 | Users can set their own `phone_verified` (the `email_verified` part is fixed, see below; phone verification is not in the live flow) | H | DB |
 | 9 | Public `/ice-servers` exposes TURN credentials | H | relay |
-| 12 | Presence visibility setting is cosmetic | H | app + relay |
 | 16 | Groups lost when the relay restarts | M | relay |
 | 18 | Docs and encryption PDF say "libsodium"; the app uses TweetNaCl | M | docs |
 
@@ -418,6 +419,14 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Change:** the heads-up now reads, for example, "This group has 6 members. This call will ring: A, B, C. Not called: D, E." with Cancel / Call anyway. Members who are not in your contacts appear as "Member".
 - **Tested:** message builder 6/6 (no warning at 4, names the called and the not-called, correct member count). App typecheck clean.
 - **Shipped:** branch only; needs build 8.
+
+### 2026-11-01: Issue 12 — online status is now enforced by the relay
+- **Root cause:** the relay announced "X is online / offline" to EVERY connected socket, so any signed-in stranger could watch when anyone was online, and the "Nobody" setting was only a hint the app applied on its own screens (the code comment said so).
+- **Files:** `server/src/index.ts`, `server/src/supabaseAdmin.ts`. No app change and no build needed.
+- **Change:** a user's online/offline status is sent only to their approved contacts; a user whose setting is "Nobody" is not announced to anyone; the snapshot sent when you connect lists only your approved contacts who are online and not on "Nobody". The setting is read from the database and cached 30 seconds, so a changed setting takes effect within about half a minute; if it cannot be read, status is treated as "contacts" (never wider). The app already only shows presence for approved contacts, so "Everyone" and "Contacts only" look the same as before; "Nobody" now really hides you.
+- **Tested (relay on a mock database, old vs new):** old relay fails 5 of 11 checks (stranger sees A online and offline, snapshot lists a Nobody contact and a stranger, a Nobody user is announced when connecting); new relay passes 11/11: contacts see each other, strangers see nothing, Nobody user never announced, snapshots filtered. Relay regression (messages, groups, calls, pings) and size/rate-limit suites pass. Relay typecheck clean.
+- **Limit:** "last seen" times already known to the app are not retracted; and a user who set "Nobody" can still see their contacts' status (the setting hides you, it does not hide others).
+- **Shipped:** branch only; relay deploys on Render after merge.
 
 ---
 
