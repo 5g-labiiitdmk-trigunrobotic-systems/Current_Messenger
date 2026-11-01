@@ -48,38 +48,30 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 42 | Notifications went to a phone the account had left (one push token per account) | app + DB + relay | branch `fix/issue-42-device-push-tokens` | In `main`; run migration 0008 in Supabase; needs build 8 |
 | 1 | `contact_requests` RLS: a user could insert an already-approved request, or approve their own pending request, or rewrite its parties | DB | branch `fix/issue-1-contact-rls` (migration 0009) | In `main`; run migration 0009 in Supabase; no build needed |
 | 8 (email part) | Users could store `email_verified = true` without confirming their email | DB | branch `fix/issue-8-email-verified` (migration 0010) | In `main`; run migration 0010 in Supabase; no build needed |
-| 17 | Transfer log (who messaged whom, when, size) kept forever | DB | branch `fix/issue-17-transfer-log` (migration 0011) | Pushed, waiting for "merge 17"; run migration in Supabase; no build needed |
+| 17 | Transfer log (who messaged whom, when, size) kept forever | DB | branch `fix/issue-17-transfer-log` (migration 0011) | In `main`; run migration in Supabase; no build needed |
+| 25 | Setup failure silently replaced the chosen username with a random one | app | branch `fix/issue-25-username-setup` | In `main`; needs build 8 |
 
-| 25 | Setup failure silently replaced the chosen username with a random one | app | branch `fix/issue-25-username-setup` | Pushed, waiting for "merge 25"; needs build 8 |
+| 27 | App lock started unlocked until settings loaded, and never re-locked when the app went to the background | app | branch `fix/issue-27-app-lock` | In `main`; needs build 8 |
+| 28 | Incoming messages not de-duplicated (a re-sent copy showed twice) | app | branch `fix/issue-28-dedupe` | In `main`; needs build 8 |
 
-| 27 | App lock started unlocked until settings loaded, and never re-locked when the app went to the background | app | branch `fix/issue-27-app-lock` | Pushed, waiting for "merge 27"; needs build 8 |
+| 29 | Tapping a message / chat-request / contact-request notification did not open the chat | app + relay | branch `fix/issue-29-notification-tap` | In `main`; relay part deploys safely first; needs build 8 |
+| 30 | A declined contact request could never be re-sent; the error was swallowed | app | branch `fix/issue-30-declined-resend` | In `main`; needs build 8 |
 
-| 28 | Incoming messages not de-duplicated (a re-sent copy showed twice) | app | branch `fix/issue-28-dedupe` | Pushed, waiting for "merge 28"; needs build 8 |
+| 31 | Leaving a group only sent the leave message; the group stayed on screen | app | branch `fix/issue-31-leave-group` | In `main`; needs build 8 |
+| 32 | Group invite / forward lists silently cut at 6 people | app | branch `fix/issue-32-list-cut` | In `main`; needs build 8 |
 
-| 29 | Tapping a message / chat-request / contact-request notification did not open the chat | app + relay | branch `fix/issue-29-notification-tap` | Pushed, waiting for "merge 29"; relay part deploys safely first; needs build 8 |
+| 33 | Denied photo / camera / location permission gave no message | app | branch `fix/issue-33-permission-messages` | In `main`; needs build 8 |
+| 34 | Reset-password screen spun forever without a valid session | app | branch `fix/issue-34-reset-spinner` | In `main`; needs build 8 |
 
-| 30 | A declined contact request could never be re-sent; the error was swallowed | app | branch `fix/issue-30-declined-resend` | Pushed, waiting for "merge 30"; needs build 8 |
+| 35 | Expo push token printed to the log | app | branch `fix/issue-35-38-cleanup` | In `main`; needs build 8 |
+| 38 | Mock phone-verification (test code) shipped in release builds, and its test screens were reachable by link | app | branch `fix/issue-35-38-cleanup` | In `main`; needs build 8 |
+| 39 (iOS part) | `ITSAppUsesNonExemptEncryption` not set in the app config | app config | branch `fix/issue-39-config` | In `main`; needs build 8. Android permission trimming deliberately NOT done (see log) |
 
-| 31 | Leaving a group only sent the leave message; the group stayed on screen | app | branch `fix/issue-31-leave-group` | Pushed, waiting for "merge 31"; needs build 8 |
+| 7 | Edit / delete / poll vote not checked against the original sender | app | branch `fix/issue-7-sender-check` | In `main`; needs build 8 |
+| 41 | A failed message showed only "Failed": no reason, no retry | app | branch `fix/issue-41-retry` | In `main`; needs build 8 |
 
-| 32 | Group invite / forward lists silently cut at 6 people | app | branch `fix/issue-32-list-cut` | Pushed, waiting for "merge 32"; needs build 8 |
-
-| 33 | Denied photo / camera / location permission gave no message | app | branch `fix/issue-33-permission-messages` | Pushed, waiting for "merge 33"; needs build 8 |
-
-| 34 | Reset-password screen spun forever without a valid session | app | branch `fix/issue-34-reset-spinner` | Pushed, waiting for "merge 34"; needs build 8 |
-
-| 35 | Expo push token printed to the log | app | branch `fix/issue-35-38-cleanup` | Pushed, waiting for "merge 35"; needs build 8 |
-| 38 | Mock phone-verification (test code) shipped in release builds, and its test screens were reachable by link | app | branch `fix/issue-35-38-cleanup` | Pushed, waiting for "merge 38"; needs build 8 |
-
-| 39 (iOS part) | `ITSAppUsesNonExemptEncryption` not set in the app config | app config | branch `fix/issue-39-config` | Pushed, waiting for "merge 39"; needs build 8. Android permission trimming deliberately NOT done (see log) |
-
-| 7 | Edit / delete / poll vote not checked against the original sender | app | branch `fix/issue-7-sender-check` | Pushed, waiting for "merge 7"; needs build 8 |
-
-| 41 | A failed message showed only "Failed": no reason, no retry | app | branch `fix/issue-41-retry` | Pushed, waiting for "merge 41"; needs build 8 |
-
-| 37 | Group call cap (4 people) did not say who would be left out | app | branch `fix/issue-37-group-call-cap` | Pushed, waiting for "merge 37"; needs build 8. The 4-person limit itself stays (see log) |
-
-| 12 | Presence visibility setting was cosmetic: online status went to every connected user, and "Nobody" was only hidden by the app | relay | branch `fix/issue-12-presence-relay` | Pushed, waiting for "merge 12"; relay only, no build needed (deploys on Render) |
+| 37 | Group call cap (4 people) did not say who would be left out | app | branch `fix/issue-37-group-call-cap` | In `main`; needs build 8. The 4-person limit itself stays (see log) |
+| 12 | Presence visibility setting was cosmetic: online status went to every connected user, and "Nobody" was only hidden by the app | relay | branch `fix/issue-12-presence-relay` | In `main`; relay only, no build needed (deploys on Render) |
 | 24 | A failed contact refresh (network drop, timeout) emptied Chats/Contacts and made blocked people reappear | app | branch `fix/issue-24-contact-refresh` | In `main`, needs build 8 |
 
 ### Open (original 20)
@@ -96,32 +88,18 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 
 | # | Issue | Sev | Where |
 |---|---|---|---|
-| 27 | App lock not tied to backgrounding; starts unlocked until settings load | H | app |
 
-| 25 | Setup failure silently replaces the chosen username | H | app |
-| 28 | Incoming messages not de-duplicated | M | app |
 
-| 29 | Message-ping notification taps do not open the chat | M | app |
 
-| 30 | A declined contact request can never be re-sent (error swallowed) | M | app |
 
-| 31 | Leaving a group only sends the leave message; group stays on screen | M | app |
 
-| 32 | Group invite / forward lists cut at 6 people silently | M | app |
 
-| 33 | Denied photo / camera permission gives no message | M | app |
 
-| 34 | Reset-password screen spins forever without a valid session | M | app |
 
-| 35 | Push token printed to the log | L | app |
 
 | 36 | All chat history loaded at once at start-up | M | app |
-| 37 | Group call silently capped | M | app |
 
-| 38 | Test values left in phone-auth code | L | app |
-| 39 | Over-broad Android permissions; `ITSAppUsesNonExemptEncryption` not set | L | app config |
 
-| 38 | Test values left in phone-auth code | L | app |
 | 40 | No calls to a closed app on iPhone (no CallKit / push-to-talk) | — | product limit |
 
 ### Suggested order
@@ -206,7 +184,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Change:** both ids must be real UUIDs (what Supabase user ids always are) or the answer is "not contacts"; such values are never cached.
 - **Tested:** against a mock database that evaluates the filter like PostgREST: old code answers "approved" for a stranger with two crafted values (2 fails), new code answers false for both; real pairs (either order, upper or lower case) still true; relay regression suite re-run with UUID ids, 26/26 pass. Typecheck clean.
 - **Not covered:** `isBlocked` already uses safe parameters but treats a database error as "not blocked" (issue 14).
-- **Shipped:** branch only; deploys on merge to `main`.
+- **Shipped:** merged to `main`; deploys on Render.
 
 ### 2026-10-28: Issue 14 — contact cache and block check
 - **Root cause:** `areApprovedContacts` remembered every answer for 30 s, including "no" and database errors. Someone whose request had just been accepted (or who hit one failed lookup) kept getting "not a contact" and failed sends for up to 30 s. `isBlocked` treated a database error as "not blocked", so a blocked person's message could get through during a hiccup.
@@ -322,7 +300,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Decision for you:** 30 days is my choice; change the number in the migration if you want more or less.
 - **Tested:** real Postgres engine with the real table: only rows older than the limit are deleted (2 of 4), running twice is harmless, under-1-day refused, app users denied, custom retention works (6/6). The pg_cron scheduling itself is not tested here (not available in the test engine).
 - **Rollout:** enable pg_cron, run migration 0011 in the SQL editor, then check `select * from cron.job;` shows `purge-message-transfer-log`.
-- **Shipped:** branch only.
+- **Shipped:** merged to `main`.
 
 ### 2026-11-01: Issue 25 — chosen username silently replaced after a setup failure
 - **Root cause:** `finish-setup.tsx` created the profile in a 3-try loop and, on ANY error (a network blip, a server error), swapped in a random username for the next try. A bad connection could leave someone with a name they never chose, with no message.
@@ -344,7 +322,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **File:** `app/src/state/chatStore.ts`.
 - **Change:** the append now checks the id inside the state update (so copies arriving at the same instant cannot both pass) and skips both showing and saving a message that is already in the thread. Applies to direct and group chats.
 - **Tested (real store, old vs new):** old code adds a repeated copy (5 of 6 checks fail); new code passes 6/6: first copy saved once, repeat ignored, three simultaneous copies give one message, distinct messages unaffected, groups covered. App typecheck clean.
-- **Shipped:** branch only; needs build 8.
+- **Shipped:** merged to `main`; needs build 8.
 
 
 ### 2026-11-01: Issue 29 — notification taps open the right screen
@@ -353,7 +331,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Change:** the relay now adds `data` to those pushes (`kind` plus the sender's id for messages and chat requests). The app maps a tap to the sender's chat (`/chat/<id>`) or the Contacts tab; only a real UUID can become part of a route. If the app is already signed in the tap opens it at once; on a cold start the destination is remembered and opened right after the app reaches the chat list. Old apps ignore the extra data, so the relay can deploy before build 8.
 - **Tested:** relay push payloads against a stub (old vs new: old carries no data, new passes 4/4); route rules 6/6 (message, chat request, contact request, calls left to their own handler, missing data, crafted id rejected). Typechecks clean for app and relay.
 - **Not covered:** the actual notification tap on a device (warm and cold start).
-- **Shipped:** branch only.
+- **Shipped:** merged to `main`.
 
 
 ### 2026-11-01: Issue 30 — re-sending a declined contact request
@@ -390,13 +368,13 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **35:** `app/src/lib/push.ts` printed the full Expo push token to the device log; anyone able to read logs could send pushes to that phone. It now logs only "obtained an Expo push token".
 - **38:** `app/src/lib/otp.ts` is a mock phone-verification provider that generates a code, prints it to the log, and accepts it; its two test screens (`phone-auth/entry`, `phone-auth/verify`) were registered routes reachable by a link. Not part of the live sign-up flow, but shipping a fake phone check is wrong. Now the mock exists only in development builds (`__DEV__`); a release build gets a provider that refuses ("Phone verification is not available yet") and prints nothing, and the two screens redirect to the start screen in release builds.
 - **Tested:** OTP provider, real file with `__DEV__` on/off: release old code sends and logs the code (2 of 3 fail); release new code refuses and logs nothing (3/3); dev build still works (3/3). App typecheck clean. Push-token log change checked by code inspection.
-- **Shipped:** branch only; needs build 8.
+- **Shipped:** merged to `main`; needs build 8.
 
 ### 2026-11-01: Issue 39 — encryption declaration (iOS); Android permissions left alone
 - **Change:** `app/app.json` now sets `ITSAppUsesNonExemptEncryption: true` for iOS. Reasoning: the app implements its own end-to-end encryption (TweetNaCl, X25519 + XSalsa20-Poly1305) rather than only using the phone's built-in encryption for HTTPS, so I declared "uses encryption that needs documentation", matching your plan to submit the signed encryption PDF. Setting `false` would be a legal statement that no documentation is needed; I did not choose that. **This is your decision as the publisher:** if your own export-compliance review says the app is exempt, change it to `false` before building. Apple may also give an `ITSEncryptionExportComplianceCode` after the documents are accepted; add it under the same `infoPlist` then.
 - **Not changed (on purpose):** the Android permission list. The live Play Store app depends on it, I cannot build or inspect the merged manifest here, and several entries look unneeded (`READ_EXTERNAL_STORAGE`, `BLUETOOTH`, `BLUETOOTH_ADMIN`, `USE_FINGERPRINT`) but some are used indirectly (Bluetooth headset routing in calls, photo picker on older Android). Trimming them blind could break calls or photo picking on some phones. Recommended: do it as a separate step with a test build and a check of the merged manifest.
 - **Tested:** the JSON is valid and the key is present. No code change.
-- **Shipped:** branch only; needs build 8 (iOS).
+- **Shipped:** merged to `main`; needs build 8 (iOS).
 
 
 ### 2026-11-01: Issue 7 — edits, deletes and votes are checked
@@ -418,7 +396,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Files:** new `app/src/lib/groupCallCap.ts`, `app/app/group-chat/[id].tsx`.
 - **Change:** the heads-up now reads, for example, "This group has 6 members. This call will ring: A, B, C. Not called: D, E." with Cancel / Call anyway. Members who are not in your contacts appear as "Member".
 - **Tested:** message builder 6/6 (no warning at 4, names the called and the not-called, correct member count). App typecheck clean.
-- **Shipped:** branch only; needs build 8.
+- **Shipped:** merged to `main`; needs build 8.
 
 ### 2026-11-01: Issue 12 — online status is now enforced by the relay
 - **Root cause:** the relay announced "X is online / offline" to EVERY connected socket, so any signed-in stranger could watch when anyone was online, and the "Nobody" setting was only a hint the app applied on its own screens (the code comment said so).
@@ -426,7 +404,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Change:** a user's online/offline status is sent only to their approved contacts; a user whose setting is "Nobody" is not announced to anyone; the snapshot sent when you connect lists only your approved contacts who are online and not on "Nobody". The setting is read from the database and cached 30 seconds, so a changed setting takes effect within about half a minute; if it cannot be read, status is treated as "contacts" (never wider). The app already only shows presence for approved contacts, so "Everyone" and "Contacts only" look the same as before; "Nobody" now really hides you.
 - **Tested (relay on a mock database, old vs new):** old relay fails 5 of 11 checks (stranger sees A online and offline, snapshot lists a Nobody contact and a stranger, a Nobody user is announced when connecting); new relay passes 11/11: contacts see each other, strangers see nothing, Nobody user never announced, snapshots filtered. Relay regression (messages, groups, calls, pings) and size/rate-limit suites pass. Relay typecheck clean.
 - **Limit:** "last seen" times already known to the app are not retracted; and a user who set "Nobody" can still see their contacts' status (the setting hides you, it does not hide others).
-- **Shipped:** branch only; relay deploys on Render after merge.
+- **Shipped:** merged to `main`; relay deploys on Render.
 
 ---
 
