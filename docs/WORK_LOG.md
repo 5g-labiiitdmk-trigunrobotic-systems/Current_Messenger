@@ -450,6 +450,15 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Rollout:** run migration 0015 in the Supabase SQL editor (not yet applied).
 - **Shipped:** branch only.
 
+### 2026-11-01: Issue 39 (Android permissions) — analysed, deliberately NOT changed
+- **What I checked:** the permissions in `app.json` and the ones each library adds in its own Android manifest (read from `node_modules`).
+  - Needed and used: CAMERA (QR scan, photos, calls), RECORD_AUDIO, POST_NOTIFICATIONS, ACCESS_COARSE/FINE_LOCATION (share location), USE_BIOMETRIC and USE_FINGERPRINT (app lock; the library adds both itself, and USE_FINGERPRINT covers Android 7-8), BLUETOOTH_CONNECT (headset audio in calls), USE_FULL_SCREEN_INTENT (incoming-call screen; Play asks you to declare it for calling apps).
+  - BLUETOOTH and BLUETOOTH_ADMIN are old install-time permissions with no prompt and no Play review impact.
+  - READ_EXTERNAL_STORAGE / WRITE_EXTERNAL_STORAGE look like the removable ones, but are not removable safely: `expo-file-system` and `expo-image-picker` add them in their own manifests, so deleting the line from `app.json` does nothing, and blocking them would need `android.blockedPermissions`. Worse, `app/src/lib/media.ts` calls `ImagePicker.requestMediaLibraryPermissionsAsync()` before picking a photo and reports failure if refused, so the app depends on that permission on some Android versions.
+- **Not changed:** no code or config. The only safe route is: stop asking for the library permission on Android (the system picker needs none), add `blockedPermissions` for READ/WRITE_EXTERNAL_STORAGE, make an internal test build, open the merged manifest (`aapt dump permissions`) and test attaching a photo on an Android 11 or 12 phone and an Android 13+ phone. That needs a device and a build, so it is a separate step after build 8.
+- **Impact if left:** none functional. Play may show the storage permissions on the store page; they do not need a declaration form.
+- **Shipped:** documentation only (branch).
+
 ---
 
 ## 5. Real-phone checks before releasing build 8
