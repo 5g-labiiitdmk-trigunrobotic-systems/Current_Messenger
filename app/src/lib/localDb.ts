@@ -388,6 +388,14 @@ export async function clearLocalHistory(userId: string): Promise<void> {
  * whole account's, see clearLocalHistory above). This device only: never
  * touches the other party's copy, since there's nothing server-side to
  * clear from in the first place. */
+/** Removes one message row completely (used when a failed message is discarded or retried). */
+export async function deleteMessageRow(userId: string, messageId: string): Promise<void> {
+  return withDbErrorAlert('removing message', async () => {
+    const db = await getDb(userId);
+    await db.runAsync('delete from messages where id = ?', [messageId]);
+  });
+}
+
 export async function deleteThreadLocal(userId: string, threadKey: string): Promise<void> {
   return withDbErrorAlert('clearing chat', async () => {
     const db = await getDb(userId);

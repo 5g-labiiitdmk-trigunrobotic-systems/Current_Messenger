@@ -19,6 +19,7 @@ import { useContactStore } from '../../src/state/contactStore';
 import { useAuthStore } from '../../src/state/authStore';
 import { previewFor } from '../../src/data/conversations';
 import { appAlert } from '../../src/state/alertStore';
+import { failReasonText } from '../../src/lib/failReason';
 import { pickImageBase64, pickVideoBase64, startVoiceRecording, stopVoiceRecording, abortVoiceRecording, MAX_VIDEO_DURATION_SECONDS, MAX_VIDEO_FILE_BYTES } from '../../src/lib/media';
 import { useAudioRecorder, RecordingPresets } from 'expo-audio';
 
@@ -37,7 +38,7 @@ export default function GroupChatScreen() {
   const group = useGroupStore((s) => s.groups[id ?? '']);
   const approved = useContactStore((s) => s.approved);
   const threads = useChatStore((s) => s.threads);
-  const { sendText, sendRich, setTyping, react, markRead } = useChatStore();
+  const { sendText, sendRich, setTyping, react, markRead, retryMessage, discardFailed } = useChatStore();
   const startGroupCall = useGroupCallStore((s) => s.startGroupCall);
   const groupCallPhase = useGroupCallStore((s) => s.phase);
 
@@ -259,6 +260,15 @@ export default function GroupChatScreen() {
 
   // onLongPressMessage(): a smaller action sheet than the 1:1 screen's —
   // react and reply only (no edit/delete/forward/pin in group chat yet).
+  // Tapping "Failed" on one of my messages: say why, and offer to try again or discard it.
+  const onFailedMessage = (messageId: string, reason?: string) => {
+    appAlert('Message not sent', failReasonText(reason), [
+      { text: 'Try again', onPress: () => { retryMessage(id ?? '', true, messageId); } },
+      { text: 'Delete', style: 'destructive', onPress: () => discardFailed(id ?? '', true, messageId) },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
+
   const onLongPressMessage = (messageId: string) => {
     appAlert('Message', undefined, [
       { text: '👍 React', onPress: () => react(id ?? '', true, messageId, '👍') },
@@ -381,6 +391,7 @@ export default function GroupChatScreen() {
                 isMe={item.from === me}
                 senderName={showName ? nameFor(item.from) : undefined}
                 onLongPress={() => onLongPressMessage(item.id)}
+                onFailedPress={item.from === me && item.status === 'failed' ? () => onFailedMessage(item.id, item.failReason) : undefined}
                 replyPreview={repliedTo ? { senderLabel: nameFor(repliedTo.from), text: previewFor(repliedTo) } : null}
               />
             );

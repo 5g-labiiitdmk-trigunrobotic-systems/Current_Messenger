@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { relayClient } from '../lib/relayClient';
 import { decryptPayload, type KeyPairB64 } from '../lib/crypto';
 import { getOrCreateDeviceKeyPair, fetchActivePublicKeysWithRetry, encryptForUser } from '../lib/keystore';
-import { loadAllThreads, loadPinned, saveMessage, renameMessageId, setPinned, deleteThreadLocal } from '../lib/localDb';
+import { loadAllThreads, loadPinned, saveMessage, renameMessageId, setPinned, deleteThreadLocal, deleteMessageRow } from '../lib/localDb';
 import type { ClientEvent, MessageKind, ServerEvent, EncryptedPayload } from '../types/relay';
 import { useAuthStore } from './authStore';
 import { useGroupStore } from './groupStore';
@@ -88,6 +88,10 @@ interface ChatState {
   react: (targetId: string, isGroup: boolean, messageId: string, emoji: string) => void;
   editMessage: (targetId: string, isGroup: boolean, messageId: string, newText: string) => void;
   deleteLocal: (targetId: string, isGroup: boolean, messageId: string) => void;
+  /** Removes a message that failed to send, completely (no "deleted" placeholder). */
+  discardFailed: (targetId: string, isGroup: boolean, messageId: string) => void;
+  /** Sends a failed message again as a new message and removes the failed one. */
+  retryMessage: (targetId: string, isGroup: boolean, messageId: string) => Promise<void>;
   /** Own messages only — deletes from this device immediately, and asks
    * the other party's device (if connected right now) to delete its copy
    * too. See the doc comment above the 'delete' MessageKind in
@@ -808,6 +812,35 @@ export const useChatStore = create<ChatState>((set, get) => ({
       },
     }));
     if (me && updatedMsg) saveMessage(me, key, updatedMsg).catch(() => {});
+  },
+
+  discardFailed: (targetId, isGroup, messageId) => {
+    const me = useAuthStore.getState().session?.user.id;
+    const key = chatKey(targetId, isGroup);
+    let removed = false;
+    set((s) => {
+      const list = s.threads[key] ?? [];
+      const target = list.find((m) => m.id === messageId);
+      // Only ever removes a message of mine that is in the failed state.
+      if (!target || target.status !== 'failed' || target.from !== me) return s;
+      removed = true;
+      return { threads: { ...s.threads, [key]: list.filter((m) => m.id !== messageId) } };
+    });
+    if (me && removed) deleteMessageRow(me, messageId).catch(() => {});
+  },
+
+  retryMessage: async (targetId, isGroup, messageId) => {
+    const me = useAuthStore.getState().session?.user.id;
+    if (!me) return;
+    const key = chatKey(targetId, isGroup);
+    const failed = (get().threads[key] ?? []).find((m) => m.id === messageId);
+    if (!failed || failed.status !== 'failed' || failed.from !== me) return;
+    get().discardFailed(targetId, isGroup, messageId);
+    if (RICH_KINDS.has(failed.kind) && failed.meta) {
+      await get().sendRich(targetId, isGroup, failed.kind, failed.meta as Record<string, unknown>, failed.replyToId);
+    } else if (failed.text) {
+      await get().sendText(targetId, isGroup, failed.text, { kind: failed.kind, replyToId: failed.replyToId });
+    }
   },
 
   deleteForEveryone: (targetId, isGroup, messageId) => {

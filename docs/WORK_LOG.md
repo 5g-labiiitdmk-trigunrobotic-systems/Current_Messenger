@@ -74,6 +74,8 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 39 (iOS part) | `ITSAppUsesNonExemptEncryption` not set in the app config | app config | branch `fix/issue-39-config` | Pushed, waiting for "merge 39"; needs build 8. Android permission trimming deliberately NOT done (see log) |
 
 | 7 | Edit / delete / poll vote not checked against the original sender | app | branch `fix/issue-7-sender-check` | Pushed, waiting for "merge 7"; needs build 8 |
+
+| 41 | A failed message showed only "Failed": no reason, no retry | app | branch `fix/issue-41-retry` | Pushed, waiting for "merge 41"; needs build 8 |
 | 24 | A failed contact refresh (network drop, timeout) emptied Chats/Contacts and made blocked people reappear | app | branch `fix/issue-24-contact-refresh` | In `main`, needs build 8 |
 
 ### Open (original 20)
@@ -116,7 +118,6 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 
 | 38 | Test values left in phone-auth code | L | app |
 | 40 | No calls to a closed app on iPhone (no CallKit / push-to-talk) | — | product limit |
-| 41 | A failed message shows only "Failed": no retry button, no reason | M | app (found while fixing 11) |
 
 ### Suggested order
 1. **Relay, no app release:** 9, 14, 15.
@@ -399,6 +400,13 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Change:** an edit or delete applies only if the sender of the event is the original sender of the message; a poll vote applies only to a poll message and a valid option; a reaction must be a short emoji (16 characters at most). Everything else is ignored.
 - **Tested (real store, old vs new):** old code fails 5 of 9 (other person edits and deletes my message, votes on a non-poll, votes for an option that does not exist, 500-character reaction); new code passes 9/9 including the normal cases (own edit, own delete, valid vote, normal reaction). App typecheck clean.
 - **Not changed:** the relay still forwards these events as before (it cannot read them; they are encrypted).
+
+### 2026-11-01: Issue 41 — retry and reason for failed messages
+- **Problem:** after fix 11 a message that could not be sent shows "Failed", but nothing explained why and there was no way to send it again short of retyping it.
+- **Files:** `app/src/state/chatStore.ts` (`retryMessage`, `discardFailed`), `app/src/lib/localDb.ts` (`deleteMessageRow`), new `app/src/lib/failReason.ts`, `app/src/components/MessageBubble.tsx`, `app/app/chat/[id].tsx`, `app/app/group-chat/[id].tsx`.
+- **Change:** "Failed" on one of my messages is now tappable ("Failed · tap"). It opens "Message not sent" with a plain-language reason (they are offline, you are not connected, connection dropped, server did not confirm, app closed, no security key yet, ...) and three buttons: Try again (sends it as a new message and removes the failed one, works for text and for photos / voice / location / polls etc.), Delete (removes it completely, no "deleted" placeholder), Cancel. Only my own failed messages can be retried or discarded.
+- **Tested (real store, old vs new):** old version has neither feature; new passes 10/10: failed text message retried exactly once, goes to the relay, old row removed from the saved history; retry/discard ignore messages that did not fail; a location message is retried with its content; every failure reason has a readable text. App typecheck clean.
+- **Limit:** a retried message gets the time of the retry (it moves to the bottom), not its original position.
 - **Shipped:** branch only; needs build 8.
 
 ---
@@ -432,3 +440,5 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 20. In phone settings turn off Photos / Camera / Location for Current, then try attaching a photo, the camera, a profile photo and share location: each shows a message with Open Settings.
 
 21. Open an old (already used) reset-password link: after about 12 seconds you see 'This reset link did not work' with a Back to login button; a fresh link still shows the new-password form.
+
+22. Airplane mode, send a message and a photo: both show 'Failed · tap'. Tap one: the reason is shown. Turn airplane mode off and tap Try again: it sends once and the failed copy is gone. Delete removes a failed message completely.
