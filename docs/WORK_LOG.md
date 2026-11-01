@@ -4,23 +4,24 @@ A running record of the pre-launch bug hunt and fixes. New entries are added at 
 **bottom** after every piece of work (what changed, which commits, how it was tested,
 what is still open). Times are IST.
 
-**Working rules agreed with Krishna**
+**Working rules agreed with Husenbasha**
 - Report first; fix only when told "fix <number>". One issue at a time, report after each.
 - Show each change before moving on. Confirm before generating files.
-- Demo-account passwords are typed by Krishna directly into App Store Connect, never shared.
+- Demo-account passwords are typed by Husenbasha directly into App Store Connect, never shared.
 - DB / relay fixes need no app release. App fixes need one new build (**build 8**) for both stores.
 
 ---
 
-## 1. Where things stand (updated 2026-10-28)
+## 1. Where things stand (updated 2026-11-01)
 
 | Area | State |
 |---|---|
-| Google Play | Live in India, v1.0.1 (does **not** have the app fixes below) |
-| App Store | Build 7 in TestFlight, **not submitted**. Wait for build 8. |
-| Relay (Render) | Live: `https://current-messenger-relay.onrender.com`. Has fix 3; fixes 13, 6, 14, 15, 19, 20, 43 deploying. |
-| `main` branch | Fixes 3, 4, 5, 23/10, 11, 13, 6, 14, 15, 19, 20, 43 merged (42 is on its own branch, not merged). Nothing builds automatically. |
-| Build 8 | Not made yet. Should include 4, 5, 11, 23/10, 22 and the rest of the app batch. |
+| Google Play | Live in India, v1.0.1 (does **not** have the app fixes). Build 8 for Android still to be made. |
+| App Store | Build 7 in TestFlight, **not submitted**. Build 8 is next; then the iPhone screen recording and the reply to Apple's Guideline 2.1 request. |
+| Relay (Render) | Live on `main` with all relay fixes (including 9 and 16). Verified: start-up log shows groups restored from the database. Free plan, sleeps when idle. |
+| Database (Supabase) | Migrations 0006 to 0013, 0015 and 0016 applied on 2026-11-01. `supabase/pending/0014_users_restrict_read.sql` is HELD (see issue 2). |
+| `main` branch | Every bug in the register is fixed and merged, except the held issue 2 step 2, the Android permission trimming (analysed, unchanged) and issue 40 (product limit). |
+| Build 8 | Not started. All planned app fixes are in `main`; EAS numbers the build itself. |
 
 ---
 
@@ -109,7 +110,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 
 ---
 
-## 3. Before submitting iOS (Krishna's side, not code)
+## 3. Before submitting iOS (Husenbasha's side, not code)
 
 - Set price to Free; upload iPad screenshots; confirm age rating 16+.
 - Encryption PDF: correct "libsodium" to TweetNaCl, fill the bracketed fields, sign.
@@ -219,7 +220,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Shipped:** merged to `main`.
 
 ### 2026-10-28 08:45: New report — notification on a phone the account had left (issue 42, not fixed)
-- **Report:** an account that was signed in on Krishna's phone earlier is now signed in on another phone; texting it notifies both phones.
+- **Report:** an account that was signed in on Husenbasha's phone earlier is now signed in on another phone; texting it notifies both phones.
 - **Findings (code read only):** each account has ONE push token in `users.push_token`, the last device that registered wins; the relay sends one push to that token. The live Android app does not clear the token on sign-out (build 8 does, fix 22), so a phone that signed out can keep a token that is still on file, and a phone that is still signed in also shows its own in-app notification from the live connection. Not yet confirmed which of these happened on the two phones.
 - **Open:** answers needed (was the account signed OUT on the first phone, or just left signed in; which notification appeared on which phone). Candidate fixes: build 8 already covers the sign-out case; a proper fix is one token per device (new database table, app registers per device, relay sends to all of the account's devices and Expo drops dead tokens) and needs a build.
 
