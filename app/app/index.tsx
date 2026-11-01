@@ -6,6 +6,7 @@ import { BokehBackground } from '../src/components/BokehBackground';
 import { TypingDots } from '../src/components/TypingDots';
 import { useTheme } from '../src/theme/useTheme';
 import { useAuthStore } from '../src/state/authStore';
+import { takePendingNotificationRoute } from '../src/lib/push';
 
 // Minimum time the splash screen stays up, regardless of how fast auth
 // initialization actually finishes — long enough for the logo/halo/
@@ -55,7 +56,13 @@ export default function SplashRoute() {
         // navigation into the chat list outrun this device's E2E key
         // publish. Usually already done well within SPLASH_HOLD_MS, so
         // this is a fast no-op in the common case, not an extra delay.
-        useAuthStore.getState().ensureDeviceKeyPublished().finally(() => router.replace('/(tabs)/chats'));
+        useAuthStore.getState().ensureDeviceKeyPublished().finally(() => {
+          router.replace('/(tabs)/chats');
+          // The app was opened by tapping a message / request notification:
+          // go on to that chat or screen now that the chat list is the base.
+          const target = takePendingNotificationRoute();
+          if (target) setTimeout(() => router.push(target as any), 0);
+        });
       }
     }, SPLASH_HOLD_MS);
     return () => clearTimeout(t);

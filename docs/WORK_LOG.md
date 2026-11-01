@@ -55,6 +55,8 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 27 | App lock started unlocked until settings loaded, and never re-locked when the app went to the background | app | branch `fix/issue-27-app-lock` | Pushed, waiting for "merge 27"; needs build 8 |
 
 | 28 | Incoming messages not de-duplicated (a re-sent copy showed twice) | app | branch `fix/issue-28-dedupe` | Pushed, waiting for "merge 28"; needs build 8 |
+
+| 29 | Tapping a message / chat-request / contact-request notification did not open the chat | app + relay | branch `fix/issue-29-notification-tap` | Pushed, waiting for "merge 29"; relay part deploys safely first; needs build 8 |
 | 24 | A failed contact refresh (network drop, timeout) emptied Chats/Contacts and made blocked people reappear | app | branch `fix/issue-24-contact-refresh` | In `main`, needs build 8 |
 
 ### Open (original 20)
@@ -79,6 +81,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 28 | Incoming messages not de-duplicated | M | app |
 
 | 29 | Message-ping notification taps do not open the chat | M | app |
+
 | 30 | A declined contact request can never be re-sent (error swallowed) | M | app |
 | 31 | Leaving a group only sends the leave message; group stays on screen | M | app |
 | 32 | Group invite / forward lists cut at 6 people silently | M | app |
@@ -314,6 +317,15 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Tested (real store, old vs new):** old code adds a repeated copy (5 of 6 checks fail); new code passes 6/6: first copy saved once, repeat ignored, three simultaneous copies give one message, distinct messages unaffected, groups covered. App typecheck clean.
 - **Shipped:** branch only; needs build 8.
 
+
+### 2026-11-01: Issue 29 — notification taps open the right screen
+- **Root cause:** only call notifications were routed on tap. The relay's message, chat-request and contact-request pushes carried no data at all, so a tap just opened the app wherever it last was.
+- **Files:** relay `server/src/pushPing.ts` and `server/src/index.ts`; app `app/src/lib/push.ts`, new `app/src/lib/notificationRoute.ts`, `app/app/index.tsx`.
+- **Change:** the relay now adds `data` to those pushes (`kind` plus the sender's id for messages and chat requests). The app maps a tap to the sender's chat (`/chat/<id>`) or the Contacts tab; only a real UUID can become part of a route. If the app is already signed in the tap opens it at once; on a cold start the destination is remembered and opened right after the app reaches the chat list. Old apps ignore the extra data, so the relay can deploy before build 8.
+- **Tested:** relay push payloads against a stub (old vs new: old carries no data, new passes 4/4); route rules 6/6 (message, chat request, contact request, calls left to their own handler, missing data, crafted id rejected). Typechecks clean for app and relay.
+- **Not covered:** the actual notification tap on a device (warm and cold start).
+- **Shipped:** branch only.
+
 ---
 
 ## 5. Real-phone checks before releasing build 8
@@ -335,3 +347,5 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 15. Sign up with a username, tap the email link while in airplane mode, then turn it off: the account ends up with the username you chose (not a random one).
 
 16. Turn on the biometric lock, fully close the app, open it: the lock screen shows first and the app is never visible before unlocking. Then press Home for a few seconds and return: it asks again. Cancel the prompt: the Unlock button works.
+
+17. Close the app on phone A, send A a message from B: tap the notification on A: it opens B's chat (also test with the app in the background). Send a contact request and tap its notification: it opens Contacts.
