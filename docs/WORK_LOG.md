@@ -48,6 +48,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 42 | Notifications went to a phone the account had left (one push token per account) | app + DB + relay | branch `fix/issue-42-device-push-tokens` | In `main`; run migration 0008 in Supabase; needs build 8 |
 | 1 | `contact_requests` RLS: a user could insert an already-approved request, or approve their own pending request, or rewrite its parties | DB | branch `fix/issue-1-contact-rls` (migration 0009) | In `main`; run migration 0009 in Supabase; no build needed |
 | 8 (email part) | Users could store `email_verified = true` without confirming their email | DB | branch `fix/issue-8-email-verified` (migration 0010) | In `main`; run migration 0010 in Supabase; no build needed |
+| 17 | Transfer log (who messaged whom, when, size) kept forever | DB | branch `fix/issue-17-transfer-log` (migration 0011) | Pushed, waiting for "merge 17"; run migration in Supabase; no build needed |
 | 24 | A failed contact refresh (network drop, timeout) emptied Chats/Contacts and made blocked people reappear | app | branch `fix/issue-24-contact-refresh` | In `main`, needs build 8 |
 
 ### Open (original 20)
@@ -60,7 +61,6 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 9 | Public `/ice-servers` exposes TURN credentials | H | relay |
 | 12 | Presence visibility setting is cosmetic | H | app + relay |
 | 16 | Groups lost when the relay restarts | M | relay |
-| 17 | Transfer log kept forever | M | DB |
 | 18 | Docs and encryption PDF say "libsodium"; the app uses TweetNaCl | M | docs |
 
 ### Open (found in the broader audit)
@@ -274,6 +274,15 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Not changed:** `phone_verified` (phone verification is not in the live flow, per your instruction), and the `email` column itself can still be set to any text. Existing rows are untouched; the migration ends with a query that lists rows marked verified without a confirmed email.
 - **Rollout:** run migration 0010 in the Supabase SQL editor.
 - **Shipped:** merged to `main`; migration still to be run in Supabase.
+
+### 2026-11-01: Issue 17 — transfer log retention
+- **Root cause:** `message_transfer_log` (sender, recipient, time, size; no content) was written by the relay for every delivered message and never cleaned. Nothing in the app or relay reads it, so it only built up a permanent who-talks-to-whom history.
+- **File:** new `supabase/migrations/0011_message_transfer_log_retention.sql`.
+- **Change:** an index on `created_at`, a function `purge_old_message_transfer_log(retain)` (default 30 days; refuses less than 1 day; not callable by app users), and a daily pg_cron job at 03:15 UTC. If pg_cron is not enabled the migration still applies and prints a notice; enable pg_cron in Supabase (Database > Extensions) and re-run the file to add the schedule.
+- **Decision for you:** 30 days is my choice; change the number in the migration if you want more or less.
+- **Tested:** real Postgres engine with the real table: only rows older than the limit are deleted (2 of 4), running twice is harmless, under-1-day refused, app users denied, custom retention works (6/6). The pg_cron scheduling itself is not tested here (not available in the test engine).
+- **Rollout:** enable pg_cron, run migration 0011 in the SQL editor, then check `select * from cron.job;` shows `purge-message-transfer-log`.
+- **Shipped:** branch only.
 
 ---
 
