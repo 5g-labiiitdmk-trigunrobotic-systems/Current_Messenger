@@ -65,6 +65,8 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 32 | Group invite / forward lists silently cut at 6 people | app | branch `fix/issue-32-list-cut` | Pushed, waiting for "merge 32"; needs build 8 |
 
 | 33 | Denied photo / camera / location permission gave no message | app | branch `fix/issue-33-permission-messages` | Pushed, waiting for "merge 33"; needs build 8 |
+
+| 34 | Reset-password screen spun forever without a valid session | app | branch `fix/issue-34-reset-spinner` | Pushed, waiting for "merge 34"; needs build 8 |
 | 24 | A failed contact refresh (network drop, timeout) emptied Chats/Contacts and made blocked people reappear | app | branch `fix/issue-24-contact-refresh` | In `main`, needs build 8 |
 
 ### Open (original 20)
@@ -99,6 +101,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 33 | Denied photo / camera permission gives no message | M | app |
 
 | 34 | Reset-password screen spins forever without a valid session | M | app |
+
 | 35 | Push token printed to the log | L | app |
 | 36 | All chat history loaded at once at start-up | M | app |
 | 37 | Group call silently capped | M | app |
@@ -362,6 +365,12 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **File:** `app/src/lib/media.ts` (new `explainPermissionDenied`).
 - **Change:** a refused permission now shows "Photo / Camera / Location access is off" with the reason and an "Open Settings" button (opens the app's settings page) or "Not now". Covers chat photos, the camera option, profile photo and share location.
 - **Tested (real helpers, stubbed pickers and settings, old vs new):** old code shows nothing (5 of 7 fail); new code passes 7/7: each denial shows the right message, the button opens settings, and granted permissions return the photo/location with no alert. App typecheck clean.
+
+### 2026-11-01: Issue 34 — reset-password screen never gave up
+- **Root cause:** the screen waits for the recovery session created from the email link; with an expired, already-used or broken link that session never arrives and "Verifying reset link…" spun forever with no way out.
+- **File:** `app/app/(auth)/reset-password.tsx`.
+- **Change:** after 12 seconds without a session the screen shows "This reset link did not work — it may have expired or already been used" with a "Back to login" button. If the session arrives later the form appears as before.
+- **Tested:** app typecheck clean. Not unit-tested (screen code); covered by the phone check below.
 - **Shipped:** branch only; needs build 8.
 
 ---
@@ -393,3 +402,5 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 19. With more than 6 contacts: Group info > Add member and long-press a message > Forward both list every contact (scroll the list).
 
 20. In phone settings turn off Photos / Camera / Location for Current, then try attaching a photo, the camera, a profile photo and share location: each shows a message with Open Settings.
+
+21. Open an old (already used) reset-password link: after about 12 seconds you see 'This reset link did not work' with a Back to login button; a fresh link still shows the new-password form.

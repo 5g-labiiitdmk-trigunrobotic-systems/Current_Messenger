@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import { ScreenScaffold } from '../../src/components/ScreenScaffold';
@@ -10,6 +10,9 @@ import { fontFamilies } from '../../src/theme/tokens';
 import { supabase } from '../../src/lib/supabase';
 import { useAuthStore } from '../../src/state/authStore';
 import { appAlert } from '../../src/state/alertStore';
+
+// How long to wait for the recovery session before telling the user the link failed.
+const RESET_LINK_TIMEOUT_MS = 12000;
 
 /**
  * Reached via the current://reset-password deep link (see
@@ -26,6 +29,17 @@ export default function ResetPasswordScreen() {
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [loading, setLoading] = useState(false);
+  // If the recovery session never shows up (expired / already-used / broken
+  // link) the screen used to spin on "Verifying reset link…" forever.
+  const [linkTimedOut, setLinkTimedOut] = useState(false);
+  useEffect(() => {
+    if (session) {
+      setLinkTimedOut(false);
+      return;
+    }
+    const t = setTimeout(() => setLinkTimedOut(true), RESET_LINK_TIMEOUT_MS);
+    return () => clearTimeout(t);
+  }, [session]);
 
   const canSubmit = !loading && password.length >= 8 && password === confirm;
 
@@ -55,6 +69,20 @@ export default function ResetPasswordScreen() {
     const needsSetup = useAuthStore.getState().needsProfileSetup;
     router.replace(needsSetup ? '/(auth)/finish-setup' : '/(tabs)/chats');
   };
+
+  if (!session && linkTimedOut) {
+    return (
+      <ScreenScaffold scroll={false}>
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, paddingHorizontal: 32 }}>
+          <Text style={{ fontFamily: fontFamilies.heavy, color: tokens.text, fontSize: 18, textAlign: 'center' }}>This reset link did not work</Text>
+          <Text style={{ fontFamily: fontFamilies.medium, color: tokens.text2, fontSize: 13.5, textAlign: 'center', lineHeight: 19 }}>
+            It may have expired or already been used. Request a new link from the login screen.
+          </Text>
+          <PrimaryButton title="Back to login" onPress={() => router.replace('/(auth)/login')} />
+        </View>
+      </ScreenScaffold>
+    );
+  }
 
   if (!session) {
     return (
