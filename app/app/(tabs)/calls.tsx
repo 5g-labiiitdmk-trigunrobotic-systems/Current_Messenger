@@ -13,6 +13,7 @@ import { useCallStore } from '../../src/state/callStore';
 import { useContactStore } from '../../src/state/contactStore';
 import { supabase } from '../../src/lib/supabase';
 import type { UserRow } from '../../src/types/database';
+import { toUserRow, type PublicProfile } from '../../src/lib/publicProfile';
 
 // FILE PURPOSE: The "Calls" tab — a locally-persisted call history list
 // (see callStore.ts's `log`), each entry showing the other party, call
@@ -38,14 +39,12 @@ export default function CallsScreen() {
     if (missing.length === 0) return;
     missing.forEach((id) => attemptedIds.current.add(id));
     supabase
-      .from('users')
-      .select('*')
-      .in('id', missing)
+      .rpc('get_profiles', { p_ids: missing })
       .then(({ data }) => {
         if (!data || data.length === 0) return;
         setResolvedUsers((prev) => {
           const next = { ...prev };
-          for (const u of data as UserRow[]) next[u.id] = u;
+          for (const p of data as PublicProfile[]) next[p.id] = toUserRow(p);
           return next;
         });
       });

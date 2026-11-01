@@ -32,8 +32,7 @@ export function usernameFormatError(raw: string): string | null {
  * current row (see authStore.ts's changeUsername).
  */
 export async function isUsernameTaken(username: string, excludeUserId?: string): Promise<boolean> {
-  let query = supabase.from('users').select('id').eq('username', username);
-  if (excludeUserId) query = query.neq('id', excludeUserId);
-  const { data } = await query.maybeSingle();
-  return !!data;
+  // On a lookup error this says "not taken" (as before); the unique constraint on users.username still stops a duplicate at save time.
+  const { data } = await supabase.rpc('username_taken', { p_username: username, p_exclude: excludeUserId ?? null });
+  return data === true;
 }
