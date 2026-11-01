@@ -53,6 +53,8 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 25 | Setup failure silently replaced the chosen username with a random one | app | branch `fix/issue-25-username-setup` | Pushed, waiting for "merge 25"; needs build 8 |
 
 | 27 | App lock started unlocked until settings loaded, and never re-locked when the app went to the background | app | branch `fix/issue-27-app-lock` | Pushed, waiting for "merge 27"; needs build 8 |
+
+| 28 | Incoming messages not de-duplicated (a re-sent copy showed twice) | app | branch `fix/issue-28-dedupe` | Pushed, waiting for "merge 28"; needs build 8 |
 | 24 | A failed contact refresh (network drop, timeout) emptied Chats/Contacts and made blocked people reappear | app | branch `fix/issue-24-contact-refresh` | In `main`, needs build 8 |
 
 ### Open (original 20)
@@ -75,6 +77,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 
 | 25 | Setup failure silently replaces the chosen username | H | app |
 | 28 | Incoming messages not de-duplicated | M | app |
+
 | 29 | Message-ping notification taps do not open the chat | M | app |
 | 30 | A declined contact request can never be re-sent (error swallowed) | M | app |
 | 31 | Leaving a group only sends the leave message; group stays on screen | M | app |
@@ -303,6 +306,12 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Tested:** the rules (old behaviour as on `main` vs new), 9/9: not-loaded no longer counts as unlocked, lock-on stays locked, lock-off opens, background re-locks, prompt blip ignored. App typecheck clean.
 - **Not covered by tests:** the real Face ID / fingerprint prompt and the app-state events on a device (the checklist item below covers this).
 - **Limit:** re-lock happens immediately on background (no grace period); a delay setting could be added later.
+
+### 2026-11-01: Issue 28 — duplicate incoming messages
+- **Root cause:** the receive handler appended every `message:receive` to the thread without checking whether a message with that id was already there, so a copy re-sent by the relay (e.g. around a reconnect) or a duplicate frame appeared twice and was saved twice.
+- **File:** `app/src/state/chatStore.ts`.
+- **Change:** the append now checks the id inside the state update (so copies arriving at the same instant cannot both pass) and skips both showing and saving a message that is already in the thread. Applies to direct and group chats.
+- **Tested (real store, old vs new):** old code adds a repeated copy (5 of 6 checks fail); new code passes 6/6: first copy saved once, repeat ignored, three simultaneous copies give one message, distinct messages unaffected, groups covered. App typecheck clean.
 - **Shipped:** branch only; needs build 8.
 
 ---

@@ -414,8 +414,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
           return;
         }
 
-        set((s) => ({ threads: { ...s.threads, [key]: [...(s.threads[key] ?? []), msg] } }));
-        saveMessage(me, key, msg).catch(() => {});
+        // The same message can reach us twice (the relay re-sending after a
+        // reconnect, or a duplicate frame). Without this check it was shown
+        // and saved twice. The test runs inside the state update so two
+        // copies arriving at the same moment cannot both pass it.
+        let duplicate = false;
+        set((s) => {
+          const current = s.threads[key] ?? [];
+          if (current.some((m) => m.id === msg.id)) {
+            duplicate = true;
+            return s;
+          }
+          return { threads: { ...s.threads, [key]: [...current, msg] } };
+        });
+        if (!duplicate) saveMessage(me, key, msg).catch(() => {});
       }
 
       if (event.type === 'typing') {
