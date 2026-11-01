@@ -63,6 +63,8 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 31 | Leaving a group only sent the leave message; the group stayed on screen | app | branch `fix/issue-31-leave-group` | Pushed, waiting for "merge 31"; needs build 8 |
 
 | 32 | Group invite / forward lists silently cut at 6 people | app | branch `fix/issue-32-list-cut` | Pushed, waiting for "merge 32"; needs build 8 |
+
+| 33 | Denied photo / camera / location permission gave no message | app | branch `fix/issue-33-permission-messages` | Pushed, waiting for "merge 33"; needs build 8 |
 | 24 | A failed contact refresh (network drop, timeout) emptied Chats/Contacts and made blocked people reappear | app | branch `fix/issue-24-contact-refresh` | In `main`, needs build 8 |
 
 ### Open (original 20)
@@ -95,6 +97,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 32 | Group invite / forward lists cut at 6 people silently | M | app |
 
 | 33 | Denied photo / camera permission gives no message | M | app |
+
 | 34 | Reset-password screen spins forever without a valid session | M | app |
 | 35 | Push token printed to the log | L | app |
 | 36 | All chat history loaded at once at start-up | M | app |
@@ -353,6 +356,12 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Root cause:** "Invite to group" (`group-info/[id].tsx`) and "Forward to" (`chat/[id].tsx`) built their menus from `.slice(0, 6)`, so anyone beyond the sixth contact could not be invited or forwarded to, with no hint that the list was cut.
 - **Change:** removed the cut. The menus go through the app's own alert component, whose button list already scrolls (max height 400), so every contact is reachable.
 - **Tested:** app typecheck clean; code inspection that no `slice(0, 6)` remains in those two places and that the alert list scrolls. Not unit-tested (screen code); the phone check below covers it.
+
+### 2026-11-01: Issue 33 — permission denied gave no message
+- **Root cause:** when photo, camera or location permission was refused, the helpers returned `null`, which the screens treat as "cancelled", so the button just did nothing. (Voice and video already showed a message.)
+- **File:** `app/src/lib/media.ts` (new `explainPermissionDenied`).
+- **Change:** a refused permission now shows "Photo / Camera / Location access is off" with the reason and an "Open Settings" button (opens the app's settings page) or "Not now". Covers chat photos, the camera option, profile photo and share location.
+- **Tested (real helpers, stubbed pickers and settings, old vs new):** old code shows nothing (5 of 7 fail); new code passes 7/7: each denial shows the right message, the button opens settings, and granted permissions return the photo/location with no alert. App typecheck clean.
 - **Shipped:** branch only; needs build 8.
 
 ---
@@ -382,3 +391,5 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 18. Create a group of three, leave it from one phone: it disappears from that phone's chat list at once, and the others see the member gone. Try leaving in airplane mode: you are told you are offline and stay in the group.
 
 19. With more than 6 contacts: Group info > Add member and long-press a message > Forward both list every contact (scroll the list).
+
+20. In phone settings turn off Photos / Camera / Location for Current, then try attaching a photo, the camera, a profile photo and share location: each shows a message with Open Settings.
