@@ -356,7 +356,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
               ...s.threads,
               [key]: (s.threads[key] ?? []).map((m) => {
                 if (m.id !== event.meta!.targetMessageId) return m;
-                updatedMsg = { ...m, reactions: { ...m.reactions, [event.from]: String(event.meta!.emoji) } };
+                const emoji = String(event.meta!.emoji ?? '');
+                if (!emoji || emoji.length > 16) return m; // a reaction is one short emoji, never long text
+                updatedMsg = { ...m, reactions: { ...m.reactions, [event.from]: emoji } };
                 return updatedMsg;
               }),
             },
@@ -371,6 +373,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
               ...s.threads,
               [key]: (s.threads[key] ?? []).map((m) => {
                 if (m.id !== event.meta!.targetMessageId) return m;
+                // Only the original sender may edit a message. The relay
+                // does not check this, so without it anyone in the chat
+                // could rewrite the other person's messages.
+                if (m.from !== event.from) return m;
                 updatedMsg = { ...m, text, edited: true };
                 return updatedMsg;
               }),
@@ -389,6 +395,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
               ...s.threads,
               [key]: (s.threads[key] ?? []).map((m) => {
                 if (m.id !== event.meta!.targetMessageId) return m;
+                // Only the original sender may delete for everyone.
+                if (m.from !== event.from) return m;
                 updatedMsg = { ...m, deleted: true, text: undefined };
                 return updatedMsg;
               }),
@@ -405,6 +413,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
               ...s.threads,
               [key]: (s.threads[key] ?? []).map((m) => {
                 if (m.id !== event.meta!.targetMessageId) return m;
+                // A vote only applies to a real poll, for one of its options.
+                const pollOptions = (m.meta?.options as unknown[] | undefined) ?? [];
+                if (m.kind !== 'poll' || !Number.isInteger(optionIndex) || optionIndex < 0 || optionIndex >= pollOptions.length) return m;
                 updatedMsg = { ...m, meta: { ...m.meta, votes: { ...(m.meta?.votes as Record<string, number> | undefined), [event.from]: optionIndex } } };
                 return updatedMsg;
               }),
