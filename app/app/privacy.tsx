@@ -14,6 +14,7 @@ import { useContactStore } from '../src/state/contactStore';
 import { useAuthStore } from '../src/state/authStore';
 import { supabase } from '../src/lib/supabase';
 import type { DeviceKeyRow } from '../src/types/database';
+import type { PublicProfile } from '../src/lib/publicProfile';
 
 // FILE PURPOSE: The "Privacy Dashboard" screen — an encryption
 // reassurance card, a simple security-score ring, active-device-key and
@@ -48,9 +49,9 @@ export default function PrivacyScreen() {
   useEffect(() => {
     (async () => {
       const entries: Record<string, string> = {};
-      for (const id of blocked) {
-        const { data } = await supabase.from('users').select('username').eq('id', id).maybeSingle();
-        if (data) entries[id] = data.username;
+      if (blocked.length > 0) {
+        const { data } = await supabase.rpc('get_profiles', { p_ids: blocked });
+        for (const p of (data ?? []) as PublicProfile[]) entries[p.id] = p.username;
       }
       setBlockedProfiles(entries);
     })();

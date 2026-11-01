@@ -5,6 +5,7 @@ import { useAuthStore } from './authStore';
 import { relayClient } from '../lib/relayClient';
 import type { ServerEvent } from '../types/relay';
 import { appAlert } from './alertStore';
+import { toUserRow, type PublicProfile } from '../lib/publicProfile';
 
 // FILE PURPOSE: Long-term contact relationships — approved contacts,
 // incoming/outgoing requests, and blocking/reporting — backed by
@@ -219,13 +220,10 @@ export const useContactStore = create<ContactState>((set, get) => ({
   searchByUsername: async (query) => {
     const me = useAuthStore.getState().session?.user.id;
     if (!query.trim()) return [];
-    const { data } = await supabase
-      .from('users')
-      .select('*')
-      .ilike('username', `%${query.trim()}%`)
-      .neq('id', me ?? '')
-      .limit(20);
-    return (data ?? []) as UserRow[];
+    if (!me) return [];
+    // Public profile fields only (database function search_users).
+    const { data } = await supabase.rpc('search_users', { p_query: query.trim() });
+    return ((data ?? []) as PublicProfile[]).map(toUserRow);
   },
 
   sendRequest: async (receiverId) => {

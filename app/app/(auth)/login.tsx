@@ -37,13 +37,13 @@ export default function LoginScreen() {
     let email = identifier.trim();
     if (!email.includes('@')) {
       // Typed a username, not an email — look up the matching email first.
-      const { data } = await supabase.from('users').select('email').eq('username', email.toLowerCase()).maybeSingle();
-      if (!data) {
+      const { data: foundEmail } = await supabase.rpc('login_email_for_username', { p_username: email.toLowerCase() });
+      if (!foundEmail) {
         setLoading(false);
         appAlert('Account not found', 'No account with that username.');
         return;
       }
-      email = data.email;
+      email = foundEmail as string;
     }
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {

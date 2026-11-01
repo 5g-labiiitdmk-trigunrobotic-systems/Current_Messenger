@@ -72,6 +72,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 
 | 9 | Public `/ice-servers` exposed TURN credentials to anyone | relay + app | branch `fix/issue-9-ice-servers-auth` | Relay part works alone; app sends its token from build 8 |
 | 16 | Groups lost when the relay restarts | relay + DB | branch `fix/issue-16-persist-groups` | Needs migration 0012 first, then relay deploy; no app build |
+| 2 | `users` table readable by everyone (emails and push tokens of all 133 users reachable with the public app key) | DB + app | branch `fix/issue-2-users-read` | Step 1 (functions, migration 0013) is safe any time; app uses them from build 8; step 2 (close the table) is HELD in `supabase/pending/0014_users_restrict_read.sql` until old builds are gone |
 | 36 | All chat history loaded at once at start-up | app | branch `fix/issue-36-paged-history` | Needs build 8 |
 | 37 | Group call cap (4 people) did not say who would be left out | app | branch `fix/issue-37-group-call-cap` | In `main`; needs build 8. The 4-person limit itself stays (see log) |
 | 12 | Presence visibility setting was cosmetic: online status went to every connected user, and "Nobody" was only hidden by the app | relay | branch `fix/issue-12-presence-relay` | In `main`; relay only, no build needed (deploys on Render) |
@@ -81,7 +82,6 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 
 | # | Issue | Sev | Where |
 |---|---|---|---|
-| 2 | `users` table readable by everyone (login-by-username, signup check, contact search, QR depend on it) | C | DB + app |
 | 8 | Users can set their own `phone_verified` (the `email_verified` part is fixed, see below; phone verification is not in the live flow) | H | DB |
 | 18 | Docs and encryption PDF say "libsodium"; the app uses TweetNaCl | M | docs |
 
@@ -428,6 +428,15 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Tested:** migration on Postgres (applies twice, signed-in and anonymous users denied on both tables, user delete removes memberships, owner delete keeps the group, group delete removes members) all pass. Relay on a mock Supabase, end to end: create a group with two members, restart the relay, both users see the group with the right owner; one leaves, restart, still gone for them; the last member leaving deletes the stored rows. Old `main` loses the group on restart (fails as expected). Database outage at start-up: group works in memory, nothing is written during the outage, and it is written after recovery. Relay typecheck and build clean.
 - **Shipped:** merged to `main`. **Order:** run migration 0012 in Supabase first, then let Render deploy (without the tables the relay logs `[groups] ... failed` and groups stay in-memory as before; nothing breaks).
 
+### 2026-11-01: Issue 2 — `users` table no longer needs to be public (in two steps)
+- **Root cause:** a rule `users_select_by_username_lookup` (`using (true)`) let anyone, including a signed-out caller holding the public app key, read every column of every row. Confirmed on the live database: 133 rows, all with an email, 108 with a push token. The app needed it for login-by-username (it read `email` by username before sign-in), the signup username check, contact search and call-log names. The views `approved_contacts` and `verified_users` are security-invoker, so they follow the table's rules and are covered.
+- **Why two steps:** removing the rule breaks Play 1.0.1 (login by username, search, username check, call-log names), so the app has to stop reading the table first.
+- **Step 1 (safe, additive):** `supabase/migrations/0013_user_lookup_functions.sql` adds `login_email_for_username` (exact username in, email out; usable before sign-in), `username_taken`, `search_users` (signed-in only, 2+ characters, 20 results, never yourself, public fields only) and `get_profiles` (up to 50 ids, public fields only). Nothing existing changes. The app (login, signup/username change, contact search, call log, blocked list) now uses them: `login.tsx`, `username.ts`, `contactStore.ts`, `(tabs)/calls.tsx`, `privacy.tsx`, new `publicProfile.ts`. Needs build 8.
+- **Step 2 (HELD):** `supabase/pending/0014_users_restrict_read.sql` removes the open rule and adds one so a pending request still shows who it is from. After it, a signed-in user reads only their own row, approved contacts and people on a request with them. Not in `migrations/` on purpose. Run it only when nearly everyone is on build 8 or later.
+- **Tested (real Postgres with the same rules and roles, 21 checks, all pass):** after 0013 the old direct lookups still work and the functions return only public fields, reject signed-out search/profile calls and treat `%` and `_` literally; after 0014 a signed-out caller reads nothing, a signed-in user sees only self, contacts and request senders (strangers are invisible), and login lookup, search, profiles and username check still work. App typecheck clean.
+- **Limits:** `login_email_for_username` still returns the email for a username someone already knows; that is how login-by-username works, and nothing can list users in bulk through it. An approved contact can still read the other side's email and push token through the existing contacts rule. Guessing usernames one at a time is not rate-limited.
+- **Shipped:** branch only. Migration 0013 not yet applied to Supabase.
+
 ---
 
 ## 5. Real-phone checks before releasing build 8
@@ -465,3 +474,5 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 22. Open a chat with more than 300 messages: it opens at the newest; scroll up to the top and older messages load without jumping or duplicates. A pinned old message still shows in the pin bar.
 
 23. Create a group of three and send a message. In Render press Manual Deploy (restart) and wait for it to come up: all three phones still list the group within a few seconds of reconnecting and keep sending in it.
+
+24. After migration 0013 is applied and build 8 is installed: log in with a username (not email); search for a person by part of their username (2+ characters); change username to a taken one (refused); open Calls with an entry from someone no longer a contact (shows their name); Settings > Privacy shows blocked people by name.
