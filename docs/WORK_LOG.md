@@ -83,7 +83,6 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 
 | # | Issue | Sev | Where |
 |---|---|---|---|
-| 8 | Users can set their own `phone_verified` (the `email_verified` part is fixed, see below; phone verification is not in the live flow) | H | DB |
 | 18 | Docs and encryption PDF say "libsodium"; the app uses TweetNaCl | M | docs |
 
 ### Open (found in the broader audit)
