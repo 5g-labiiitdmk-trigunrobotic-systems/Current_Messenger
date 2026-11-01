@@ -59,6 +59,8 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 29 | Tapping a message / chat-request / contact-request notification did not open the chat | app + relay | branch `fix/issue-29-notification-tap` | Pushed, waiting for "merge 29"; relay part deploys safely first; needs build 8 |
 
 | 30 | A declined contact request could never be re-sent; the error was swallowed | app | branch `fix/issue-30-declined-resend` | Pushed, waiting for "merge 30"; needs build 8 |
+
+| 31 | Leaving a group only sent the leave message; the group stayed on screen | app | branch `fix/issue-31-leave-group` | Pushed, waiting for "merge 31"; needs build 8 |
 | 24 | A failed contact refresh (network drop, timeout) emptied Chats/Contacts and made blocked people reappear | app | branch `fix/issue-24-contact-refresh` | In `main`, needs build 8 |
 
 ### Open (original 20)
@@ -87,6 +89,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 30 | A declined contact request can never be re-sent (error swallowed) | M | app |
 
 | 31 | Leaving a group only sends the leave message; group stays on screen | M | app |
+
 | 32 | Group invite / forward lists cut at 6 people silently | M | app |
 | 33 | Denied photo / camera permission gives no message | M | app |
 | 34 | Reset-password screen spins forever without a valid session | M | app |
@@ -336,6 +339,12 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Change:** before inserting, the sender's own declined row to that person is deleted (a sender may delete a row they are part of), then a fresh pending request is inserted and the recipient notified as usual. A failed delete or any other insert error now shows "Could not send request" instead of failing silently. Compatible with the contact-request security fix (migration 0009: inserts must be pending, delete still allowed for participants).
 - **Tested (real store, stubbed database that enforces the unique pair, old vs new):** old code fails the re-send (3 of 6 fail); new code passes 6/6: re-send after decline creates a pending request, notifies, shows as outgoing; first request, duplicate send while pending and mutual-request handling unchanged.
 - **Limit:** a person who declined can be asked again; they can block the sender to stop it. A cool-down could be added if it gets abused.
+
+### 2026-11-01: Issue 31 — leaving a group
+- **Root cause:** `leave()` sent `group:leave` and relied on follow-up events, but the relay only tells the OTHER members (the leaver is already out of the member list when it broadcasts `group:member_left`). The leaving phone kept showing the group until the next reconnect.
+- **Files:** `app/src/state/groupStore.ts`, `app/app/group-info/[id].tsx`.
+- **Change:** once the leave request has actually been sent, the group is also removed from this phone's list. If it could not be sent (offline), nothing changes and the screen says "You are offline — Reconnect to leave this group" instead of silently leaving the user in the chat list.
+- **Tested (real store, old vs new):** old code keeps the group (1 of 5 fails); new code passes 5/5: leave sends the event, group disappears at once, other groups untouched, offline keeps the group and reports false.
 - **Shipped:** branch only; needs build 8.
 
 ---
@@ -361,3 +370,5 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 16. Turn on the biometric lock, fully close the app, open it: the lock screen shows first and the app is never visible before unlocking. Then press Home for a few seconds and return: it asks again. Cancel the prompt: the Unlock button works.
 
 17. Close the app on phone A, send A a message from B: tap the notification on A: it opens B's chat (also test with the app in the background). Send a contact request and tap its notification: it opens Contacts.
+
+18. Create a group of three, leave it from one phone: it disappears from that phone's chat list at once, and the others see the member gone. Try leaving in airplane mode: you are told you are offline and stay in the group.
