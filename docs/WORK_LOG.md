@@ -70,6 +70,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 7 | Edit / delete / poll vote not checked against the original sender | app | branch `fix/issue-7-sender-check` | In `main`; needs build 8 |
 | 41 | A failed message showed only "Failed": no reason, no retry | app | branch `fix/issue-41-retry` | In `main`; needs build 8 |
 
+| 36 | All chat history loaded at once at start-up | app | branch `fix/issue-36-paged-history` | Needs build 8 |
 | 37 | Group call cap (4 people) did not say who would be left out | app | branch `fix/issue-37-group-call-cap` | In `main`; needs build 8. The 4-person limit itself stays (see log) |
 | 12 | Presence visibility setting was cosmetic: online status went to every connected user, and "Nobody" was only hidden by the app | relay | branch `fix/issue-12-presence-relay` | In `main`; relay only, no build needed (deploys on Render) |
 | 24 | A failed contact refresh (network drop, timeout) emptied Chats/Contacts and made blocked people reappear | app | branch `fix/issue-24-contact-refresh` | In `main`, needs build 8 |
@@ -97,7 +98,6 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 
 
 
-| 36 | All chat history loaded at once at start-up | M | app |
 
 
 | 40 | No calls to a closed app on iPhone (no CallKit / push-to-talk) | — | product limit |
@@ -406,6 +406,13 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Limit:** "last seen" times already known to the app are not retracted; and a user who set "Nobody" can still see their contacts' status (the setting hides you, it does not hide others).
 - **Shipped:** merged to `main`; relay deploys on Render.
 
+### 2026-11-01: Issue 36 — chat history loads in pages
+- **Root cause:** start-up read every message of every chat from the local database into memory, so start-up time and memory grew with the account's whole history.
+- **Files:** `app/src/lib/localDb.ts`, `app/src/state/chatStore.ts`, `app/app/chat/[id].tsx`, `app/app/group-chat/[id].tsx`. Needs build 8.
+- **Change:** start-up loads only the newest 300 messages per chat (plus any older pinned message, so pins still show). Scrolling to the top of a chat loads 300 older ones (`loadEarlier`, with a "more exists" flag per chat). Paging uses a (time, id) cursor so messages with identical timestamps are never skipped or repeated. Edits, deletes, reactions and poll votes aimed at a message that is not in memory are applied straight to the database, with the same checks as before.
+- **Tested:** real SQLite: paging order, no gaps/duplicates across 700 messages with the same timestamp, pinned older messages kept, 100% pass; store level 10/10; earlier suites (dedupe, failed-message retry, edits/deletes, account-switch leak test) still pass on the paged store. App typecheck clean.
+- **Limit:** search over messages not yet loaded is not covered by this change.
+
 ---
 
 ## 5. Real-phone checks before releasing build 8
@@ -439,3 +446,5 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 21. Open an old (already used) reset-password link: after about 12 seconds you see 'This reset link did not work' with a Back to login button; a fresh link still shows the new-password form.
 
 22. Airplane mode, send a message and a photo: both show 'Failed · tap'. Tap one: the reason is shown. Turn airplane mode off and tap Try again: it sends once and the failed copy is gone. Delete removes a failed message completely.
+
+22. Open a chat with more than 300 messages: it opens at the newest; scroll up to the top and older messages load without jumping or duplicates. A pinned old message still shows in the pin bar.
