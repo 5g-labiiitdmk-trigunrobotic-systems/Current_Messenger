@@ -51,6 +51,8 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 17 | Transfer log (who messaged whom, when, size) kept forever | DB | branch `fix/issue-17-transfer-log` (migration 0011) | Pushed, waiting for "merge 17"; run migration in Supabase; no build needed |
 
 | 25 | Setup failure silently replaced the chosen username with a random one | app | branch `fix/issue-25-username-setup` | Pushed, waiting for "merge 25"; needs build 8 |
+
+| 27 | App lock started unlocked until settings loaded, and never re-locked when the app went to the background | app | branch `fix/issue-27-app-lock` | Pushed, waiting for "merge 27"; needs build 8 |
 | 24 | A failed contact refresh (network drop, timeout) emptied Chats/Contacts and made blocked people reappear | app | branch `fix/issue-24-contact-refresh` | In `main`, needs build 8 |
 
 ### Open (original 20)
@@ -70,6 +72,8 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | # | Issue | Sev | Where |
 |---|---|---|---|
 | 27 | App lock not tied to backgrounding; starts unlocked until settings load | H | app |
+
+| 25 | Setup failure silently replaces the chosen username | H | app |
 | 28 | Incoming messages not de-duplicated | M | app |
 | 29 | Message-ping notification taps do not open the chat | M | app |
 | 30 | A declined contact request can never be re-sent (error swallowed) | M | app |
@@ -291,6 +295,14 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Change:** the chosen username is replaced only when the database says that username is taken (unique violation on `username`); then a random one is used AND the user is told ("Username changed ... you were given @x, change it in Settings"). Any other error retries the same username (1.5 s apart); if it keeps failing the user sees "check your connection and try signing in again", and the chosen name is kept (it is stored in the account and picked up on the next sign-in).
 - **Tested (real code, stubbed database, old loop vs new):** old code renames after a single network blip; new code keeps the name (6/6): blip, persistent outage (3 tries, never renamed), real collision (renamed + flagged), other unique violations not treated as name collisions, normal path unchanged. App typecheck clean.
 - **Not covered:** the alert on a device.
+
+### 2026-11-01: Issue 27 — app lock bypass
+- **Root cause:** `AppLockGate` decided "unlocked" at the first render from the lock setting, but the saved setting loads asynchronously, so a cold start read the default (off) and showed the app unlocked; it also never reacted to the app going to the background, so a user who switched away and back was never asked again.
+- **Files:** `app/src/components/AppLockGate.tsx`, new `app/src/lib/appLockLogic.ts`.
+- **Change:** the gate waits until the saved settings have loaded (shows only the background until then, never the app); lock off opens immediately, lock on prompts automatically; the app re-locks every time it goes to the background and prompts again on return; the system prompt's own background blip is ignored, and two prompts cannot start at once.
+- **Tested:** the rules (old behaviour as on `main` vs new), 9/9: not-loaded no longer counts as unlocked, lock-on stays locked, lock-off opens, background re-locks, prompt blip ignored. App typecheck clean.
+- **Not covered by tests:** the real Face ID / fingerprint prompt and the app-state events on a device (the checklist item below covers this).
+- **Limit:** re-lock happens immediately on background (no grace period); a delay setting could be added later.
 - **Shipped:** branch only; needs build 8.
 
 ---
@@ -312,3 +324,5 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 10. Airplane mode on, send a message: it shows Failed within a second, not "sending".
 14. Open Contacts, turn on airplane mode, pull to refresh: the contact list stays as it was (not empty). Turn it off: it refreshes normally.
 15. Sign up with a username, tap the email link while in airplane mode, then turn it off: the account ends up with the username you chose (not a random one).
+
+16. Turn on the biometric lock, fully close the app, open it: the lock screen shows first and the app is never visible before unlocking. Then press Home for a few seconds and return: it asks again. Cancel the prompt: the Unlock button works.
