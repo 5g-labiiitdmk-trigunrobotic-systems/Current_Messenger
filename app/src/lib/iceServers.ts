@@ -1,5 +1,7 @@
 // FILE PURPOSE: single-export file — fetchIceServers() below, see its own
 // doc comment for what it does and why TURN credentials live server-side.
+import { supabase } from './supabase';
+
 export interface IceServerConfig {
   urls: string | string[];
   username?: string;
@@ -23,7 +25,9 @@ export async function fetchIceServers(): Promise<IceServerConfig[]> {
   if (!wsUrl) return FALLBACK_ICE_SERVERS;
   const httpUrl = wsUrl.replace(/^ws/, 'http').replace(/\/$/, '') + '/ice-servers';
   try {
-    const res = await fetch(httpUrl);
+    // The relay only hands TURN credentials to a signed-in user.
+    const token = (await supabase.auth.getSession()).data.session?.access_token;
+    const res = await fetch(httpUrl, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined);
     if (!res.ok) return FALLBACK_ICE_SERVERS;
     const data = await res.json();
     return Array.isArray(data.iceServers) && data.iceServers.length > 0 ? data.iceServers : FALLBACK_ICE_SERVERS;

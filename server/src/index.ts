@@ -18,9 +18,8 @@ const AUTH_TIMEOUT_MS = 10_000;
 // bundle, so the client fetches them from the already-trusted relay server
 // at call time instead. STUN alone is enough for most direct P2P
 // connections; TURN only matters as a relay fallback on strict NATs, so
-// it's fine for this to be a plain unauthenticated GET (the credentials
-// themselves are what's gated, e.g. Metered's time-limited API keys — see
-// docs/SETUP.md). If no TURN_* env vars are set, only STUN is returned.
+// the endpoint requires a signed-in user (see handleIceServers below). If no
+// TURN_* env vars are set, only STUN is returned.
 //
 // Logs once at boot (not per-request — this is static for the process
 // lifetime) so "cross-network calls stuck on connecting" can be triaged
@@ -30,10 +29,10 @@ const AUTH_TIMEOUT_MS = 10_000;
 // (which would silently serve an unauthenticated TURN entry that every
 // real TURN server rejects — same end symptom as no TURN at all, but far
 // less obvious from the client side).
-function getIceServers(): RTCIceServerConfig[] {
+function getIceServers(includeTurn: boolean): RTCIceServerConfig[] {
   const servers: RTCIceServerConfig[] = [{ urls: 'stun:stun.l.google.com:19302' }];
   const turnUrls = process.env.TURN_URLS;
-  if (turnUrls) {
+  if (turnUrls && includeTurn) {
     servers.push({
       urls: turnUrls.split(',').map((u) => u.trim()),
       username: process.env.TURN_USERNAME,
@@ -51,6 +50,7 @@ function logIceServerConfig() {
   }
   const hasUsername = !!process.env.TURN_USERNAME;
   const hasCredential = !!process.env.TURN_CREDENTIAL;
+  if (process.env.ICE_ALLOW_ANONYMOUS === '1') console.warn('[ice-servers] ICE_ALLOW_ANONYMOUS=1 — callers without a token get STUN only (no TURN). Remove it once old app builds are gone.');
   console.log(`[ice-servers] TURN configured: ${turnUrls} (username set: ${hasUsername}, credential set: ${hasCredential})`);
   if (!hasUsername || !hasCredential) {
     console.warn('[ice-servers] TURN_URLS is set but TURN_USERNAME/TURN_CREDENTIAL is missing — the served TURN entry will be unauthenticated and every real TURN server will reject it. This looks like "connecting forever" from the client, not an obvious error.');
@@ -72,9 +72,12 @@ const server = http.createServer((req, res) => {
     res.end(JSON.stringify({ ok: true, online: relayState.onlineUserIds().length, storesMessages: false }));
     return;
   }
-  if (req.url === '/ice-servers') {
-    res.writeHead(200, { 'content-type': 'application/json' });
-    res.end(JSON.stringify({ iceServers: getIceServers() }));
+  if ((req.url ?? '').split('?')[0] === '/ice-servers') {
+    handleIceServers(req, res).catch((e) => {
+      console.error('[ice-servers] unexpected error:', e instanceof Error ? e.message : e);
+      if (!res.headersSent) res.writeHead(500, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Could not load ICE servers' }));
+    });
     return;
   }
   if (req.method === 'POST' && (req.url ?? '').split('?')[0] === '/account/delete') {
@@ -88,6 +91,25 @@ const server = http.createServer((req, res) => {
   res.writeHead(404);
   res.end();
 });
+
+// GET /ice-servers with `Authorization: Bearer <the user's access token>`.
+// The TURN username/credential are paid-for secrets, so only a signed-in user
+// gets them (the endpoint used to answer anyone on the internet). Apps built
+// before this change send no token; ICE_ALLOW_ANONYMOUS=1 keeps answering
+// them, with STUN only unless a valid token is sent, so those builds still
+// connect on permissive networks. Never hand TURN to an anonymous caller.
+async function handleIceServers(req: http.IncomingMessage, res: http.ServerResponse) {
+  const json = (status: number, body: unknown) => {
+    res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+    res.end(JSON.stringify(body));
+  };
+  const header = req.headers.authorization ?? '';
+  const token = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
+  const userId = token ? await verifyUserToken(token) : null;
+  if (userId) return json(200, { iceServers: getIceServers(true) });
+  if (process.env.ICE_ALLOW_ANONYMOUS === '1' && !token) return json(200, { iceServers: getIceServers(false) });
+  return json(401, { error: 'Not signed in' });
+}
 
 // Accounts currently being deleted, so a double tap can't run it twice.
 const deletingAccounts = new Set<string>();
