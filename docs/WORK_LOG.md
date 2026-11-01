@@ -70,6 +70,8 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 
 | 35 | Expo push token printed to the log | app | branch `fix/issue-35-38-cleanup` | Pushed, waiting for "merge 35"; needs build 8 |
 | 38 | Mock phone-verification (test code) shipped in release builds, and its test screens were reachable by link | app | branch `fix/issue-35-38-cleanup` | Pushed, waiting for "merge 38"; needs build 8 |
+
+| 39 (iOS part) | `ITSAppUsesNonExemptEncryption` not set in the app config | app config | branch `fix/issue-39-config` | Pushed, waiting for "merge 39"; needs build 8. Android permission trimming deliberately NOT done (see log) |
 | 24 | A failed contact refresh (network drop, timeout) emptied Chats/Contacts and made blocked people reappear | app | branch `fix/issue-24-contact-refresh` | In `main`, needs build 8 |
 
 ### Open (original 20)
@@ -110,6 +112,8 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 36 | All chat history loaded at once at start-up | M | app |
 | 37 | Group call silently capped | M | app |
 | 39 | Over-broad Android permissions; `ITSAppUsesNonExemptEncryption` not set | L | app config |
+
+| 38 | Test values left in phone-auth code | L | app |
 | 40 | No calls to a closed app on iPhone (no CallKit / push-to-talk) | — | product limit |
 | 41 | A failed message shows only "Failed": no retry button, no reason | M | app (found while fixing 11) |
 
@@ -380,6 +384,12 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **38:** `app/src/lib/otp.ts` is a mock phone-verification provider that generates a code, prints it to the log, and accepts it; its two test screens (`phone-auth/entry`, `phone-auth/verify`) were registered routes reachable by a link. Not part of the live sign-up flow, but shipping a fake phone check is wrong. Now the mock exists only in development builds (`__DEV__`); a release build gets a provider that refuses ("Phone verification is not available yet") and prints nothing, and the two screens redirect to the start screen in release builds.
 - **Tested:** OTP provider, real file with `__DEV__` on/off: release old code sends and logs the code (2 of 3 fail); release new code refuses and logs nothing (3/3); dev build still works (3/3). App typecheck clean. Push-token log change checked by code inspection.
 - **Shipped:** branch only; needs build 8.
+
+### 2026-11-01: Issue 39 — encryption declaration (iOS); Android permissions left alone
+- **Change:** `app/app.json` now sets `ITSAppUsesNonExemptEncryption: true` for iOS. Reasoning: the app implements its own end-to-end encryption (TweetNaCl, X25519 + XSalsa20-Poly1305) rather than only using the phone's built-in encryption for HTTPS, so I declared "uses encryption that needs documentation", matching your plan to submit the signed encryption PDF. Setting `false` would be a legal statement that no documentation is needed; I did not choose that. **This is your decision as the publisher:** if your own export-compliance review says the app is exempt, change it to `false` before building. Apple may also give an `ITSEncryptionExportComplianceCode` after the documents are accepted; add it under the same `infoPlist` then.
+- **Not changed (on purpose):** the Android permission list. The live Play Store app depends on it, I cannot build or inspect the merged manifest here, and several entries look unneeded (`READ_EXTERNAL_STORAGE`, `BLUETOOTH`, `BLUETOOTH_ADMIN`, `USE_FINGERPRINT`) but some are used indirectly (Bluetooth headset routing in calls, photo picker on older Android). Trimming them blind could break calls or photo picking on some phones. Recommended: do it as a separate step with a test build and a check of the merged manifest.
+- **Tested:** the JSON is valid and the key is present. No code change.
+- **Shipped:** branch only; needs build 8 (iOS).
 
 ---
 

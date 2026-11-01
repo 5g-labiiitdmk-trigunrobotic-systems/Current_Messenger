@@ -18,7 +18,8 @@
         "NSCameraUsageDescription": "Current uses the camera to scan contact QR codes and take photos to share in chats.",
         "NSMicrophoneUsageDescription": "Current uses the microphone for voice messages and voice/video calls.",
         "NSPhotoLibraryUsageDescription": "Current needs access to your photos so you can share media in chats.",
-        "NSFaceIDUsageDescription": "Current uses Face ID to unlock the app when biometric lock is enabled."
+        "NSFaceIDUsageDescription": "Current uses Face ID to unlock the app when biometric lock is enabled.",
+        "ITSAppUsesNonExemptEncryption": true
       }
     },
     "android": {
