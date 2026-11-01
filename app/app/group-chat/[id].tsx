@@ -15,6 +15,7 @@ import type { ChatMessage } from '../../src/state/chatStore';
 import { withDateSeparators } from '../../src/lib/dateSeparators';
 import { useGroupStore } from '../../src/state/groupStore';
 import { useGroupCallStore, GROUP_CALL_CAP } from '../../src/state/groupCallStore';
+import { describeGroupCallCap } from '../../src/lib/groupCallCap';
 import { useContactStore } from '../../src/state/contactStore';
 import { useAuthStore } from '../../src/state/authStore';
 import { previewFor } from '../../src/data/conversations';
@@ -243,16 +244,12 @@ export default function GroupChatScreen() {
     if (groupCallPhase !== 'idle') return; // already on a group call
     const others = group.memberIds.filter((mid) => mid !== me);
     if (others.length === 0) return;
-    const capped = others.length > GROUP_CALL_CAP - 1;
-    if (capped) {
-      appAlert(
-        'Group calls are limited to 4 people',
-        `This group has ${others.length + 1} members — only the first ${GROUP_CALL_CAP - 1} will be rung for this call.`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Call anyway', onPress: () => startGroupCall(id ?? '', kind) },
-        ]
-      );
+    const cap = describeGroupCallCap(others.map((mid) => ({ id: mid, name: nameFor(mid) })), GROUP_CALL_CAP);
+    if (cap.capped) {
+      appAlert(cap.title, cap.message, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Call anyway', onPress: () => startGroupCall(id ?? '', kind) },
+      ]);
     } else {
       startGroupCall(id ?? '', kind);
     }

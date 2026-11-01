@@ -76,6 +76,8 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 7 | Edit / delete / poll vote not checked against the original sender | app | branch `fix/issue-7-sender-check` | Pushed, waiting for "merge 7"; needs build 8 |
 
 | 41 | A failed message showed only "Failed": no reason, no retry | app | branch `fix/issue-41-retry` | Pushed, waiting for "merge 41"; needs build 8 |
+
+| 37 | Group call cap (4 people) did not say who would be left out | app | branch `fix/issue-37-group-call-cap` | Pushed, waiting for "merge 37"; needs build 8. The 4-person limit itself stays (see log) |
 | 24 | A failed contact refresh (network drop, timeout) emptied Chats/Contacts and made blocked people reappear | app | branch `fix/issue-24-contact-refresh` | In `main`, needs build 8 |
 
 ### Open (original 20)
@@ -114,6 +116,8 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 
 | 36 | All chat history loaded at once at start-up | M | app |
 | 37 | Group call silently capped | M | app |
+
+| 38 | Test values left in phone-auth code | L | app |
 | 39 | Over-broad Android permissions; `ITSAppUsesNonExemptEncryption` not set | L | app config |
 
 | 38 | Test values left in phone-auth code | L | app |
@@ -407,6 +411,12 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Change:** "Failed" on one of my messages is now tappable ("Failed · tap"). It opens "Message not sent" with a plain-language reason (they are offline, you are not connected, connection dropped, server did not confirm, app closed, no security key yet, ...) and three buttons: Try again (sends it as a new message and removes the failed one, works for text and for photos / voice / location / polls etc.), Delete (removes it completely, no "deleted" placeholder), Cancel. Only my own failed messages can be retried or discarded.
 - **Tested (real store, old vs new):** old version has neither feature; new passes 10/10: failed text message retried exactly once, goes to the relay, old row removed from the saved history; retry/discard ignore messages that did not fail; a location message is retried with its content; every failure reason has a readable text. App typecheck clean.
 - **Limit:** a retried message gets the time of the retry (it moves to the bottom), not its original position.
+
+### 2026-11-01: Issue 37 — group call cap now names who is and is not called
+- **Situation:** group calls are a direct phone-to-phone mesh limited to 4 people (`GROUP_CALL_CAP`, see docs/GROUP_CALLING.md). The group chat already warned "Group calls are limited to 4 people", but only said the first three would be rung, not who they were; the others were left out without being named. Raising the limit is a product / performance decision (every extra person multiplies each phone's connections and bandwidth), so I left the number alone.
+- **Files:** new `app/src/lib/groupCallCap.ts`, `app/app/group-chat/[id].tsx`.
+- **Change:** the heads-up now reads, for example, "This group has 6 members. This call will ring: A, B, C. Not called: D, E." with Cancel / Call anyway. Members who are not in your contacts appear as "Member".
+- **Tested:** message builder 6/6 (no warning at 4, names the called and the not-called, correct member count). App typecheck clean.
 - **Shipped:** branch only; needs build 8.
 
 ---
