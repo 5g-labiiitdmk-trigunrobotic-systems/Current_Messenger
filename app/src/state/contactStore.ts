@@ -4,6 +4,7 @@ import type { UserRow, ContactRequestRow } from '../types/database';
 import { useAuthStore } from './authStore';
 import { relayClient } from '../lib/relayClient';
 import type { ServerEvent } from '../types/relay';
+import { appAlert } from './alertStore';
 
 // FILE PURPOSE: Long-term contact relationships — approved contacts,
 // incoming/outgoing requests, and blocking/reporting — backed by
@@ -259,6 +260,22 @@ export const useContactStore = create<ContactState>((set, get) => ({
       return;
     }
 
+    // They declined an earlier request from us. That old row still occupies
+    // our (sender, receiver) slot (contact_requests_unique_pair), so the new
+    // insert below used to hit a unique violation that was then swallowed as
+    // "already covered" — the request was never sent and nothing was shown.
+    // Clear our own declined row first (the sender may delete it) so a fresh
+    // request can be made.
+    const ownDeclined = rows.find((r) => r.status === 'declined' && r.sender_id === me && r.receiver_id === receiverId);
+    if (ownDeclined) {
+      const { error: clearError } = await supabase.from('contact_requests').delete().eq('id', ownDeclined.id);
+      if (clearError) {
+        appAlert('Could not send request', 'Please try again in a moment.');
+        await get().refresh();
+        return;
+      }
+    }
+
     const { error } = await supabase.from('contact_requests').insert({ sender_id: me, receiver_id: receiverId, status: 'pending' });
     // A unique-violation here (23505) means the other side's request landed
     // in the genuinely-simultaneous window between the check above and this
@@ -267,6 +284,7 @@ export const useContactStore = create<ContactState>((set, get) => ({
     // for that race, not this client-side check alone. Treat it the same as
     // "already covered," not an error to surface.
     if (error && error.code !== '23505') {
+      appAlert('Could not send request', 'Please check your connection and try again.');
       await get().refresh();
       return;
     }

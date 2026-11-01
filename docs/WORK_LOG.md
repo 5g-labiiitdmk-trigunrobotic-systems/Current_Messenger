@@ -57,6 +57,8 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 28 | Incoming messages not de-duplicated (a re-sent copy showed twice) | app | branch `fix/issue-28-dedupe` | Pushed, waiting for "merge 28"; needs build 8 |
 
 | 29 | Tapping a message / chat-request / contact-request notification did not open the chat | app + relay | branch `fix/issue-29-notification-tap` | Pushed, waiting for "merge 29"; relay part deploys safely first; needs build 8 |
+
+| 30 | A declined contact request could never be re-sent; the error was swallowed | app | branch `fix/issue-30-declined-resend` | Pushed, waiting for "merge 30"; needs build 8 |
 | 24 | A failed contact refresh (network drop, timeout) emptied Chats/Contacts and made blocked people reappear | app | branch `fix/issue-24-contact-refresh` | In `main`, needs build 8 |
 
 ### Open (original 20)
@@ -83,6 +85,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 29 | Message-ping notification taps do not open the chat | M | app |
 
 | 30 | A declined contact request can never be re-sent (error swallowed) | M | app |
+
 | 31 | Leaving a group only sends the leave message; group stays on screen | M | app |
 | 32 | Group invite / forward lists cut at 6 people silently | M | app |
 | 33 | Denied photo / camera permission gives no message | M | app |
@@ -325,6 +328,15 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Tested:** relay push payloads against a stub (old vs new: old carries no data, new passes 4/4); route rules 6/6 (message, chat request, contact request, calls left to their own handler, missing data, crafted id rejected). Typechecks clean for app and relay.
 - **Not covered:** the actual notification tap on a device (warm and cold start).
 - **Shipped:** branch only.
+
+
+### 2026-11-01: Issue 30 — re-sending a declined contact request
+- **Root cause:** a declined request keeps its row, which occupies the (sender, receiver) slot (`contact_requests_unique_pair`). A new request hit a unique-violation (23505), and the app treated that as "already covered" and returned silently, so nothing was sent and nothing was shown.
+- **File:** `app/src/state/contactStore.ts`.
+- **Change:** before inserting, the sender's own declined row to that person is deleted (a sender may delete a row they are part of), then a fresh pending request is inserted and the recipient notified as usual. A failed delete or any other insert error now shows "Could not send request" instead of failing silently. Compatible with the contact-request security fix (migration 0009: inserts must be pending, delete still allowed for participants).
+- **Tested (real store, stubbed database that enforces the unique pair, old vs new):** old code fails the re-send (3 of 6 fail); new code passes 6/6: re-send after decline creates a pending request, notifies, shows as outgoing; first request, duplicate send while pending and mutual-request handling unchanged.
+- **Limit:** a person who declined can be asked again; they can block the sender to stop it. A cool-down could be added if it gets abused.
+- **Shipped:** branch only; needs build 8.
 
 ---
 
