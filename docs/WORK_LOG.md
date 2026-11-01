@@ -70,6 +70,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 7 | Edit / delete / poll vote not checked against the original sender | app | branch `fix/issue-7-sender-check` | In `main`; needs build 8 |
 | 41 | A failed message showed only "Failed": no reason, no retry | app | branch `fix/issue-41-retry` | In `main`; needs build 8 |
 
+| 9 | Public `/ice-servers` exposed TURN credentials to anyone | relay + app | branch `fix/issue-9-ice-servers-auth` | Relay part works alone; app sends its token from build 8 |
 | 36 | All chat history loaded at once at start-up | app | branch `fix/issue-36-paged-history` | Needs build 8 |
 | 37 | Group call cap (4 people) did not say who would be left out | app | branch `fix/issue-37-group-call-cap` | In `main`; needs build 8. The 4-person limit itself stays (see log) |
 | 12 | Presence visibility setting was cosmetic: online status went to every connected user, and "Nobody" was only hidden by the app | relay | branch `fix/issue-12-presence-relay` | In `main`; relay only, no build needed (deploys on Render) |
@@ -81,7 +82,6 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 |---|---|---|---|
 | 2 | `users` table readable by everyone (login-by-username, signup check, contact search, QR depend on it) | C | DB + app |
 | 8 | Users can set their own `phone_verified` (the `email_verified` part is fixed, see below; phone verification is not in the live flow) | H | DB |
-| 9 | Public `/ice-servers` exposes TURN credentials | H | relay |
 | 16 | Groups lost when the relay restarts | M | relay |
 | 18 | Docs and encryption PDF say "libsodium"; the app uses TweetNaCl | M | docs |
 
@@ -412,6 +412,14 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Change:** start-up loads only the newest 300 messages per chat (plus any older pinned message, so pins still show). Scrolling to the top of a chat loads 300 older ones (`loadEarlier`, with a "more exists" flag per chat). Paging uses a (time, id) cursor so messages with identical timestamps are never skipped or repeated. Edits, deletes, reactions and poll votes aimed at a message that is not in memory are applied straight to the database, with the same checks as before.
 - **Tested:** real SQLite: paging order, no gaps/duplicates across 700 messages with the same timestamp, pinned older messages kept, 100% pass; store level 10/10; earlier suites (dedupe, failed-message retry, edits/deletes, account-switch leak test) still pass on the paged store. App typecheck clean.
 - **Limit:** search over messages not yet loaded is not covered by this change.
+
+### 2026-11-01: Issue 9 — TURN credentials only for signed-in users
+- **Root cause:** `GET /ice-servers` answered anyone on the internet with the TURN username and credential (the paid Metered account), so anyone could use it for their own traffic.
+- **Files:** `server/src/index.ts`, `app/src/lib/iceServers.ts`.
+- **Change:** the relay now requires `Authorization: Bearer <Supabase access token>` and checks it with Supabase, same as `/account/delete`. A missing or bad token gets 401. The app sends its token when it asks. **Old app builds** (Play v1.0.1, TestFlight 7) send no token, so they now get a 401 and fall back to STUN only: calls still connect on normal networks but lose the TURN fallback on strict NATs. To keep old builds on STUN while they exist, set `ICE_ALLOW_ANONYMOUS=1` on Render: tokenless callers then get STUN only (never TURN); remove it once old builds are gone. Responses are `no-store`.
+- **Tested (relay on a mock Supabase, old vs new):** old `main` returns the TURN secret for no token, a bad token and a good token; new returns 401 / 401 / TURN for a good token; with `ICE_ALLOW_ANONYMOUS=1` a tokenless call gets STUN only and a bad token is still 401. Relay and app typecheck clean.
+- **Limit:** the Metered credential itself is still one static value that any signed-in user can fetch. If it ever leaks, rotate it in Metered and in Render's `TURN_*` variables.
+- **Shipped:** branch only.
 
 ---
 
