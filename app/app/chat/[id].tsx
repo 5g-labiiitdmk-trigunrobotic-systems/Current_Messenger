@@ -330,8 +330,9 @@ export default function ChatScreen() {
     setPollOptB('');
   };
 
-  // onForward(): offers up to the first 6 approved contacts as forward
-  // targets for the given message (chosen from a long-press menu).
+  // onForward(): offers every approved contact as a forward target for the
+  // given message (chosen from a long-press menu). The alert's button list
+  // scrolls (AppAlertHost), so a long contact list is fine.
   const onForward = (message: (typeof messages)[number]) => {
     if (approved.length === 0) {
       appAlert('No contacts', 'Add a contact to forward messages to.');
@@ -341,7 +342,6 @@ export default function ChatScreen() {
       'Forward to',
       undefined,
       approved
-        .slice(0, 6)
         .map((c) => ({ text: c.display_name || c.username, onPress: () => forwardMessage(message, c.id, false) }))
         .concat([{ text: 'Cancel', style: 'cancel' } as any])
     );
