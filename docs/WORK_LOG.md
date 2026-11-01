@@ -73,6 +73,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | 9 | Public `/ice-servers` exposed TURN credentials to anyone | relay + app | branch `fix/issue-9-ice-servers-auth` | Relay part works alone; app sends its token from build 8 |
 | 16 | Groups lost when the relay restarts | relay + DB | branch `fix/issue-16-persist-groups` | Needs migration 0012 first, then relay deploy; no app build |
 | 2 | `users` table readable by everyone (emails and push tokens of all 133 users reachable with the public app key) | DB + app | branch `fix/issue-2-users-read` | Step 1 (functions, migration 0013) is safe any time; app uses them from build 8; step 2 (close the table) is HELD in `supabase/pending/0014_users_restrict_read.sql` until old builds are gone |
+| 18 | README said "libsodium" (and several other stale claims); the app uses TweetNaCl | docs | branch `fix/issue-18-docs-tweetnacl` | The repo is corrected; the encryption PDF is not in the repo and must be corrected by hand (wording in the entry) |
 | 36 | All chat history loaded at once at start-up | app | branch `fix/issue-36-paged-history` | Needs build 8 |
 | 37 | Group call cap (4 people) did not say who would be left out | app | branch `fix/issue-37-group-call-cap` | In `main`; needs build 8. The 4-person limit itself stays (see log) |
 | 12 | Presence visibility setting was cosmetic: online status went to every connected user, and "Nobody" was only hidden by the app | relay | branch `fix/issue-12-presence-relay` | In `main`; relay only, no build needed (deploys on Render) |
@@ -83,7 +84,6 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 | # | Issue | Sev | Where |
 |---|---|---|---|
 | 8 | Users can set their own `phone_verified` (the `email_verified` part is fixed, see below; phone verification is not in the live flow) | H | DB |
-| 18 | Docs and encryption PDF say "libsodium"; the app uses TweetNaCl | M | docs |
 
 ### Open (found in the broader audit)
 
@@ -436,6 +436,12 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Tested (real Postgres with the same rules and roles, 21 checks, all pass):** after 0013 the old direct lookups still work and the functions return only public fields, reject signed-out search/profile calls and treat `%` and `_` literally; after 0014 a signed-out caller reads nothing, a signed-in user sees only self, contacts and request senders (strangers are invisible), and login lookup, search, profiles and username check still work. App typecheck clean.
 - **Limits:** `login_email_for_username` still returns the email for a username someone already knows; that is how login-by-username works, and nothing can list users in bulk through it. An approved contact can still read the other side's email and push token through the existing contacts rule. Guessing usernames one at a time is not rate-limited.
 - **Shipped:** merged to `main` (code and the held file only). Migration 0013 not yet applied to Supabase; 0014 not to be run until old builds are gone.
+
+### 2026-11-01: Issue 18 — README corrected (TweetNaCl, not libsodium)
+- **Finding:** the app encrypts with the TweetNaCl library (`app/package.json`: `tweetnacl`, `tweetnacl-util`; `app/src/lib/crypto.ts`), not libsodium. The only repo text that said otherwise was the README ("libsodium-equivalent primitives"). While there I corrected three more stale README claims: sign-up is email only (phone OTP is not in the live flow), groups are now saved to Postgres as names and member ids (fix 16), and calls do use WebRTC with TURN fallback. The relay line now says no message content is stored, rather than "in-memory only".
+- **Files:** `README.md` only. No code change.
+- **Wording for the encryption PDF (not in the repo, so edit it by hand):** "Messages are end-to-end encrypted on the device with NaCl box (Curve25519/X25519 key agreement, XSalsa20-Poly1305 authenticated encryption), implemented by the open-source TweetNaCl library. Each message uses a fresh random 24-byte nonce. Each device holds its own key pair; the private key never leaves the device. The server relays encrypted payloads and does not store message content. There is no forward secrecy or key ratcheting." Library name should be TweetNaCl wherever the PDF says libsodium.
+- **Shipped:** branch only.
 
 ---
 
