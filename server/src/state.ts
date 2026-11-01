@@ -16,7 +16,7 @@ interface Connection {
   lastSeenAt: number;
 }
 
-interface Group {
+export interface Group {
   id: string;
   name: string;
   ownerId: string;
@@ -56,9 +56,31 @@ interface ActiveRing {
 // the caller's app crashed instead of cleanly sending 'timeout'/'hangup').
 const RING_STALE_MS = 50_000;
 
+// Optional write-through for groups, so they survive a relay restart. The
+// state class stays storage-agnostic: index.ts plugs in a Postgres-backed one
+// (groupStore.ts); tests plug in a fake. Calls are fire-and-forget — the live
+// in-memory state is always the source of truth while the process runs.
+export interface GroupPersistence {
+  saveGroup(group: Group): void;
+  saveMember(groupId: string, userId: string, isAdmin: boolean): void;
+  removeMember(groupId: string, userId: string): void;
+  deleteGroup(groupId: string): void;
+}
+
 class RelayState {
   private connections = new Map<string, Connection>(); // userId -> connection
   private groups = new Map<string, Group>();
+  private groupPersistence: GroupPersistence | null = null;
+
+  setGroupPersistence(p: GroupPersistence | null) {
+    this.groupPersistence = p;
+  }
+
+  /** Puts groups read from storage back into memory at start-up. A group
+   * already in memory (created while storage was unreachable) is kept as is. */
+  restoreGroups(groups: Group[]) {
+    for (const g of groups) if (!this.groups.has(g.id)) this.groups.set(g.id, g);
+  }
 
   /**
    * Tracks "is someone currently ringing this user right now" — the one
@@ -272,7 +294,12 @@ class RelayState {
       createdAt: Date.now(),
     };
     this.groups.set(id, group);
+    this.groupPersistence?.saveGroup(group);
     return group;
+  }
+
+  getAllGroups(): Group[] {
+    return [...this.groups.values()];
   }
 
   getGroup(id: string): Group | undefined {
@@ -292,7 +319,10 @@ class RelayState {
 
   // Adds one more member to an existing group (used once an invite is accepted).
   addGroupMember(groupId: string, userId: string) {
-    this.groups.get(groupId)?.memberIds.add(userId);
+    const g = this.groups.get(groupId);
+    if (!g) return;
+    g.memberIds.add(userId);
+    this.groupPersistence?.saveMember(groupId, userId, g.admins.has(userId));
   }
 
   // Removes a member (leave, or an owner/admin removal) — deletes the
@@ -302,7 +332,11 @@ class RelayState {
     if (!g) return;
     g.memberIds.delete(userId);
     g.admins.delete(userId);
-    if (g.memberIds.size === 0) this.groups.delete(groupId);
+    this.groupPersistence?.removeMember(groupId, userId);
+    if (g.memberIds.size === 0) {
+      this.groups.delete(groupId);
+      this.groupPersistence?.deleteGroup(groupId);
+    }
   }
 
   isGroupMember(groupId: string, userId: string): boolean {

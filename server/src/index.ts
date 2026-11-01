@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import { WebSocketServer, WebSocket } from 'ws';
 import type { ClientEvent, ServerEvent } from './protocol.js';
 import { relayState } from './state.js';
+import { startGroupPersistence } from './groupStore.js';
 import { verifyUserToken, areApprovedContacts, invalidateContactCache, hasContactRequest, getApprovedContactIds, getStatusVisibility, getStatusVisibilities, deleteAccountData, isBlocked, getUsername, logTransfer } from './supabaseAdmin.js';
 import { pingOfflineRecipient, pingIncomingCall, pingContactRequest, pingSessionRequest } from './pushPing.js';
 
@@ -951,4 +952,5 @@ server.listen(PORT, () => {
   // eslint-disable-next-line no-console
   console.log(`[relay] listening on :${PORT} — zero message persistence, in-memory only`);
   logIceServerConfig();
+  startGroupPersistence();
 });

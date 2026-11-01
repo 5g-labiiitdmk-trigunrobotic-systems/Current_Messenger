@@ -1,6 +1,7 @@
 -- Current — metadata-only schema.
 -- Absolute rule: this database NEVER stores message content, media, or chat history.
 -- Exactly four tables, as scoped: users, contact_requests, blocked_users, device_keys.
+-- (Update: group identity/membership are now kept in relay_groups / relay_group_members, migration 0012.)
 -- Group identity/membership and message routing live only in the relay server's
 -- in-memory state (see /server) — they are intentionally NOT modeled here, so a
 -- server restart drops them too. That keeps "zero persistence, anywhere" literal.
