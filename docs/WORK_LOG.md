@@ -17,11 +17,11 @@ what is still open). Times are IST.
 | Area | State |
 |---|---|
 | Google Play | Live in India, v1.0.1 (does **not** have the app fixes). Build 8 for Android still to be made. |
-| App Store | Build 7 in TestFlight, **not submitted**. Build 8 is next; then the iPhone screen recording and the reply to Apple's Guideline 2.1 request. |
+| App Store | Build 7 in TestFlight, **not submitted**. Build 8 (iOS) was built on EAS on 2026-11-01 from `main` at `741dbb6`; submit to TestFlight is the next step; then the iPhone screen recording and the reply to Apple's Guideline 2.1 request. |
 | Relay (Render) | Live on `main` with all relay fixes (including 9 and 16). Verified: start-up log shows groups restored from the database. Free plan, sleeps when idle. |
 | Database (Supabase) | Migrations 0006 to 0013, 0015 and 0016 applied on 2026-11-01. `supabase/pending/0014_users_restrict_read.sql` is HELD (see issue 2). |
 | `main` branch | Every bug in the register is fixed and merged, except the held issue 2 step 2, the Android permission trimming (analysed, unchanged) and issue 40 (product limit). |
-| Build 8 | Not started. All planned app fixes are in `main`; EAS numbers the build itself. |
+| Build 8 | iOS built on EAS (2026-11-01, from `main` `741dbb6`), not yet confirmed in TestFlight. Android not started. EAS numbers the build itself. |
 
 ---
 

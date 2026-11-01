@@ -129,7 +129,7 @@ Live on `main` including fixes 9 and 16. Verified start-up log
 optional Render env var: tokenless callers (old builds) get STUN only instead of 401.
 
 ## Open actions for Husenbasha (not code)
-1. Start **build 8**: iOS `eas build` then `eas submit`; Android build separately.
+1. **Build 8 iOS:** built on EAS on 2026-11-01 from `main` at `741dbb6` (Mac checkout updated and pulled; `app.json` took `ITSAppUsesNonExemptEncryption: true` from `main`, his local `false` was discarded). Next: `npx eas-cli submit --platform ios --latest` to TestFlight, then test on a physical iPhone. Android build 8 is still to be made (`--platform android`).
 2. Correct "libsodium" to TweetNaCl in the encryption PDF (wording in WORK_LOG, Issue 18).
 3. Real-phone checks in WORK_LOG section 5 (esp. #12 delete account, #22 long-chat
    scroll, #23 group survives relay restart, #24 username login/search).
