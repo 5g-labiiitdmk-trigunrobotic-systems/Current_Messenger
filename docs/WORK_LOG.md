@@ -435,7 +435,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Step 2 (HELD):** `supabase/pending/0014_users_restrict_read.sql` removes the open rule and adds one so a pending request still shows who it is from. After it, a signed-in user reads only their own row, approved contacts and people on a request with them. Not in `migrations/` on purpose. Run it only when nearly everyone is on build 8 or later.
 - **Tested (real Postgres with the same rules and roles, 21 checks, all pass):** after 0013 the old direct lookups still work and the functions return only public fields, reject signed-out search/profile calls and treat `%` and `_` literally; after 0014 a signed-out caller reads nothing, a signed-in user sees only self, contacts and request senders (strangers are invisible), and login lookup, search, profiles and username check still work. App typecheck clean.
 - **Limits:** `login_email_for_username` still returns the email for a username someone already knows; that is how login-by-username works, and nothing can list users in bulk through it. An approved contact can still read the other side's email and push token through the existing contacts rule. Guessing usernames one at a time is not rate-limited.
-- **Shipped:** branch only. Migration 0013 not yet applied to Supabase.
+- **Shipped:** merged to `main` (code and the held file only). Migration 0013 not yet applied to Supabase; 0014 not to be run until old builds are gone.
 
 ---
 
