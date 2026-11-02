@@ -460,6 +460,14 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Impact if left:** none functional. Play may show the storage permissions on the store page; they do not need a declaration form.
 - **Shipped:** merged to `main` (documentation only).
 
+### 2026-11-02: Issue 39 (iOS) follow-up — removed ITSAppUsesNonExemptEncryption (build 8 rejected, ITMS-90592)
+- **What happened:** the first iOS build 8 (built from `main` at `741dbb6` with `ITSAppUsesNonExemptEncryption: true`) uploaded but Apple rejected it by email: "ITMS-90592 Invalid Export Compliance Code ... key value [] ... doesn't match the key value of the app's export compliance documentation". The same error came again when the same file was uploaded a second time. In App Store Connect (App Information > App Encryption Documentation) Husenbasha completed the wizard (App Purpose, "standard encryption algorithms instead of or in addition to Apple's OS") and Apple's result was "no documentation required"; no code is issued.
+- **Cause:** declaring `true` in the build while Apple's record says no documentation/code does not match, and the code field in the build is empty.
+- **Change:** removed `ITSAppUsesNonExemptEncryption` from `app/app.json` (back to what build 7 had). App Store Connect then asks the export compliance questions when a build is chosen; the answers are Husenbasha's declaration. Nothing else changed.
+- **Next:** pull, build 9 on EAS (`--platform ios --profile production`), submit, answer the compliance questions in App Store Connect truthfully (uses encryption; standard algorithms; the answers consistent with the wizard).
+- **Not tested here:** the upload result depends on Apple's processing; the JSON was validated.
+- **Shipped:** branch only until merged.
+
 ---
 
 ## 5. Real-phone checks before releasing build 8
