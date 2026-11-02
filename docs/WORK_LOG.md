@@ -21,7 +21,7 @@ what is still open). Times are IST.
 | Relay (Render) | Live on `main` with all relay fixes (including 9 and 16). Verified: start-up log shows groups restored from the database. Free plan, sleeps when idle. |
 | Database (Supabase) | Migrations 0006 to 0013, 0015 and 0016 applied on 2026-11-01. `supabase/pending/0014_users_restrict_read.sql` is HELD (see issue 2). |
 | `main` branch | Every bug in the register is fixed and merged, except the held issue 2 step 2, the Android permission trimming (analysed, unchanged) and issue 40 (product limit). |
-| Build 8 | iOS built on EAS (2026-11-01, from `main` `741dbb6`), not yet confirmed in TestFlight. Android not started. EAS numbers the build itself. |
+| Build 8 | The first iOS build 8 (2026-11-01, `main` `741dbb6`) was rejected by Apple (ITMS-90592, see log 2026-11-02); the fix is in `main` (`c738f26`). iOS must be rebuilt (becomes build 9). Android not started. EAS numbers the build itself. |
 
 ---
 
@@ -467,7 +467,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Change:** removed `ITSAppUsesNonExemptEncryption` from `app/app.json` (back to what build 7 had). App Store Connect then asks the export compliance questions when a build is chosen; the answers are Husenbasha's declaration. Nothing else changed.
 - **Next:** pull, build 9 on EAS (`--platform ios --profile production`), submit, answer the compliance questions in App Store Connect truthfully (uses encryption; standard algorithms; the answers consistent with the wizard).
 - **Not tested here:** the upload result depends on Apple's processing; the JSON was validated.
-- **Shipped:** branch only until merged.
+- **Shipped:** merged to `main` (`c738f26`).
 
 ---
 

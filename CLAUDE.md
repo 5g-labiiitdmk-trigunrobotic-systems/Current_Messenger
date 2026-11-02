@@ -104,8 +104,7 @@ taps open the right screen · 30 re-send declined request · 31 leaving a group 
 32 invite/forward lists not cut at 6 · 33 permission-denied messages · 34 reset-password
 screen gives up · 35 push token not logged · 36 chat history loads in pages of 300 ·
 37 group call cap names who is left out · 38 mock phone verification removed from
-release · 39 (iOS) encryption declaration (`ITSAppUsesNonExemptEncryption: true`, his
-compliance call to confirm) · 41 retry and reason for failed messages · 42 per-device
+release · 39 (iOS) encryption declaration (the key was added then REMOVED again on 2026-11-02 after ITMS-90592; App Store Connect asks the questions per build instead) · 41 retry and reason for failed messages · 42 per-device
 push tokens · 43 in-app account deletion.
 Details and test results for each are in `docs/WORK_LOG.md` section 4.
 
@@ -129,14 +128,13 @@ Live on `main` including fixes 9 and 16. Verified start-up log
 optional Render env var: tokenless callers (old builds) get STUN only instead of 401.
 
 ## Open actions for Husenbasha (not code)
-1. **Build 8 iOS:** built on EAS on 2026-11-01 from `main` at `741dbb6` (Mac checkout updated and pulled; `app.json` took `ITSAppUsesNonExemptEncryption: true` from `main`, his local `false` was discarded). Next: `npx eas-cli submit --platform ios --latest` to TestFlight, then test on a physical iPhone. Android build 8 is still to be made (`--platform android`).
+1. **Build 8 iOS:** the first EAS build (2026-11-01, `main` `741dbb6`) was rejected by Apple with ITMS-90592 (it had `ITSAppUsesNonExemptEncryption: true` while Apple's record says "no documentation required" and no code). Fixed by removing that key from `app/app.json` (merged 2026-11-02, `main` `c738f26`). Next: on the Mac, in `/Users/trigunroboticsystems/Current_Messenger/app`, `git pull`, `npx eas-cli build --platform ios --profile production` (becomes build 9), `npx eas-cli submit --platform ios --latest`, answer the compliance questions in App Store Connect truthfully, then test on a physical iPhone. Android build is still to be made (`--platform android`). Always `cd` into the `app` folder first; new Terminal windows open in the home folder.
 2. Correct "libsodium" to TweetNaCl in the encryption PDF (wording in WORK_LOG, Issue 18).
 3. Real-phone checks in WORK_LOG section 5 (esp. #12 delete account, #22 long-chat
    scroll, #23 group survives relay restart, #24 username login/search).
 4. Record the iPhone screen recording (physical iPhone, including Delete account and
    block/report), then reply to Apple's **Guideline 2.1 – Information Needed** request
-   (six items; Claude can draft the reply). Confirm regional availability and the
-   `ITSAppUsesNonExemptEncryption` value.
+   (six items; Claude can draft the reply). Confirm regional availability.
 5. Optional: set `ICE_ALLOW_ANONYMOUS=1`; turn on leaked-password protection; consider a
    paid Render plan before launch (free plan sleeps).
 
