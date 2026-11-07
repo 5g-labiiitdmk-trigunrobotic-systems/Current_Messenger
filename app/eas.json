@@ -18,6 +18,7 @@
       }
     },
     "ios-simulator": {
+      "environment": "production",
       "distribution": "internal",
       "ios": {
         "simulator": true

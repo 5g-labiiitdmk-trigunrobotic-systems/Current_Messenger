@@ -477,6 +477,13 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Not tested:** the profile was validated as JSON only; no simulator build was made here.
 - **Shipped:** merged to `main`.
 
+### 2026-11-07: ios-simulator profile now uses the production EAS environment
+- **Symptom:** the Simulator build installed and opened, but login failed with "fetch failed: A server with the specified hostname could not be found". The Mac's DNS and Safari in the Simulator reached Supabase fine, so it was not the network.
+- **Cause (most likely):** `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY` and `EXPO_PUBLIC_RELAY_WS_URL` exist only as EAS **production** variables. The `ios-simulator` profile had no `environment`, so those values were not baked into the build.
+- **Fix:** `app/eas.json`: `"environment": "production"` on the `ios-simulator` profile. The Simulator build must be rebuilt.
+- **Not tested here:** needs a new EAS Simulator build. The fix is a config line only; no app code changed.
+- **Shipped:** branch `fix/ios-simulator-env`, not merged.
+
 ---
 
 ## 5. Real-phone checks before releasing build 8
