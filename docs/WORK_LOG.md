@@ -475,7 +475,7 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Use:** on the Mac (Xcode installed), from `app/`: `npx eas-cli build --platform ios --profile ios-simulator`; download the resulting `.tar.gz`, unpack it, and drag the `.app` onto an open Simulator window (or `xcrun simctl install booted <path>.app`).
 - **Limits of the Simulator:** no push notifications, no real camera or microphone, calls and QR scan cannot be tested, no Face ID unless enabled in the Simulator menu. Login, chats, groups, contacts, block/report and Delete account work. A Simulator recording may not satisfy Apple's request for a screen recording from a physical device.
 - **Not tested:** the profile was validated as JSON only; no simulator build was made here.
-- **Shipped:** branch only until merged.
+- **Shipped:** merged to `main`.
 
 ---
 
