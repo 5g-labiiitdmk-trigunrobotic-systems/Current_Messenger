@@ -469,6 +469,14 @@ Severity: C = critical, H = high, M = medium, L = low. Where = DB / relay / app 
 - **Not tested here:** the upload result depends on Apple's processing; the JSON was validated.
 - **Shipped:** merged to `main` (`c738f26`).
 
+### 2026-11-07: EAS profile for the iOS Simulator (no app code changed)
+- **Why:** adding a tester in TestFlight kept looping at Apple sign-in, so there was no physical iPhone to test on. The Simulator needs its own build type; the TestFlight/production build cannot run in it.
+- **File:** `app/eas.json`: new profile `ios-simulator` (`ios.simulator: true`, internal distribution). Production profile unchanged.
+- **Use:** on the Mac (Xcode installed), from `app/`: `npx eas-cli build --platform ios --profile ios-simulator`; download the resulting `.tar.gz`, unpack it, and drag the `.app` onto an open Simulator window (or `xcrun simctl install booted <path>.app`).
+- **Limits of the Simulator:** no push notifications, no real camera or microphone, calls and QR scan cannot be tested, no Face ID unless enabled in the Simulator menu. Login, chats, groups, contacts, block/report and Delete account work. A Simulator recording may not satisfy Apple's request for a screen recording from a physical device.
+- **Not tested:** the profile was validated as JSON only; no simulator build was made here.
+- **Shipped:** branch only until merged.
+
 ---
 
 ## 5. Real-phone checks before releasing build 8
